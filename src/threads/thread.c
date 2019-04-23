@@ -23,6 +23,13 @@
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
 static struct list ready_list;
+// ready_lists's semaphore
+struct sempahore ready_list_sema;
+
+// list of processes that are sleeping
+static struct list sleeping_list;
+// sleeping_list's semaphore
+struct semaphora sleeping_list_sema;
 
 /* List of all processes.  Processes are added to this list
    when they are first scheduled and removed when they exit. */
@@ -91,6 +98,9 @@ thread_init (void)
 
   lock_init (&tid_lock);
   list_init (&ready_list);
+  sema_init (&ready_list_sema);
+  list_init (&sleeping_list);
+  sema_init (&sleeping_list_sema);
   list_init (&all_list);
 
   /* Set up a thread structure for the running thread. */
@@ -202,6 +212,36 @@ thread_create (const char *name, int priority,
   thread_unblock (t);
 
   return tid;
+}
+
+void thread_sleep (void) {  
+  struct thread *cur = thread_current ();
+  
+  // don't I need another embedded list element for sleeping list??
+  // continuing assuming I don't...
+  
+  // find the thread inside ready list
+  while ( sema_try_down(&ready_list_sema) ) {
+    // spin
+  }
+  struct list_elem * e = NULL;
+  for (e = list_begin (&ready_list); e != list_end (&ready_list);
+       e = list_next(e))  {
+      struct thread *f = list_entry (e, struct thread, elem);
+      if ( f == cur ) {
+        list_remove(f->elem);
+      }
+  }
+  sema_up(&ready_list_sema);
+  
+  // remove that thread
+  // put the thread inside sleeping list
+  while ( sema_try_down(&sleeping_list_sema) ) {
+    //spin
+  }
+  list_push_back(&ready_list,cur->elem);
+  sema_up(&sleeping_list_sema);
+  
 }
 
 /* Puts the current thread to sleep.  It will not be scheduled
@@ -542,6 +582,12 @@ thread_schedule_tail (struct thread *prev)
     }
 }
 
+// wake up threads whose time has come
+void
+check_sleeping_threads (void) {
+  printf("check on sleepnig threads\n");
+}
+
 /* Schedules a new process.  At entry, interrupts must be off and
    the running process's state must have been changed from
    running to some other state.  This function finds another
@@ -559,7 +605,7 @@ schedule (void)
   ASSERT (intr_get_level () == INTR_OFF);
   ASSERT (cur->status != THREAD_RUNNING);
   ASSERT (is_thread (next));
-
+  
   if (cur != next)
     prev = switch_threads (cur, next);
   thread_schedule_tail (prev);
