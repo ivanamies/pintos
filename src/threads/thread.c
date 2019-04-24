@@ -24,12 +24,12 @@
    that are ready to run but not actually running. */
 static struct list ready_list;
 // ready_lists's semaphore
-struct sempahore ready_list_sema;
+struct semaphore ready_list_sema;
 
 // list of processes that are sleeping
 static struct list sleeping_list;
 // sleeping_list's semaphore
-struct semaphora sleeping_list_sema;
+struct semaphore sleeping_list_sema;
 
 /* List of all processes.  Processes are added to this list
    when they are first scheduled and removed when they exit. */
@@ -98,9 +98,9 @@ thread_init (void)
 
   lock_init (&tid_lock);
   list_init (&ready_list);
-  sema_init (&ready_list_sema);
+  sema_init (&ready_list_sema, 1);
   list_init (&sleeping_list);
-  sema_init (&sleeping_list_sema);
+  sema_init (&sleeping_list_sema, 1);
   list_init (&all_list);
 
   /* Set up a thread structure for the running thread. */
@@ -227,9 +227,9 @@ void thread_sleep (void) {
   struct list_elem * e = NULL;
   for (e = list_begin (&ready_list); e != list_end (&ready_list);
        e = list_next(e))  {
-      struct thread *f = list_entry (e, struct thread, elem);
+      struct thread *f = list_entry (e, struct thread, ready_list_elem);
       if ( f == cur ) {
-        list_remove(f->elem);
+        list_remove(&f->ready_list_elem);
       }
   }
   sema_up(&ready_list_sema);
@@ -239,7 +239,7 @@ void thread_sleep (void) {
   while ( sema_try_down(&sleeping_list_sema) ) {
     //spin
   }
-  list_push_back(&ready_list,cur->elem);
+  list_push_back(&sleeping_list,&cur->sleeping_list_elem);
   sema_up(&sleeping_list_sema);
   
 }
@@ -277,7 +277,7 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back (&ready_list, &t->elem);
+  list_push_back (&ready_list, &t->ready_list_elem);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -348,7 +348,7 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread) 
-    list_push_back (&ready_list, &cur->elem);
+    list_push_back (&ready_list, &cur->ready_list_elem);
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -533,7 +533,7 @@ next_thread_to_run (void)
   if (list_empty (&ready_list))
     return idle_thread;
   else
-    return list_entry (list_pop_front (&ready_list), struct thread, elem);
+    return list_entry (list_pop_front (&ready_list), struct thread, ready_list_elem);
 }
 
 /* Completes a thread switch by activating the new thread's page

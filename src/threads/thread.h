@@ -90,8 +90,9 @@ struct thread
     int priority;                       /* Priority. */
     struct list_elem allelem;           /* List element for all threads list. */
 
-    /* Shared between thread.c and synch.c. */
-    struct list_elem elem;              /* List element. */
+    struct list_elem ready_list_elem;              /* List element. */
+    struct list_elem sema_elem;
+    struct list_elem sleeping_list_elem;
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
@@ -117,7 +118,7 @@ typedef void thread_func (void *aux);
 tid_t thread_create (const char *name, int priority, thread_func *, void *);
 
 void thread_sleep (void);
-void check_sleeping_threads (void)
+void check_sleeping_threads (void);
   
 void thread_block (void);
 void thread_unblock (struct thread *);
