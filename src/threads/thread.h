@@ -96,7 +96,7 @@ struct thread
     struct list_elem sleeping_list_elem;
 
     // when to wake up thread if thread is sleeping
-    uint64_t wake_me_up; // wake me up inside (can't wake up)
+    int64_t wake_me_up; // wake me up inside (can't wake up)
     
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
