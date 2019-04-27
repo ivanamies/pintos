@@ -214,7 +214,8 @@ thread_create (const char *name, int priority,
   return tid;
 }
 
-void thread_sleep (void) {  
+// called with interrupts on
+void thread_sleep (int64_t wake_me_up) {  
   struct thread *cur = thread_current ();
   
   // don't I need another embedded list element for sleeping list??
@@ -233,6 +234,10 @@ void thread_sleep (void) {
       }
   }
   sema_up(&ready_list_sema);
+
+  ASSERT(e != NULL);
+  cur->status = THREAD_SLEEPING;
+  cur->wake_me_up = wake_me_up;
   
   // remove that thread
   // put the thread inside sleeping list
@@ -241,7 +246,9 @@ void thread_sleep (void) {
   }
   list_push_back(&sleeping_list,&cur->sleeping_list_elem);
   sema_up(&sleeping_list_sema);
-  
+
+  // have some other thread run
+  schedule();
 }
 
 /* Puts the current thread to sleep.  It will not be scheduled
@@ -585,7 +592,36 @@ thread_schedule_tail (struct thread *prev)
 // wake up threads whose time has come
 void
 check_sleeping_threads (void) {
-  printf("check on sleepnig threads\n");
+    struct thread *cur = thread_current ();
+  
+  // don't I need another embedded list element for sleeping list??
+  // continuing assuming I don't...
+  
+  // find the thread inside sleeping list
+  while ( sema_try_down(&sleeping_list_sema) ) {
+    // spin
+  }
+  struct list_elem * e = NULL;
+  for (e = list_begin (&sleeping_list); e != list_end (&sleeping_list);
+       e = list_next(e))  {
+      struct thread *f = list_entry (e, struct thread, sleeping_list_elem);
+      if ( f == cur ) {
+        list_remove(&f->sleeping_list_elem);
+      }
+  }
+  sema_up(&sleeping_list_sema);
+
+  ASSERT(e != NULL);
+  cur->status = THREAD_READY;
+  cur->wake_me_up = 0;
+  
+  // remove that thread
+  // put the thread inside sleeping list
+  while ( sema_try_down(&ready_list_sema) ) {
+    //spin
+  }
+  list_push_back(&ready_list,&cur->ready_list_elem);
+  sema_up(&ready_list_sema);
 }
 
 /* Schedules a new process.  At entry, interrupts must be off and

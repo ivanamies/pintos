@@ -11,7 +11,8 @@ enum thread_status
     THREAD_RUNNING,     /* Running thread. */
     THREAD_READY,       /* Not running but ready to run. */
     THREAD_BLOCKED,     /* Waiting for an event to trigger. */
-    THREAD_DYING        /* About to be destroyed. */
+    THREAD_DYING,        /* About to be destroyed. */
+    THREAD_SLEEPING
   };
 
 /* Thread identifier type.
@@ -94,6 +95,9 @@ struct thread
     struct list_elem sema_elem;
     struct list_elem sleeping_list_elem;
 
+    // when to wake up thread if thread is sleeping
+    uint64_t wake_me_up; // wake me up inside (can't wake up)
+    
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
@@ -117,7 +121,7 @@ void thread_print_stats (void);
 typedef void thread_func (void *aux);
 tid_t thread_create (const char *name, int priority, thread_func *, void *);
 
-void thread_sleep (void);
+void thread_sleep (int64_t);
 void check_sleeping_threads (void);
   
 void thread_block (void);
