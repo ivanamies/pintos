@@ -91,8 +91,7 @@ struct thread
     int priority;                       /* Priority. */
     struct list_elem allelem;           /* List element for all threads list. */
 
-    struct list_elem ready_list_elem;              /* List element. */
-    struct list_elem sema_elem;
+    struct list_elem elem;              /* List element. */
     struct list_elem sleeping_list_elem;
 
     // when to wake up thread if thread is sleeping
