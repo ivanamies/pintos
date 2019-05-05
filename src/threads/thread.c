@@ -11,7 +11,6 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
-#include "devices/timer.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -24,16 +23,10 @@
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
 static struct list ready_list;
-// ready_lists's semaphore
-struct semaphore ready_list_sema;
 
-// list of processes that are sleeping
-static struct list sleeping_list;
-// sleeping_list's semaphore
-// guards:
-// 1. struct list sleeping lst
-// 2. thread sleeping_list_elem
-struct semaphore sleeping_list_sema;
+// it will be mutually exclusive with ready_list
+// like sema waiters
+static struct list sleep_list;
 
 /* List of all processes.  Processes are added to this list
    when they are first scheduled and removed when they exit. */
@@ -82,9 +75,6 @@ static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 
-/* Lock used to sync printf(). */
-static struct semaphore stdout_lock;
-
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
    general and it is possible in this case only because loader.S
@@ -103,15 +93,11 @@ thread_init (void)
 {
   ASSERT (intr_get_level () == INTR_OFF);
 
-  sema_init (&stdout_lock, 1);
-  
   lock_init (&tid_lock);
   list_init (&ready_list);
-  sema_init (&ready_list_sema, 1);
-  list_init (&sleeping_list);
-  sema_init (&sleeping_list_sema, 1);
+  list_init (&sleep_list);
   list_init (&all_list);
-  
+
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
   init_thread (initial_thread, "main", PRI_DEFAULT);
@@ -223,46 +209,27 @@ thread_create (const char *name, int priority,
   return tid;
 }
 
-// called with interrupts on
-// SYNC ACQUIRE ORDER
-// 1. ready_list_sema
-// 2. sleeping_list_sema
-void thread_sleep (int64_t wake_me_up) {
-  
-  // SYNC ACQUISITION
-  sema_down(&ready_list_sema);
-  //printf("thread_sleep ready list sema acquire\n");
-  sema_down(&sleeping_list_sema);
-  //printf("thread_sleep sleeping list sema acquire\n");
-  ////
-  
-  printf("===thread_sleep===\n");
-  printf("thread sleep for %lld\n",wake_me_up);
-  
-  struct thread *cur = thread_current ();
-  
-  struct list_elem * e = NULL;
-  struct thread * f = NULL;
-  for (e = list_begin (&ready_list); e != list_end (&ready_list);
-       e = list_next(e))  {
-      f = list_entry (e, struct thread, elem);
-      if ( f == cur ) {
-        break;
-      }
+void thread_sleep(void) {
+
+
+  // interrupts are off
+  ASSERT (!intr_context ());
+  int old_level = intr_disable ();
+
+  // block thread
+  list_push_back (&sleep_list, &thread_current()->elem);
+  thread_block ();
+
+  // maybe interrupts are on again
+  intr_set_level (old_level);
+}
+
+void thread_unsleep_one(void) {
+  // uninside the interrupt handler so I can't be interrupted
+  if (!list_empty (&sleep_list)) {
+    thread_unblock (list_entry (list_pop_front (&sleep_list),
+                                struct thread, elem));
   }
-  
-  ASSERT(f);
-  list_remove(&f->elem);
-
-  f->status = THREAD_SLEEPING;
-  f->wake_me_up = wake_me_up;
-  
-  list_push_back(&sleeping_list,&f->sleeping_list_elem);
-
-  // SYNC DEACQUISITON
-  sema_up(&sleeping_list_sema);
-  sema_up(&ready_list_sema);
-  ////
 }
 
 /* Puts the current thread to sleep.  It will not be scheduled
@@ -603,58 +570,6 @@ thread_schedule_tail (struct thread *prev)
     }
 }
 
-// wake up threads whose time has come
-// SYNC ACQUIRE ORDER
-// 1. ready_list_sema
-// 2. sleeping_list_sema
-void
-check_sleeping_threads (void) {
-  // SYNC ACQUISITION
-  while ( sema_try_down(&ready_list_sema) ) {
-    //spin
-  }
-  while ( sema_try_down(&sleeping_list_sema) ) {
-    // spin
-  }
-  ////
-  
-  struct list_elem * e = NULL;
-  struct thread * f = NULL;
-  struct thread * g = NULL;
-
-  int sleeping_list_size = 0;
-  
-  // find one thread to wake up
-  for (e = list_begin (&sleeping_list); e != list_end (&sleeping_list); e = list_next(e))  {
-    f = list_entry (e, struct thread, sleeping_list_elem);
-    int found = f->wake_me_up > timer_ticks();
-    if ( found ) {
-      if ( g == NULL ) {
-        g = f;
-      }
-      else if ( g != NULL && f->wake_me_up < g->wake_me_up ) {
-        g = f;
-      }
-    }
-    ++sleeping_list_size;
-  }
-
-  if ( g != NULL ) {
-    printf("===check_sleeping_threads===\n");
-    printf("sleeping list size: %d\n",sleeping_list_size);
-    printf("g: %p w wake me up: %lld\n",(void *)g,g->wake_me_up);
-    list_remove(&g->sleeping_list_elem);
-    g->status = THREAD_READY;
-    g->wake_me_up = 0;
-    list_push_back(&ready_list,&g->elem);
-  }
-  
-  // SYNC DEACQUISITON
-  sema_up(&sleeping_list_sema);
-  sema_up(&ready_list_sema);
-  ////  
-}
-
 /* Schedules a new process.  At entry, interrupts must be off and
    the running process's state must have been changed from
    running to some other state.  This function finds another
@@ -672,22 +587,10 @@ schedule (void)
   ASSERT (intr_get_level () == INTR_OFF);
   ASSERT (cur->status != THREAD_RUNNING);
   ASSERT (is_thread (next));
-    
+
   if (cur != next)
     prev = switch_threads (cur, next);
   thread_schedule_tail (prev);
-
-    // check if something should be woken up
-  check_sleeping_threads ();
-
-  // check on ready threads bc wtf
-  struct list_elem * e = NULL;
-  struct thread * f = NULL;
-  for (e = list_begin (&ready_list); e != list_end (&ready_list); e = list_next(e))  {
-    f = list_entry (e, struct thread, elem);
-    printf("schedule ready list thread: %p\n",f);
-  }
-
 }
 
 /* Returns a tid to use for a new thread. */
