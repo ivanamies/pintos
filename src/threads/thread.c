@@ -210,8 +210,6 @@ thread_create (const char *name, int priority,
 }
 
 void thread_sleep(void) {
-
-
   // interrupts are off
   ASSERT (!intr_context ());
   int old_level = intr_disable ();
@@ -225,7 +223,7 @@ void thread_sleep(void) {
 }
 
 void thread_unsleep_one(void) {
-  // uninside the interrupt handler so I can't be interrupted
+  // inside the interrupt handler so I can't be interrupted
   if (!list_empty (&sleep_list)) {
     thread_unblock (list_entry (list_pop_front (&sleep_list),
                                 struct thread, elem));
