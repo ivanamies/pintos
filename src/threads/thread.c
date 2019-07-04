@@ -24,6 +24,10 @@
    that are ready to run but not actually running. */
 static struct list ready_list;
 
+// it will be mutually exclusive with ready_list
+// like sema waiters
+static struct list sleep_list;
+
 /* List of all processes.  Processes are added to this list
    when they are first scheduled and removed when they exit. */
 static struct list all_list;
@@ -91,6 +95,7 @@ thread_init (void)
 
   lock_init (&tid_lock);
   list_init (&ready_list);
+  list_init (&sleep_list);
   list_init (&all_list);
 
   /* Set up a thread structure for the running thread. */
@@ -202,6 +207,27 @@ thread_create (const char *name, int priority,
   thread_unblock (t);
 
   return tid;
+}
+
+void thread_sleep(void) {
+  // interrupts are off
+  ASSERT (!intr_context ());
+  int old_level = intr_disable ();
+
+  // block thread
+  list_push_back (&sleep_list, &thread_current()->elem);
+  thread_block ();
+
+  // maybe interrupts are on again
+  intr_set_level (old_level);
+}
+
+void thread_unsleep_one(void) {
+  // inside the interrupt handler so I can't be interrupted
+  while (!list_empty (&sleep_list)) {
+    thread_unblock (list_entry (list_pop_front (&sleep_list),
+                                struct thread, elem));
+  }
 }
 
 /* Puts the current thread to sleep.  It will not be scheduled

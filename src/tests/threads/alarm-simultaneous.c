@@ -55,6 +55,7 @@ test_sleep (int thread_cnt, int iterations)
 
   /* Start threads. */
   ASSERT (output != NULL);
+  // msg("begin sleep");
   for (i = 0; i < thread_cnt; i++)
     {
       char name[16];
@@ -87,6 +88,7 @@ sleeper (void *test_)
   for (i = 1; i <= test->iterations; i++) 
     {
       int64_t sleep_until = test->start + i * 10;
+      // msg ("thread: %p test_start: %lld sleep_until: %lld timer_ticks: %lld",thread_current(),test->start,sleep_until,timer_ticks());
       timer_sleep (sleep_until - timer_ticks ());
       *test->output_pos++ = timer_ticks () - test->start;
       thread_yield ();
