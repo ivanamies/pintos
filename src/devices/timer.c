@@ -174,7 +174,7 @@ timer_print_stats (void)
 static void
 timer_interrupt (struct intr_frame *args UNUSED)
 {
-  thread_unsleep_one();
+  thread_unsleep();
   ticks++;
   thread_tick ();
 }

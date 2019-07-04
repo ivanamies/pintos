@@ -222,7 +222,7 @@ void thread_sleep(void) {
   intr_set_level (old_level);
 }
 
-void thread_unsleep_one(void) {
+void thread_unsleep(void) {
   // inside the interrupt handler so I can't be interrupted
   while (!list_empty (&sleep_list)) {
     thread_unblock (list_entry (list_pop_front (&sleep_list),
@@ -516,10 +516,26 @@ alloc_frame (struct thread *t, size_t size)
 static struct thread *
 next_thread_to_run (void) 
 {
-  if (list_empty (&ready_list))
+  if (list_empty (&ready_list)) {
     return idle_thread;
-  else
-    return list_entry (list_pop_front (&ready_list), struct thread, elem);
+  }
+  else {
+    // schedules the thread with the highest priority
+    struct list_elem * e;
+    struct list_elem * next_thread_e;
+    struct thread * t;
+    struct thread * next_thread = NULL;
+    for ( e = list_begin (&ready_list); e != list_end (&ready_list);
+          e = list_next (e) ) {
+      t = list_entry(e, struct thread, elem);
+      if ( !next_thread || (next_thread && next_thread->priority < t->priority) ) {
+        next_thread = t;
+        next_thread_e = e;
+      }
+    }
+    list_remove(next_thread_e);
+    return next_thread;
+  }
 }
 
 /* Completes a thread switch by activating the new thread's page

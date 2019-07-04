@@ -124,7 +124,7 @@ tid_t thread_tid (void);
 const char *thread_name (void);
 
 void thread_sleep (void);
-void thread_unsleep_one (void);
+void thread_unsleep (void);
 
 void thread_exit (void) NO_RETURN;
 void thread_yield (void);
