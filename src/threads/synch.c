@@ -32,6 +32,30 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 
+void set_waiting_for (struct thread *, struct list *);
+void unset_waiting_for (struct thread *);
+  
+// written assuming interrupts are off
+void
+set_waiting_for (struct thread * me, struct list * waiters)
+{
+  struct list_elem * e;
+  struct thread * t;
+  for ( e = list_begin (waiters); e != list_end (waiters);
+        e = list_next (e) )
+  {
+    t = list_entry (e, struct thread, elem);
+    t->waiting_for = me;
+  }
+}
+
+// written assuming interrupts are off
+void
+unset_waiting_for (struct thread * me)
+{
+  me->waiting_for = NULL;
+}
+
 /* Initializes semaphore SEMA to VALUE.  A semaphore is a
    nonnegative integer along with two atomic operators for
    manipulating it:
@@ -68,9 +92,12 @@ sema_down (struct semaphore *sema)
   old_level = intr_disable ();
   while (sema->value == 0) 
     {
+      thread_donate_pri (thread_current ());
       list_push_back (&sema->waiters, &thread_current ()->elem);
       thread_block ();
     }
+  unset_waiting_for (thread_current ());
+  set_waiting_for (thread_current (), &sema->waiters);
   sema->value--;
   intr_set_level (old_level);
 }
@@ -90,12 +117,18 @@ sema_try_down (struct semaphore *sema)
 
   old_level = intr_disable ();
   if (sema->value > 0) 
-    {
-      sema->value--;
-      success = true; 
-    }
+  {
+    unset_waiting_for (thread_current ());
+    set_waiting_for (thread_current (), &sema->waiters);
+    sema->value--;
+    success = true;      
+  }
   else
+  {
+    thread_donate_pri (thread_current ());
     success = false;
+    
+  }
   intr_set_level (old_level);
 
   return success;
@@ -113,9 +146,10 @@ sema_up (struct semaphore *sema)
   ASSERT (sema != NULL);
 
   old_level = intr_disable ();
-  if (!list_empty (&sema->waiters)) 
-    thread_unblock (list_entry (list_pop_front (&sema->waiters),
-                                struct thread, elem));
+  if (!list_empty (&sema->waiters)) {
+    struct thread * t = pop_highest_pri_thread(&sema->waiters);
+    thread_unblock (t);
+  }
   sema->value++;
   intr_set_level (old_level);
 }

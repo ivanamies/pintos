@@ -508,6 +508,43 @@ alloc_frame (struct thread *t, size_t size)
   return t->stack;
 }
 
+// written assuming interrupts are off
+void
+thread_donate_pri(struct thread * me)
+{
+  static int small = 1 << 31;
+  int max_pri = small;
+  while ( me ) {
+    if ( max_pri < me->priority ) {
+      max_pri = me->priority;
+    }
+    me->priority = max_pri;
+    me = me->waiting_for;
+  }
+}
+
+struct thread *
+pop_highest_pri_thread (struct list * my_list)
+{
+  // schedules the thread with the highest priority
+  struct list_elem * e;
+  struct thread * t;
+  struct list_elem * my_thread_e = NULL;
+  struct thread * my_thread = NULL;
+  for ( e = list_begin (my_list); e != list_end (my_list);
+        e = list_next (e) )
+  {
+    t = list_entry (e, struct thread, elem);
+    if ( !my_thread || (my_thread && my_thread->priority < t->priority) )
+    {
+      my_thread = t;
+      my_thread_e = e;
+    }
+  }
+  list_remove(my_thread_e);
+  return my_thread;
+}
+
 /* Chooses and returns the next thread to be scheduled.  Should
    return a thread from the run queue, unless the run queue is
    empty.  (If the running thread can continue running, then it
@@ -521,19 +558,7 @@ next_thread_to_run (void)
   }
   else {
     // schedules the thread with the highest priority
-    struct list_elem * e;
-    struct list_elem * next_thread_e;
-    struct thread * t;
-    struct thread * next_thread = NULL;
-    for ( e = list_begin (&ready_list); e != list_end (&ready_list);
-          e = list_next (e) ) {
-      t = list_entry(e, struct thread, elem);
-      if ( !next_thread || (next_thread && next_thread->priority < t->priority) ) {
-        next_thread = t;
-        next_thread_e = e;
-      }
-    }
-    list_remove(next_thread_e);
+    struct thread * next_thread = pop_highest_pri_thread(&ready_list);
     return next_thread;
   }
 }
