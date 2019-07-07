@@ -102,8 +102,7 @@ struct thread
 
 // private: :^)
     struct thread *waiting_for;
-    int sema_cur_held[MAX_SEMAS_HOLD];   // tag iamies -- do I actually hold this semaphore
-    struct semaphore *semas_held[MAX_SEMAS_HOLD]; // tag iamies -- pointer to semaphores I hold
+    struct semaphore *sema_held[MAX_SEMAS_HOLD]; // tag iamies -- pointer to semaphores I hold
     int non_donated_priority;           // tag iamies -- priority that donators cannot touch
     
     /* Owned by thread.c. */

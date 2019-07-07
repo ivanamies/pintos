@@ -498,8 +498,7 @@ init_thread (struct thread *t, const char *name, int priority)
   // initialize non donated priority
   t->non_donated_priority = priority;
   // initialize semaphores slots
-  memset(t->sema_cur_held,0,MAX_SEMAS_HOLD*sizeof(int));
-  memset(t->semas_held,0,MAX_SEMAS_HOLD*sizeof(struct sema *));
+  memset(t->sema_held,0,MAX_SEMAS_HOLD*sizeof(struct sema *));
 
   t->magic = THREAD_MAGIC;
 
@@ -552,9 +551,9 @@ thread_request_donate_pri(struct thread * me)
   int max_pri = small;
   for ( int i = 0; i < MAX_SEMAS_HOLD; ++i )
   {
-    if ( me->sema_cur_held[i] )
+    if ( me->sema_held[i] )
     {
-      int tmp_pri = get_max_pri_from_sema(&me->semas_held[i]->waiters);
+      int tmp_pri = get_max_pri_from_sema(&(me->sema_held[i]->waiters));
       if ( max_pri < tmp_pri )
       {
         max_pri = tmp_pri;
@@ -588,7 +587,7 @@ search_non_empty_sema_slot(struct thread * me)
 {
   for ( int i = 0; i < MAX_SEMAS_HOLD; ++i )
    {
-     if ( !me->sema_cur_held[i] )
+     if ( !me->sema_held[i] )
      {
        return i;
      }
@@ -599,7 +598,12 @@ search_non_empty_sema_slot(struct thread * me)
 
 void
 thread_failed_acquire_sema(struct thread * me, struct semaphore * sema)
-{  
+{
+  // do nothing for now
+  sema->holding_thread = me;
+  sema->holding_thread = NULL;
+  ///////////////
+  
   thread_donate_pri (me);
 }
 
@@ -616,11 +620,8 @@ void
 thread_acquire_sema(struct thread * me, struct semaphore * sema)
 {
   /* int slot = search_non_empty_sema_slot(me); */
-  /* me->sema_cur_held[slot] = 1; */
-  /* me->semas_held[slot] = sema; */
+  /* me->sema_held[slot] = sema; */
   /* thread_request_donate_pri(me); */
-  /* me->waiting_for = NULL; */
-  /* sema->holding_thread = me; */
   
   sema->holding_thread = me;
   me->waiting_for = NULL;
@@ -632,9 +633,8 @@ thread_release_sema(struct thread * me, struct semaphore * sema)
 {
   /* // search for semaphore that is being held and release it */
   /* for ( size_t i = 0; i < MAX_SEMAS_HOLD; ++i ) { */
-  /*   if ( me->semas_held[i] == sema ) { */
-  /*     me->semas_held[i] = NULL; */
-  /*     me->sema_cur_held[i] = 0; */
+  /*   if ( me->sema_held[i] == sema ) { */
+  /*     me->sema_held[i] = NULL; */
   /*     thread_request_donate_pri(me); */
   /*     me->waiting_for = NULL; */
   /*     sema->holding_thread = NULL; */
