@@ -80,7 +80,7 @@ sema_down (struct semaphore *sema)
 
   while (sema->value == 0) 
     {
-      thread_set_waiting_for(thread_current (),sema->holding_thread);
+      thread_current ()->waiting_for = sema->holding_thread;
       thread_donate_pri (thread_current ());
       list_push_back (&sema->waiters, &thread_current ()->elem);
       thread_block ();
@@ -135,11 +135,17 @@ sema_up (struct semaphore *sema)
   ASSERT (sema != NULL);
 
   old_level = intr_disable ();
-  if (!list_empty (&sema->waiters)) {
+  if (!list_empty (&sema->waiters))
+  {
     struct thread * t = pop_highest_pri_thread(&sema->waiters);
+    thread_donate_pri (thread_current ());
     thread_unblock (t);
   }
-  thread_current ()->priority = thread_current ()->non_donated_priority;
+  else
+  {
+    thread_current ()->priority = thread_current ()->non_donated_priority;
+  }
+  
   sema->holding_thread = NULL;
   sema->value++;
   intr_set_level (old_level);

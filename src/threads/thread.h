@@ -24,6 +24,8 @@ typedef int tid_t;
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
 
+#define MAX_SEMAS_HOLD 16
+
 /* A kernel thread or user process.
 
    Each thread structure is stored in its own 4 kB page.  The
@@ -88,7 +90,6 @@ struct thread
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
-    int non_donated_priority;           // tag iamies -- priority that donators cannot touch
     struct list_elem allelem;           /* List element for all threads list. */
 
     /* Shared between thread.c and synch.c. */
@@ -99,7 +100,11 @@ struct thread
     uint32_t *pagedir;                  /* Page directory. */
 #endif
 
-    struct thread * waiting_for;
+// private: :^)
+    struct thread *waiting_for;
+    int sema_cur_held[MAX_SEMAS_HOLD];   // tag iamies -- do I actually hold this semaphore
+    struct semaphore *semas_held[MAX_SEMAS_HOLD]; // tag iamies -- pointer to semaphores I hold
+    int non_donated_priority;           // tag iamies -- priority that donators cannot touch
     
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
@@ -138,7 +143,8 @@ void thread_foreach (thread_action_func *, void *);
 
 struct thread * pop_highest_pri_thread(struct list *);
 void thread_donate_pri(struct thread *);
-void thread_set_waiting_for(struct thread *, struct thread *);
+void thread_request_donate_pri(struct thread *);
+int search_non_empty_sema_slot(struct thread *);
 
 int thread_get_priority (void);
 void thread_set_priority (int);
