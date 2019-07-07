@@ -72,9 +72,9 @@ sema_down (struct semaphore *sema)
   {
     thread_failed_acquire_sema_block(thread_current (),sema);
   }
+  sema->value--;
   thread_acquire_sema(thread_current (),sema);
   
-  sema->value--;
   intr_set_level (old_level);
 }
 
@@ -94,8 +94,8 @@ sema_try_down (struct semaphore *sema)
   old_level = intr_disable ();
   if (sema->value > 0) 
   {
-    thread_acquire_sema(thread_current (),sema);
     sema->value--;
+    thread_acquire_sema(thread_current (),sema);
     success = true;      
   }
   else
@@ -126,9 +126,9 @@ sema_up (struct semaphore *sema)
     struct thread * t = pop_highest_pri_thread(&sema->waiters);
     thread_unblock (t);
   }
-  thread_release_sema (thread_current (),sema);
-  
+  thread_release_sema (thread_current (),sema);  
   sema->holding_thread = NULL;
+  
   sema->value++;
   intr_set_level (old_level);
 }

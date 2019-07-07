@@ -103,6 +103,7 @@ struct thread
 // private: :^)
     struct thread *waiting_for;
     struct semaphore *sema_held[MAX_SEMAS_HOLD]; // tag iamies -- pointer to semaphores I hold
+    void * aux;
     int non_donated_priority;           // tag iamies -- priority that donators cannot touch
     
     /* Owned by thread.c. */
