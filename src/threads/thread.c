@@ -620,7 +620,11 @@ thread_acquire_sema(struct thread * me, struct semaphore * sema)
   /* me->semas_held[slot] = sema; */
   /* thread_request_donate_pri(me); */
   /* me->waiting_for = NULL; */
-  /* sema->holding_thread = me; */  
+  /* sema->holding_thread = me; */
+  
+  sema->holding_thread = me;
+  me->waiting_for = NULL;
+
 }
   
 void
@@ -639,7 +643,10 @@ thread_release_sema(struct thread * me, struct semaphore * sema)
   /* } */
   /* ASSERT (false); // this should never happen */
 
-  thread_donate_pri(me);
+  if ( list_empty (&sema->waiters) ) {
+    me->priority = me->non_donated_priority;
+  }
+  
 }
 
 struct thread *
