@@ -109,7 +109,7 @@ thread_init (void)
    Also creates the idle thread. */
 void
 thread_start (void) 
-{
+{  
   /* Create the idle thread. */
   struct semaphore idle_started;
   sema_init (&idle_started, 0);
@@ -205,7 +205,11 @@ thread_create (const char *name, int priority,
 
   /* Add to run queue. */
   thread_unblock (t);
-
+  
+  // the thread created here may be higher priority than
+  // thread who did the createing.
+  thread_yield ();
+  
   return tid;
 }
 
@@ -362,6 +366,8 @@ void
 thread_set_priority (int new_priority) 
 {
   thread_current ()->priority = new_priority;
+  thread_current ()->non_donated_priority = new_priority;
+  thread_yield ();
 }
 
 /* Returns the current thread's priority. */
@@ -488,6 +494,7 @@ init_thread (struct thread *t, const char *name, int priority)
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
+  t->non_donated_priority = priority;
   t->magic = THREAD_MAGIC;
 
   old_level = intr_disable ();
@@ -509,10 +516,15 @@ alloc_frame (struct thread *t, size_t size)
 }
 
 // written assuming interrupts are off
+void thread_set_waiting_for(struct thread *a, struct thread *b) {
+  a->waiting_for = b;
+}
+
+// written assuming interrupts are off
 void
 thread_donate_pri(struct thread * me)
 {
-  static int small = 1 << 31;
+  static int small = -1;
   int max_pri = small;
   while ( me ) {
     if ( max_pri < me->priority ) {
@@ -541,6 +553,7 @@ pop_highest_pri_thread (struct list * my_list)
       my_thread_e = e;
     }
   }
+  ASSERT (my_thread_e);
   list_remove(my_thread_e);
   return my_thread;
 }
@@ -645,6 +658,42 @@ allocate_tid (void)
 
   return tid;
 }
+
+#define DEBUG_LOG
+
+char DEBUG_CHAR_BUFFER[DEBUG_CHAR_BUFFER_LEN];
+size_t DEBUG_CHAR_BUFFER_HEAD = 0;
+
+void write_debug(void * stuff, size_t n_bytes) {
+#ifdef DEBUG_LOG
+  memcpy(&DEBUG_CHAR_BUFFER[DEBUG_CHAR_BUFFER_HEAD],stuff,n_bytes);
+  DEBUG_CHAR_BUFFER_HEAD+=n_bytes;
+#endif
+}
+void print_debug() {
+#ifdef DEBUG_LOG
+  printf("DEBUG_CHAR_BUFFER_HEAD: %zu\n",DEBUG_CHAR_BUFFER_HEAD);
+  for ( size_t i = 0; i < DEBUG_CHAR_BUFFER_LEN; ++i ) {
+    printf("%c",DEBUG_CHAR_BUFFER[i]);
+  }
+#endif
+}
+
+void write_debug_ptr(void * ptr) {
+#ifdef DEBUG_LOG
+  write_debug("ptr: 0x",sizeof("ptr: 0x"));
+  write_debug((void *)((((size_t)ptr) & 0xF0000000) + '0'),sizeof(char));
+  write_debug((void *)((((size_t)ptr) & 0x0F000000) + '0'),sizeof(char));
+  write_debug((void *)((((size_t)ptr) & 0x00F00000) + '0'),sizeof(char));
+  write_debug((void *)((((size_t)ptr) & 0x000F0000) + '0'),sizeof(char));
+  write_debug((void *)((((size_t)ptr) & 0x0000F000) + '0'),sizeof(char));
+  write_debug((void *)((((size_t)ptr) & 0x00000F00) + '0'),sizeof(char));
+  write_debug((void *)((((size_t)ptr) & 0x000000F0) + '0'),sizeof(char));
+  write_debug((void *)((((size_t)ptr) & 0x0000000F) + '0'),sizeof(char));
+  write_debug((void *)('\n'),sizeof(char));
+#endif
+}
+
 
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */

@@ -37,20 +37,6 @@ void unset_waiting_for (struct thread *);
   
 // written assuming interrupts are off
 void
-set_waiting_for (struct thread * me, struct list * waiters)
-{
-  struct list_elem * e;
-  struct thread * t;
-  for ( e = list_begin (waiters); e != list_end (waiters);
-        e = list_next (e) )
-  {
-    t = list_entry (e, struct thread, elem);
-    t->waiting_for = me;
-  }
-}
-
-// written assuming interrupts are off
-void
 unset_waiting_for (struct thread * me)
 {
   me->waiting_for = NULL;
@@ -71,6 +57,7 @@ sema_init (struct semaphore *sema, unsigned value)
   ASSERT (sema != NULL);
 
   sema->value = value;
+  sema->holding_thread = NULL;
   list_init (&sema->waiters);
 }
 
@@ -90,14 +77,16 @@ sema_down (struct semaphore *sema)
   ASSERT (!intr_context ());
 
   old_level = intr_disable ();
+
   while (sema->value == 0) 
     {
+      thread_set_waiting_for(thread_current (),sema->holding_thread);
       thread_donate_pri (thread_current ());
       list_push_back (&sema->waiters, &thread_current ()->elem);
       thread_block ();
     }
+  sema->holding_thread = thread_current ();
   unset_waiting_for (thread_current ());
-  set_waiting_for (thread_current (), &sema->waiters);
   sema->value--;
   intr_set_level (old_level);
 }
@@ -118,9 +107,9 @@ sema_try_down (struct semaphore *sema)
   old_level = intr_disable ();
   if (sema->value > 0) 
   {
-    unset_waiting_for (thread_current ());
-    set_waiting_for (thread_current (), &sema->waiters);
     sema->value--;
+    unset_waiting_for (thread_current ());
+    sema->holding_thread = thread_current ();
     success = true;      
   }
   else
@@ -150,6 +139,8 @@ sema_up (struct semaphore *sema)
     struct thread * t = pop_highest_pri_thread(&sema->waiters);
     thread_unblock (t);
   }
+  thread_current ()->priority = thread_current ()->non_donated_priority;
+  sema->holding_thread = NULL;
   sema->value++;
   intr_set_level (old_level);
 }
@@ -229,7 +220,7 @@ lock_acquire (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
-
+  
   sema_down (&lock->semaphore);
   lock->holder = thread_current ();
 }
@@ -267,6 +258,10 @@ lock_release (struct lock *lock)
 
   lock->holder = NULL;
   sema_up (&lock->semaphore);
+
+  // tenatative thread yield
+  thread_yield ();
+  //
 }
 
 /* Returns true if the current thread holds LOCK, false

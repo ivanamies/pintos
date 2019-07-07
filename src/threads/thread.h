@@ -88,6 +88,7 @@ struct thread
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
+    int non_donated_priority;           // tag iamies -- priority that donators cannot touch
     struct list_elem allelem;           /* List element for all threads list. */
 
     /* Shared between thread.c and synch.c. */
@@ -137,6 +138,7 @@ void thread_foreach (thread_action_func *, void *);
 
 struct thread * pop_highest_pri_thread(struct list *);
 void thread_donate_pri(struct thread *);
+void thread_set_waiting_for(struct thread *, struct thread *);
 
 int thread_get_priority (void);
 void thread_set_priority (int);
@@ -145,5 +147,13 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+
+void write_debug(void *, size_t);
+void print_debug(void);
+void write_debug_ptr(void * ptr);
+
+#define DEBUG_CHAR_BUFFER_LEN 4096
+extern char DEBUG_CHAR_BUFFER[];
+extern size_t DEBUG_CHAR_BUFFER_HEAD;
 
 #endif /* threads/thread.h */
