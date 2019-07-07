@@ -142,9 +142,11 @@ typedef void thread_action_func (struct thread *t, void *aux);
 void thread_foreach (thread_action_func *, void *);
 
 struct thread * pop_highest_pri_thread(struct list *);
-void thread_donate_pri(struct thread *);
-void thread_request_donate_pri(struct thread *);
-int search_non_empty_sema_slot(struct thread *);
+
+void thread_failed_acquire_sema(struct thread *, struct semaphore *);
+void thread_failed_acquire_sema_block(struct thread *, struct semaphore *);
+void thread_acquire_sema(struct thread *, struct semaphore *);
+void thread_release_sema(struct thread *, struct semaphore *);
 
 int thread_get_priority (void);
 void thread_set_priority (int);

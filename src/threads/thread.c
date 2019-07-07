@@ -545,7 +545,7 @@ get_max_pri_from_sema(struct list * my_list)
 // written assumign interrupts are off
 // gets the maximum priority from all semaphores the thread holds
 // less donation more non-optional sharing
-void
+static void
 thread_request_donate_pri(struct thread * me)
 {
   static int small = 1;
@@ -569,7 +569,7 @@ thread_request_donate_pri(struct thread * me)
   }
 }
 
-void
+static void
 thread_donate_pri(struct thread * me)
 {
   static int small = 1;
@@ -583,7 +583,7 @@ thread_donate_pri(struct thread * me)
   }
 }
 
-int
+static int
 search_non_empty_sema_slot(struct thread * me)
 {
   for ( int i = 0; i < MAX_SEMAS_HOLD; ++i )
@@ -595,6 +595,51 @@ search_non_empty_sema_slot(struct thread * me)
    }
   ASSERT (false); // thread should always have a slot for new semaphore
   return -1;
+}
+
+void
+thread_failed_acquire_sema(struct thread * me, struct semaphore * sema)
+{  
+  thread_donate_pri (me);
+}
+
+void
+thread_failed_acquire_sema_block(struct thread * me, struct semaphore * sema)
+{
+  me->waiting_for = sema->holding_thread;
+  thread_failed_acquire_sema(me,sema);
+  list_push_back (&sema->waiters, &me->elem);
+  thread_block ();
+}
+
+void
+thread_acquire_sema(struct thread * me, struct semaphore * sema)
+{
+  /* int slot = search_non_empty_sema_slot(me); */
+  /* me->sema_cur_held[slot] = 1; */
+  /* me->semas_held[slot] = sema; */
+  /* thread_request_donate_pri(me); */
+  /* me->waiting_for = NULL; */
+  /* sema->holding_thread = me; */  
+}
+  
+void
+thread_release_sema(struct thread * me, struct semaphore * sema)
+{
+  /* // search for semaphore that is being held and release it */
+  /* for ( size_t i = 0; i < MAX_SEMAS_HOLD; ++i ) { */
+  /*   if ( me->semas_held[i] == sema ) { */
+  /*     me->semas_held[i] = NULL; */
+  /*     me->sema_cur_held[i] = 0; */
+  /*     thread_request_donate_pri(me); */
+  /*     me->waiting_for = NULL; */
+  /*     sema->holding_thread = NULL; */
+  /*     return; */
+  /*   } */
+  /* } */
+  /* ASSERT (false); // this should never happen */
+
+  thread_donate_pri(me);
 }
 
 struct thread *
