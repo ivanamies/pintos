@@ -31,17 +31,7 @@
 #include <string.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
-
-void set_waiting_for (struct thread *, struct list *);
-void unset_waiting_for (struct thread *);
   
-// written assuming interrupts are off
-void
-unset_waiting_for (struct thread * me)
-{
-  me->waiting_for = NULL;
-}
-
 /* Initializes semaphore SEMA to VALUE.  A semaphore is a
    nonnegative integer along with two atomic operators for
    manipulating it:
@@ -79,15 +69,12 @@ sema_down (struct semaphore *sema)
   old_level = intr_disable ();
 
   while (sema->value == 0) 
-    {
-      thread_current ()->waiting_for = sema->holding_thread;
-      thread_donate_pri (thread_current ());
-      list_push_back (&sema->waiters, &thread_current ()->elem);
-      thread_block ();
-    }
-  sema->holding_thread = thread_current ();
-  unset_waiting_for (thread_current ());
+  {
+    thread_failed_acquire_sema_block(thread_current (),sema);
+  }
   sema->value--;
+  thread_acquire_sema(thread_current (),sema);
+  
   intr_set_level (old_level);
 }
 
@@ -101,20 +88,19 @@ sema_try_down (struct semaphore *sema)
 {
   enum intr_level old_level;
   bool success;
-
+  
   ASSERT (sema != NULL);
 
   old_level = intr_disable ();
   if (sema->value > 0) 
   {
     sema->value--;
-    unset_waiting_for (thread_current ());
-    sema->holding_thread = thread_current ();
+    thread_acquire_sema(thread_current (),sema);
     success = true;      
   }
   else
   {
-    thread_donate_pri (thread_current ());
+    thread_failed_acquire_sema(thread_current (),sema);
     success = false;
     
   }
@@ -138,15 +124,11 @@ sema_up (struct semaphore *sema)
   if (!list_empty (&sema->waiters))
   {
     struct thread * t = pop_highest_pri_thread(&sema->waiters);
-    thread_donate_pri (thread_current ());
     thread_unblock (t);
   }
-  else
-  {
-    thread_current ()->priority = thread_current ()->non_donated_priority;
-  }
-  
+  thread_release_sema (thread_current (),sema);  
   sema->holding_thread = NULL;
+  
   sema->value++;
   intr_set_level (old_level);
 }

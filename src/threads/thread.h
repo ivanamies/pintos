@@ -102,8 +102,8 @@ struct thread
 
 // private: :^)
     struct thread *waiting_for;
-    int sema_cur_held[MAX_SEMAS_HOLD];   // tag iamies -- do I actually hold this semaphore
-    struct semaphore *semas_held[MAX_SEMAS_HOLD]; // tag iamies -- pointer to semaphores I hold
+    struct semaphore *sema_held[MAX_SEMAS_HOLD]; // tag iamies -- pointer to semaphores I hold
+    void * aux;
     int non_donated_priority;           // tag iamies -- priority that donators cannot touch
     
     /* Owned by thread.c. */
@@ -142,9 +142,11 @@ typedef void thread_action_func (struct thread *t, void *aux);
 void thread_foreach (thread_action_func *, void *);
 
 struct thread * pop_highest_pri_thread(struct list *);
-void thread_donate_pri(struct thread *);
-void thread_request_donate_pri(struct thread *);
-int search_non_empty_sema_slot(struct thread *);
+
+void thread_failed_acquire_sema(struct thread *, struct semaphore *);
+void thread_failed_acquire_sema_block(struct thread *, struct semaphore *);
+void thread_acquire_sema(struct thread *, struct semaphore *);
+void thread_release_sema(struct thread *, struct semaphore *);
 
 int thread_get_priority (void);
 void thread_set_priority (int);
