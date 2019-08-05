@@ -498,7 +498,8 @@ init_thread (struct thread *t, const char *name, int priority)
   // initialize non donated priority
   t->non_donated_priority = priority;
   // initialize semaphores slots
-  memset(t->sema_held,0,MAX_SEMAS_HOLD*sizeof(struct sema *));
+  memset(t->sema_cur_held,0,MAX_SEMAS_HOLD*sizeof(int));
+  memset(t->semas_held,0,MAX_SEMAS_HOLD*sizeof(struct sema *));
 
   t->magic = THREAD_MAGIC;
 
@@ -523,29 +524,52 @@ alloc_frame (struct thread *t, size_t size)
 // written assuming interrupts are off
 // get the maximum priority from all the threads a
 // semaphore has trapped
-/* static int */
-/* get_max_pri_from_sema(struct list * my_list) */
-/* { */
-  /* struct list_elem * e; */
-  /* struct thread * t; */
-  /* static int small = -1; */
-  /* int max_pri = small; */
-  /* int counter = 0; */
-  /* for ( e = list_begin (my_list); e != list_end (my_list); */
-  /*       e = list_next (e) ) */
-  /* { */
-    /* t = list_entry (e, struct thread, elem); */
-    /* if ( max_pri < t->priority ) { */
-    /*   max_pri = t->priority; */
-    /* } */
-  /* } */
-  /* e = list_begin(my_list); */
-  /* e = list_next(e); */
-  /* ASSERT (false && "3"); */
-  /* return max_pri; */
-/* } */
+static int
+get_max_pri_from_sema(struct list * my_list)
+{
+  struct list_elem * e;
+  struct thread * t;
+  static int small = -1;
+  int max_pri = small;
+  for ( e = list_begin (my_list); e != list_end (my_list);
+        e = list_next (e) )
+  {
+    t = list_entry (e, struct thread, elem);
+    if ( max_pri < t->priority ) {
+      max_pri = t->priority;
+    }    
+  }
+  return max_pri;
+}
 
-static void
+// written assumign interrupts are off
+// gets the maximum priority from all semaphores the thread holds
+// less donation more non-optional sharing
+void
+thread_request_donate_pri(struct thread * me)
+{
+  static int small = 1;
+  int max_pri = small;
+  for ( int i = 0; i < MAX_SEMAS_HOLD; ++i )
+  {
+    if ( me->sema_cur_held[i] )
+    {
+      int tmp_pri = get_max_pri_from_sema(&me->semas_held[i]->waiters);
+      if ( max_pri < tmp_pri )
+      {
+        max_pri = tmp_pri;
+      }
+    }
+  }
+  if ( max_pri == small ) {
+    me->priority = me->non_donated_priority;
+  }
+  else {
+    me->priority = max_pri;
+  }
+}
+
+void
 thread_donate_pri(struct thread * me)
 {
   static int small = 1;
@@ -559,114 +583,18 @@ thread_donate_pri(struct thread * me)
   }
 }
 
-static void
-thread_donate_pri_with_aux(struct thread * me, void * aux)
-{
-  me->aux = aux;
-  thread_donate_pri(me);
-}
-
-static void
-thread_restore_old_pri(struct thread * me, void  * aux)
-{
-  me->aux = aux;
-  me->priority = me->non_donated_priority;
-}
-
-// written assumign interrupts are off
-// gets the maximum priority from all semaphores the thread holds
-// less donation more non-optional sharing
-static void
-thread_request_donate_pri(struct thread * me)
-{
-  /* static int small = 1; */
-  /* int max_pri = small; */
-  /* for ( int i = 0; i < MAX_SEMAS_HOLD; ++i ) */
-  /* { */
-  /*   if ( me->sema_held[i] ) */
-  /*   { */
-  /*     int tmp_pri = get_max_pri_from_sema(&(me->sema_held[i]->waiters)); */
-  /*     if ( max_pri < tmp_pri ) */
-  /*     { */
-  /*       max_pri = tmp_pri; */
-  /*     } */
-  /*   } */
-  /* } */
-  /* if ( max_pri == small ) { */
-  /*   me->priority = me->non_donated_priority; */
-  /* } */
-  /* else { */
-  /*   me->priority = max_pri; */
-  /* } */
-  thread_foreach(thread_restore_old_pri,NULL);
-  thread_foreach(thread_donate_pri_with_aux,NULL);
-}
-
-static int
+int
 search_non_empty_sema_slot(struct thread * me)
 {
   for ( int i = 0; i < MAX_SEMAS_HOLD; ++i )
    {
-     if ( !me->sema_held[i] )
+     if ( !me->sema_cur_held[i] )
      {
        return i;
      }
    }
   ASSERT (false); // thread should always have a slot for new semaphore
   return -1;
-}
-
-void
-thread_failed_acquire_sema(struct thread * me, struct semaphore * sema)
-{
-  // do nothing for now
-  struct thread * tmp = sema->holding_thread;
-  sema->holding_thread = me;
-  sema->holding_thread = tmp;
-  ///////////////
-  
-  thread_donate_pri (me);
-}
-
-void
-thread_failed_acquire_sema_block(struct thread * me, struct semaphore * sema)
-{
-  me->waiting_for = sema->holding_thread;
-  thread_failed_acquire_sema(me,sema);
-  list_push_back (&sema->waiters, &me->elem);
-  thread_block ();
-}
-
-void
-thread_acquire_sema(struct thread * me, struct semaphore * sema)
-{
-  int slot = search_non_empty_sema_slot(me);
-  me->sema_held[slot] = sema;
-  sema->holding_thread = me;
-  me->waiting_for = NULL;
-  
-  thread_request_donate_pri(me);
-}
-  
-void
-thread_release_sema(struct thread * me, struct semaphore * sema)
-{
-  // search for semaphore that is being held and release it
-  for ( size_t i = 0; i < MAX_SEMAS_HOLD; ++i ) {
-    if ( me->sema_held[i] == sema ) { // must be holding the semaphore and only one copy held
-      me->sema_held[i] = NULL;
-      sema->holding_thread = NULL;
-      me->waiting_for = NULL;
-      thread_request_donate_pri(me);
-      /* return; */
-    }
-  }
-  // ASSERT (false); // this should never happen
-
-  /* if ( list_empty (&sema->waiters) ) { */
-  /*   me->priority = me->non_donated_priority; */
-  /* } */
-  
 }
 
 struct thread *
