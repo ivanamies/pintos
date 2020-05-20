@@ -143,9 +143,6 @@ void thread_foreach (thread_action_func *, void *);
 
 struct thread * pop_highest_pri_thread(struct list *);
 
-void thread_push_priority_donation_with_flag(struct thread *, void *);
-void update_all_priorities(void);
-
 void thread_failed_acquire_sema(struct thread *, struct semaphore *);
 void thread_failed_acquire_sema_block(struct thread *, struct semaphore *);
 void thread_acquire_sema(struct thread *, struct semaphore *);

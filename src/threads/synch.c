@@ -70,7 +70,9 @@ sema_down (struct semaphore *sema)
 
   while (sema->value == 0) 
   {
+    // thread acquired the correct priority when it was unblocked
     thread_failed_acquire_sema_block(thread_current (),sema);
+    // thread donates its priority if it was blocked
   }
   sema->value--;
   thread_acquire_sema(thread_current (),sema);
@@ -121,13 +123,15 @@ sema_up (struct semaphore *sema)
   ASSERT (sema != NULL);
 
   old_level = intr_disable ();
+
+  thread_release_sema (thread_current (),sema);
+  // all priorities are correct now
+  
   if (!list_empty (&sema->waiters))
   {
     struct thread * t = pop_highest_pri_thread(&sema->waiters);
     thread_unblock (t);
   }
-  thread_release_sema (thread_current (),sema);  
-  /* sema->holding_thread = NULL; */
   
   sema->value++;
   intr_set_level (old_level);

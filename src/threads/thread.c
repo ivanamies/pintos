@@ -75,6 +75,10 @@ static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 
+
+static void thread_request_donate_pri(struct thread *);
+
+
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
    general and it is possible in this case only because loader.S
@@ -268,6 +272,7 @@ thread_unblock (struct thread *t)
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
   list_push_back (&ready_list, &t->elem);
+  
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -520,11 +525,50 @@ alloc_frame (struct thread *t, size_t size)
   return t->stack;
 }
 
+// written assuming interrupts are off
+// get the maximum priority from all the threads a
+// semaphore has trapped
+/* static int */
+/* get_max_pri_from_sema(struct list * my_list) */
+/* { */
+  /* struct list_elem * e; */
+  /* struct thread * t; */
+  /* static int small = -1; */
+  /* int max_pri = small; */
+  /* int counter = 0; */
+  /* for ( e = list_begin (my_list); e != list_end (my_list); */
+  /*       e = list_next (e) ) */
+  /* { */
+    /* t = list_entry (e, struct thread, elem); */
+    /* if ( max_pri < t->priority ) { */
+    /*   max_pri = t->priority; */
+    /* } */
+  /* } */
+  /* e = list_begin(my_list); */
+  /* e = list_next(e); */
+  /* ASSERT (false && "3"); */
+  /* return max_pri; */
+/* } */
+
+static void
+thread_donate_pri(struct thread * me)
+{
+  static int small = 1;
+  int max_pri = small;
+  while ( me ) {
+    if ( max_pri < me->priority ) {
+      max_pri = me->priority;
+    }
+    me->priority = max_pri;
+    me = me->waiting_for;
+  }
+}
+
 static void
 thread_donate_pri_with_aux(struct thread * me, void * aux)
 {
   me->aux = aux;
-  thread_donate_pri(me);
+  thread_donate_pri(me);  
 }
 
 static void
@@ -535,23 +579,38 @@ thread_restore_old_pri(struct thread * me, void * aux)
 }
 
 static void
-thread_stop_waiting(struct thread * me, void * aux)
+thread_stop_waiting (struct thread * me, struct list * my_list)
 {
-  struct thread * to_stop_waiting_on = (struct thread *)(aux);
-  if ( me->waiting_for == to_stop_waiting_on ) {
-    me->waiting_for = NULL;
+  // schedules the thread with the highest priority
+  struct list_elem * e;
+  struct thread * t;
+  for ( e = list_begin (my_list); e != list_end (my_list); e = list_next (e) )
+  {
+    t = list_entry (e, struct thread, elem);
+    if ( t->waiting_for == me ) {
+      t->waiting_for = NULL;
+    }
   }
 }
 
+// written assumign interrupts are off
+// gets the maximum priority from all semaphores the thread holds
+// less donation more non-optional sharing
 static void
-thread_request_stop_waiting(struct thread * me) {
-  thread_foreach(thread_stop_waiting,me);
+thread_request_donate_pri(struct thread * me)
+{
+  me = NULL;
+  ASSERT (me == NULL);
+  
+  thread_foreach(thread_restore_old_pri,NULL);
+  thread_foreach(thread_donate_pri_with_aux,NULL);
 }
 
 void
 thread_failed_acquire_sema(struct thread * me, struct semaphore * sema)
 {
-  me->waiting_for = sema->holding_thread;  
+  me->waiting_for = sema->holding_thread;
+  thread_donate_pri (me);
 }
 
 void
@@ -566,62 +625,21 @@ thread_failed_acquire_sema_block(struct thread * me, struct semaphore * sema)
 void
 thread_acquire_sema(struct thread * me, struct semaphore * sema)
 {
+  // int slot = search_non_empty_sema_slot(me);
+  // me->sema_held[slot] = sema;
   sema->holding_thread = me;
-  me->waiting_for = NULL;  
+  me->waiting_for = NULL;
 }
   
 void
 thread_release_sema(struct thread * me, struct semaphore * sema)
 {
   sema->holding_thread = NULL;
-  me->waiting_for = NULL;
-  thread_request_stop_waiting(me);  
-}
-
-void thread_push_priority_donation_with_flag(struct thread * me, void * aux) {
-  int * some_change = aux;
-  if ( me->waiting_for && (me->waiting_for->priority < me->priority) ) {
-    me->waiting_for->priority = me->priority;
-    *some_change = 1;
-  }
-}
-
-void update_all_priorities (void) {
   
-  int some_change = 1;
-  
-  thread_foreach(thread_restore_old_pri,NULL);
-
-  while ( some_change ) {
-    some_change = 0;
-    thread_foreach(thread_push_priority_donation_with_flag,&some_change);
-    // some change will be 1 if atleast one priority was donated
-  }
+  thread_stop_waiting(me,&sema->waiters);
+  thread_request_donate_pri(me);
 
 }
-
-void update_priorities (struct list * my_list)
-{
-  int some_change = 1;
-  
-  struct list_elem * e;
-  struct thread * t;
-
-  while ( some_change ) {
-  
-    for ( e = list_begin (my_list); e != list_end (my_list); e = list_next (e) ) {
-        t = list_entry (e, struct thread, elem);
-        if ( !my_thread || (my_thread && my_thread->priority < t->priority) ) {
-            my_thread = t;
-            my_thread_e = e;
-          }
-      }
-  }
-  ASSERT (my_thread_e);
-  list_remove(my_thread_e);
-  return my_thread;
-}
-
 
 struct thread *
 pop_highest_pri_thread (struct list * my_list)
@@ -658,8 +676,6 @@ next_thread_to_run (void)
     return idle_thread;
   }
   else {
-    // update all threads priorities
-    update_all_priorities();
     // schedules the thread with the highest priority
     struct thread * next_thread = pop_highest_pri_thread(&ready_list);
     return next_thread;
@@ -679,7 +695,7 @@ next_thread_to_run (void)
    It's not safe to call printf() until the thread switch is
    complete.  In practice that means that printf()s should be
    added at the end of the function.
-
+   
    After this function and its caller returns, the thread switch
    is complete. */
 void
