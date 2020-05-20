@@ -127,7 +127,7 @@ sema_up (struct semaphore *sema)
     thread_unblock (t);
   }
   thread_release_sema (thread_current (),sema);  
-  sema->holding_thread = NULL;
+  /* sema->holding_thread = NULL; */
   
   sema->value++;
   intr_set_level (old_level);

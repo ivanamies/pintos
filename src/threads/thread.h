@@ -25,7 +25,6 @@ typedef int tid_t;
 #define PRI_MAX 63                      /* Highest priority. */
 
 #define MAX_SEMAS_HOLD 16
-#define MAX_PRIORITIES_HELD 8
 
 /* A kernel thread or user process.
 
@@ -101,11 +100,10 @@ struct thread
     uint32_t *pagedir;                  /* Page directory. */
 #endif
 
-// private: :^) 
-    struct thread *waiting_for;           // ... but you can be waiting for multiple threads?
+// private: :^)
+    struct thread *waiting_for;
     struct semaphore *sema_held[MAX_SEMAS_HOLD]; // tag iamies -- pointer to semaphores I hold
     void * aux;
-    int all_donated_priorities[MAX_PRIORITIES_HELD];    // tag iamies -- all donated priorities
     int non_donated_priority;           // tag iamies -- priority that donators cannot touch
     
     /* Owned by thread.c. */
@@ -144,6 +142,9 @@ typedef void thread_action_func (struct thread *t, void *aux);
 void thread_foreach (thread_action_func *, void *);
 
 struct thread * pop_highest_pri_thread(struct list *);
+
+void thread_push_priority_donation_with_flag(struct thread *, void *);
+void update_all_priorities(void);
 
 void thread_failed_acquire_sema(struct thread *, struct semaphore *);
 void thread_failed_acquire_sema_block(struct thread *, struct semaphore *);
