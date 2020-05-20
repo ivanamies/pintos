@@ -494,11 +494,15 @@ init_thread (struct thread *t, const char *name, int priority)
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
-
+  
   // initialize non donated priority
   t->non_donated_priority = priority;
   // initialize semaphores slots
   memset(t->sema_held,0,MAX_SEMAS_HOLD*sizeof(struct sema *));
+
+  // initialize all donated priorities
+  list_init (&ready_list);
+  // tagiamies current
 
   t->magic = THREAD_MAGIC;
 
@@ -579,16 +583,15 @@ thread_stop_waiting(struct thread * me, void * aux)
   // wait a second I'm not using the doubly linked list provided
   // by the kernel...
   struct thread * to_stop_waiting_on = (struct thread *)(aux);
-  while ( me && me->waiting_for ) {
-    if ( me->waiting_for == to_stop_waiting_on ) {
-      me->waiting_for = me->waiting_for->waiting_for;
-    }
-    me = me->waiting_for;
+  if ( me->waiting_for == to_stop_waiting_on ) {
+    me->waiting_for = NULL;
   }
+  // and undonate priority
+  // .... hmmm...
+  // this is hard to do with the current architecture
 }
 
-// written assumign interrupts are off
-// gets the maximum priority from all semaphores the thread holds
+// written assuming interrupts are off
 // less donation more non-optional sharing
 static void
 thread_request_donate_pri(struct thread * me)
@@ -596,7 +599,7 @@ thread_request_donate_pri(struct thread * me)
   me = NULL;
   ASSERT (me == NULL);
   
-  thread_foreach(thread_restore_old_pri,NULL);
+  // thread_foreach(thread_restore_old_pri,NULL);
   thread_foreach(thread_donate_pri_with_aux,NULL);
 }
 
@@ -650,7 +653,7 @@ thread_acquire_sema(struct thread * me, struct semaphore * sema)
   
   thread_request_donate_pri(me);
 }
-  
+
 void
 thread_release_sema(struct thread * me, struct semaphore * sema)
 {
@@ -681,8 +684,7 @@ pop_highest_pri_thread (struct list * my_list)
   struct thread * t;
   struct list_elem * my_thread_e = NULL;
   struct thread * my_thread = NULL;
-  for ( e = list_begin (my_list); e != list_end (my_list);
-        e = list_next (e) )
+  for ( e = list_begin (my_list); e != list_end (my_list); e = list_next (e) )
   {
     t = list_entry (e, struct thread, elem);
     if ( !my_thread || (my_thread && my_thread->priority < t->priority) )
