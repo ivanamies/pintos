@@ -558,8 +558,7 @@ alloc_frame (struct thread *t, size_t size)
 static void
 thread_donate_pri(struct thread * me)
 {
-  static int small = 1;
-  int max_pri = small;
+  int max_pri = PRI_MIN;
   while ( me ) {
     if ( max_pri < me->priority ) {
       max_pri = me->priority;

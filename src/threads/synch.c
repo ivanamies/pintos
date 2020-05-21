@@ -383,7 +383,7 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED)
         
         if ( t_e != NULL ) {
           t = list_entry (t_e, struct thread, elem);
-          priority = t->priority;
+          priority = t->priority; // all of these need to be changed to get/set_priority
         }
         else {
           priority = 0;          
@@ -398,11 +398,7 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED)
 
     list_remove(my_e);
     
-    sema_up (&my_s->semaphore);
-
-    /* sema_up (&list_entry (list_pop_front (&cond->waiters), */
-    /*                       struct semaphore_elem, elem)->semaphore); */
-    
+    sema_up (&my_s->semaphore);    
   }
 }
 
