@@ -142,6 +142,7 @@ typedef void thread_action_func (struct thread *t, void *aux);
 void thread_foreach (thread_action_func *, void *);
 
 struct thread * pop_highest_pri_thread(struct list *);
+struct list_elem * get_highest_pri_thread_element (struct list *);
 
 void thread_failed_acquire_sema(struct thread *, struct semaphore *);
 void thread_failed_acquire_sema_block(struct thread *, struct semaphore *);

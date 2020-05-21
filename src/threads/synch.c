@@ -277,30 +277,6 @@ struct semaphore_elem
     struct semaphore semaphore;         /* This semaphore. */
   };
 
-// refactor this later...
-
-struct list_elem *
-get_highest_pri_thread_element (struct list * my_list)
-{
-  // schedules the thread with the highest priority
-  struct list_elem * e;
-  struct thread * t;
-  struct list_elem * my_thread_e = NULL;
-  struct thread * my_thread = NULL;
-  for ( e = list_begin (my_list); e != list_end (my_list);
-        e = list_next (e) )
-  {
-    t = list_entry (e, struct thread, elem);
-    if ( !my_thread || (my_thread && my_thread->priority < t->priority) )
-    {
-      my_thread = t;
-      my_thread_e = e;
-    }
-  }
-  
-  return my_thread_e;
-}
-
 /* Initializes condition variable COND.  A condition variable
    allows one piece of code to signal a condition and cooperating
    code to receive the signal and act upon it. */
@@ -395,7 +371,7 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED)
           my_priority = priority;
         }
     }
-
+    
     list_remove(my_e);
     
     sema_up (&my_s->semaphore);    

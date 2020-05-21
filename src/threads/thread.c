@@ -370,21 +370,28 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
-  if ( thread_current ()->non_donated_priority == thread_current ()->priority ) {
-    // stupid hack so that if the higher priority is donated, it is not immediately overriden
-    // this breaks raising the threads' priority when a priority was donated
-    // but it passes all test cases so whatever
-    thread_current ()->priority = new_priority;
+  if ( !thread_mlfqs ) {
+    if ( thread_current ()->non_donated_priority == thread_current ()->priority ) {
+      // stupid hack so that if the higher priority is donated, it is not immediately overriden
+      // this breaks raising the threads' priority when a priority was donated
+      // but it passes all test cases so whatever
+      thread_current ()->priority = new_priority;
+    }
+    thread_current ()->non_donated_priority = new_priority;
+    thread_yield ();
   }
-  thread_current ()->non_donated_priority = new_priority;
-  thread_yield ();
 }
 
 /* Returns the current thread's priority. */
 int
 thread_get_priority (void) 
 {
-  return thread_current ()->priority;
+  if ( thread_mlfqs ) {
+    return PRI_MIN;
+  }
+  else {
+    return thread_current ()->priority;
+  }
 }
 
 /* Sets the current thread's nice value to NICE. */
@@ -530,31 +537,6 @@ alloc_frame (struct thread *t, size_t size)
   return t->stack;
 }
 
-// written assuming interrupts are off
-// get the maximum priority from all the threads a
-// semaphore has trapped
-/* static int */
-/* get_max_pri_from_sema(struct list * my_list) */
-/* { */
-  /* struct list_elem * e; */
-  /* struct thread * t; */
-  /* static int small = -1; */
-  /* int max_pri = small; */
-  /* int counter = 0; */
-  /* for ( e = list_begin (my_list); e != list_end (my_list); */
-  /*       e = list_next (e) ) */
-  /* { */
-    /* t = list_entry (e, struct thread, elem); */
-    /* if ( max_pri < t->priority ) { */
-    /*   max_pri = t->priority; */
-    /* } */
-  /* } */
-  /* e = list_begin(my_list); */
-  /* e = list_next(e); */
-  /* ASSERT (false && "3"); */
-  /* return max_pri; */
-/* } */
-
 static void
 thread_donate_pri(struct thread * me)
 {
@@ -614,8 +596,10 @@ void
 thread_failed_acquire_sema(struct thread * me, struct semaphore * sema)
 {
   me->waiting_for = sema->holding_thread;
-  
-  thread_donate_pri (me);
+
+  if ( !thread_mlfqs ) {
+    thread_donate_pri (me);
+  }
 }
 
 void
@@ -642,12 +626,14 @@ thread_release_sema(struct thread * me, struct semaphore * sema)
   sema->holding_thread = NULL;
   
   thread_stop_waiting(me,&sema->waiters);
-  thread_request_donate_pri(me);
+  if ( !thread_mlfqs ) {
+    thread_request_donate_pri(me);
+  }
 
 }
 
-struct thread *
-pop_highest_pri_thread (struct list * my_list)
+struct list_elem *
+get_highest_pri_thread_element (struct list * my_list)
 {
   // schedules the thread with the highest priority
   struct list_elem * e;
@@ -664,9 +650,20 @@ pop_highest_pri_thread (struct list * my_list)
       my_thread_e = e;
     }
   }
-  ASSERT (my_thread_e);
-  list_remove(my_thread_e);
-  return my_thread;
+  
+  return my_thread_e;
+}
+
+struct thread *
+pop_highest_pri_thread (struct list * my_list)
+{
+  // schedules the thread with the highest priority
+  struct list_elem * e = get_highest_pri_thread_element(my_list);
+  ASSERT (e);
+  struct thread * t = list_entry (e, struct thread, elem);
+  ASSERT (t);
+  list_remove(e);
+  return t;
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
