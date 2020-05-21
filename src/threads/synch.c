@@ -277,6 +277,30 @@ struct semaphore_elem
     struct semaphore semaphore;         /* This semaphore. */
   };
 
+// refactor this later...
+
+struct list_elem *
+get_highest_pri_thread_element (struct list * my_list)
+{
+  // schedules the thread with the highest priority
+  struct list_elem * e;
+  struct thread * t;
+  struct list_elem * my_thread_e = NULL;
+  struct thread * my_thread = NULL;
+  for ( e = list_begin (my_list); e != list_end (my_list);
+        e = list_next (e) )
+  {
+    t = list_entry (e, struct thread, elem);
+    if ( !my_thread || (my_thread && my_thread->priority < t->priority) )
+    {
+      my_thread = t;
+      my_thread_e = e;
+    }
+  }
+  
+  return my_thread_e;
+}
+
 /* Initializes condition variable COND.  A condition variable
    allows one piece of code to signal a condition and cooperating
    code to receive the signal and act upon it. */
@@ -340,9 +364,46 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED)
   ASSERT (!intr_context ());
   ASSERT (lock_held_by_current_thread (lock));
 
-  if (!list_empty (&cond->waiters)) 
-    sema_up (&list_entry (list_pop_front (&cond->waiters),
-                          struct semaphore_elem, elem)->semaphore);
+  struct list_elem * e = NULL;
+  struct semaphore_elem * s = NULL;
+  struct list_elem * t_e = NULL;
+  struct thread * t = NULL;
+  int priority = 0;
+  struct list_elem * my_e = NULL;
+  struct semaphore_elem * my_s = NULL;
+  int my_priority = 0;
+  
+  if (!list_empty (&cond->waiters)) {
+    
+    // pick the semaphore with the highest priority waiter
+    for ( e = list_begin (&cond->waiters); e != list_end (&cond->waiters);
+          e = list_next (e) ) {
+        s = list_entry (e, struct semaphore_elem, elem);
+        t_e = get_highest_pri_thread_element(&s->semaphore.waiters);
+        
+        if ( t_e != NULL ) {
+          t = list_entry (t_e, struct thread, elem);
+          priority = t->priority;
+        }
+        else {
+          priority = 0;          
+        }
+        
+        if ( my_priority == 0 || (my_priority != 0 && my_priority < priority) ) {
+          my_e = e;
+          my_s = s;
+          my_priority = priority;
+        }
+    }
+
+    list_remove(my_e);
+    
+    sema_up (&my_s->semaphore);
+
+    /* sema_up (&list_entry (list_pop_front (&cond->waiters), */
+    /*                       struct semaphore_elem, elem)->semaphore); */
+    
+  }
 }
 
 /* Wakes up all threads, if any, waiting on COND (protected by
