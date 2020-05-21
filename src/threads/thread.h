@@ -26,6 +26,8 @@ typedef int tid_t;
 
 #define MAX_SEMAS_HOLD 16
 
+struct semaphore; // forward declaration of semaphore
+
 /* A kernel thread or user process.
 
    Each thread structure is stored in its own 4 kB page.  The
@@ -102,7 +104,6 @@ struct thread
 
 // private: :^)
     struct thread *waiting_for;
-    struct semaphore *sema_held[MAX_SEMAS_HOLD]; // tag iamies -- pointer to semaphores I hold
     void * aux;
     int non_donated_priority;           // tag iamies -- priority that donators cannot touch
     
