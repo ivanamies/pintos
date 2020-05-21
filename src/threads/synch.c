@@ -127,14 +127,17 @@ sema_up (struct semaphore *sema)
   thread_release_sema (thread_current (),sema);
   // all priorities are correct now
   
+  sema->value++;
+  
   if (!list_empty (&sema->waiters))
   {
     struct thread * t = pop_highest_pri_thread(&sema->waiters);
     thread_unblock (t);
   }
   
-  sema->value++;
   intr_set_level (old_level);
+
+  thread_yield(); // immediately have another thread take over if needed... but wtf???
 }
 
 static void sema_test_helper (void *sema_);

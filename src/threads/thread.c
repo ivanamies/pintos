@@ -610,6 +610,7 @@ void
 thread_failed_acquire_sema(struct thread * me, struct semaphore * sema)
 {
   me->waiting_for = sema->holding_thread;
+  
   thread_donate_pri (me);
 }
 
@@ -630,7 +631,7 @@ thread_acquire_sema(struct thread * me, struct semaphore * sema)
   sema->holding_thread = me;
   me->waiting_for = NULL;
 }
-  
+
 void
 thread_release_sema(struct thread * me, struct semaphore * sema)
 {
