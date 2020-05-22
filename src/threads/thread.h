@@ -24,8 +24,6 @@ typedef int tid_t;
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
 
-#define MAX_SEMAS_HOLD 16
-
 struct semaphore; // forward declaration of semaphore
 
 /* A kernel thread or user process.
@@ -106,6 +104,7 @@ struct thread
     struct thread *waiting_for;
     void * aux;
     int non_donated_priority;           // tag iamies -- priority that donators cannot touch
+    int nice;                           // tag iamies -- the mlfqs niceness
     
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
