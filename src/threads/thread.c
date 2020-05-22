@@ -11,9 +11,67 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "devices/timer.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
+
+///////////////// fixed point math here out of laziness to deal with linker
+#define FIXED_P 14
+#define FIXED_Q 14
+#define FIXED_F ( 1 << FIXED_Q )
+
+// prefer * and / over bit shifts because laziness
+
+int to_fixed_point(int n) {
+  return n * FIXED_F;
+}
+
+int to_integer_round_to_zero(int x) {
+  return x / FIXED_F;
+}
+
+int to_integer_round_to_nearest(int x) {
+  if ( x >= 0 ) {
+    return x + ( FIXED_F / 2 );
+  }
+  else {
+    return x - ( FIXED_F / 2 );
+  }
+}
+
+int add_fixed(int x, int y) {
+  return x + y;
+}
+
+int subtract_fixed(int x, int y) {
+  return x - y;
+}
+
+int add_fixed_real(int x, int n) {
+  return x + to_fixed_point(n);
+}
+
+int subtract_fixed_real(int x, int n) {
+  return x - to_fixed_point(n);
+}
+
+int multiply_fixed(int x, int y ) {
+  return (((int64_t)x)*y) / FIXED_F;
+}
+
+int multiply_fixed_real(int x, int n ) {
+  return x * n;
+}
+
+int divide_fixed(int x, int y) {
+  return (((int64_t)x) * FIXED_F) / y;
+}
+
+int divide_fixed_real(int x, int n ) {
+  return x / n;
+}
+//////////////////////////////////
 
 /* Random value for struct thread's `magic' member.
    Used to detect stack overflow.  See the big comment at the top
@@ -40,6 +98,9 @@ static struct thread *initial_thread;
 
 /* Lock used by allocate_tid(). */
 static struct lock tid_lock;
+
+// thread_mlfqs load average
+static int load_avg;
 
 /* Stack frame for kernel_thread(). */
 struct kernel_thread_frame 
@@ -113,7 +174,10 @@ thread_init (void)
    Also creates the idle thread. */
 void
 thread_start (void) 
-{  
+{
+  // initial load average once on system start
+  load_avg = 0;
+  
   /* Create the idle thread. */
   struct semaphore idle_started;
   sema_init (&idle_started, 0);
@@ -133,6 +197,10 @@ thread_tick (void)
 {
   struct thread *t = thread_current ();
 
+  if ( (timer_ticks() & 0x3) == 0 ) { // on every clock tick...
+    t->priority = PRI_MAX - (to_integer_round_to_nearest(t->recent_cpu) / 4) - (t->nice * 2);
+  }
+
   /* Update statistics. */
   if (t == idle_thread)
     idle_ticks++;
@@ -142,6 +210,11 @@ thread_tick (void)
 #endif
   else
     kernel_ticks++;
+
+  // add 1 to recent_cpu...
+  // ... which is a fixed point
+  t->recent_cpu = add_fixed_real(t->recent_cpu,1);
+
   
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
@@ -420,8 +493,7 @@ thread_get_load_avg (void)
 int
 thread_get_recent_cpu (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  return thread_current ()->recent_cpu;
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
@@ -516,10 +588,13 @@ init_thread (struct thread *t, const char *name, int priority)
   else {
     t->priority = priority;
   }
-
+  
   // initialize non donated priority
   t->non_donated_priority = priority;
-
+  
+  t->nice = 0;
+  t->recent_cpu = 0;
+  
   t->magic = THREAD_MAGIC;
 
   old_level = intr_disable ();

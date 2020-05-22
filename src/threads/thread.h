@@ -104,7 +104,8 @@ struct thread
     struct thread *waiting_for;
     void * aux;
     int non_donated_priority;           // tag iamies -- priority that donators cannot touch
-    int nice;                           // tag iamies -- the mlfqs niceness
+    int nice;                           // tag iamies -- the mlfqs nice
+    int recent_cpu;                     // tag iamies -- the mlfqs recent_cpu
     
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
