@@ -44,7 +44,7 @@ static struct lock tid_lock;
 
 // thread_mlfqs load average
 // as a FIXED POINT float
-static int load_avg;
+static int load_avg = 0;
 
 /* Stack frame for kernel_thread(). */
 struct kernel_thread_frame 
@@ -98,6 +98,36 @@ int multiply_fixed_real(int, int);
 int divide_fixed(int, int);
 int divide_fixed_real(int, int);
 
+/* ////// debug utils because pintos-gdb is broken on mac... */
+/* #define DEBUG_CHAR_BUFFER_LEN (1<<20) */
+
+/* char debug_char_buffer[DEBUG_CHAR_BUFFER_LEN]; */
+/* size_t debug_char_buffer_head = 0; */
+
+/* void write_debug(void * stuff, size_t n_bytes) { */
+/*   memcpy(&debug_char_buffer[debug_char_buffer_head],stuff,n_bytes); */
+/*   debug_char_buffer_head+=n_bytes; */
+/* } */
+/* void print_debug() { */
+/*   printf("debug_char_buffer_head: %zu\n",debug_char_buffer_head); */
+/*   for ( size_t i = 0; i < debug_char_buffer_head; ++i ) { */
+/*     printf("i: %c",i,debug_char_buffer[i]); */
+/*   } */
+/* } */
+
+/* void write_debug_ptr(void * ptr) { */
+/*   write_debug("ptr: 0x",sizeof("ptr: 0x")); */
+/*   write_debug((void *)((((size_t)ptr) & 0xF0000000) + '0'),sizeof(char)); */
+/*   write_debug((void *)((((size_t)ptr) & 0x0F000000) + '0'),sizeof(char)); */
+/*   write_debug((void *)((((size_t)ptr) & 0x00F00000) + '0'),sizeof(char)); */
+/*   write_debug((void *)((((size_t)ptr) & 0x000F0000) + '0'),sizeof(char)); */
+/*   write_debug((void *)((((size_t)ptr) & 0x0000F000) + '0'),sizeof(char)); */
+/*   write_debug((void *)((((size_t)ptr) & 0x00000F00) + '0'),sizeof(char)); */
+/*   write_debug((void *)((((size_t)ptr) & 0x000000F0) + '0'),sizeof(char)); */
+/*   write_debug((void *)((((size_t)ptr) & 0x0000000F) + '0'),sizeof(char)); */
+/*   write_debug((void *)('\n'),sizeof(char)); */
+/* } */
+
 ///////////////// fixed point math here out of laziness to deal with linker
 #define FIXED_P 14
 #define FIXED_Q 14
@@ -115,10 +145,10 @@ int to_real_round_to_zero(int x) {
 
 int to_real_round_to_nearest(int x) {
   if ( x >= 0 ) {
-    return x + ( FIXED_F / 2 );
+    return (x + ( FIXED_F / 2 )) / FIXED_F;
   }
   else {
-    return x - ( FIXED_F / 2 );
+    return (x - ( FIXED_F / 2 )) / FIXED_F;
   }
 }
 
@@ -190,10 +220,7 @@ thread_init (void)
    Also creates the idle thread. */
 void
 thread_start (void) 
-{
-  // initial load average once on system start
-  load_avg = 0;
-  
+{  
   /* Create the idle thread. */
   struct semaphore idle_started;
   sema_init (&idle_started, 0);
@@ -485,6 +512,8 @@ void
 thread_set_nice (int nice) 
 {
   thread_current ()->nice = nice;
+  thread_mlfqs_thread_update_priority (thread_current (), NULL);
+  thread_yield ();
 }
 
 /* Returns the current thread's nice value. */
@@ -499,6 +528,7 @@ int
 thread_get_load_avg (void) 
 {
   /* Not yet implemented. */
+  /* printf("load_avg: %d\n",load_avg); */
   const int tmp_load_avg = multiply_fixed_real(load_avg,100);
   const int res = to_real_round_to_nearest(tmp_load_avg);
   return res;
@@ -508,7 +538,9 @@ thread_get_load_avg (void)
 int
 thread_get_recent_cpu (void) 
 {
-  return thread_current ()->recent_cpu;
+  const int tmp_recent_cpu = multiply_fixed_real(thread_current ()->recent_cpu, 100);
+  const int res = to_real_round_to_nearest(tmp_recent_cpu);
+  return res;
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
@@ -777,14 +809,26 @@ thread_mlfqs_update_priorities_all (void)
   thread_foreach(thread_mlfqs_thread_update_priority,NULL);
 }
 
-void thread_mlfqs_update_load_avg (void) {
+void thread_mlfqs_update_load_avg (void)
+{
   const int fifty_nine = to_fixed_point(59);
   const int num1 = divide_fixed_real(fifty_nine,60);
   const int one = to_fixed_point(1);
   const int num2 = divide_fixed_real(one,60);
-  const int rdy_threads = list_size(&ready_list);
+  int rdy_threads = 0;
+  struct list_elem *e;
+  struct thread *t;
+
+  for (e = list_begin (&all_list); e != list_end (&all_list);
+       e = list_next (e)) {
+    t = list_entry (e, struct thread, allelem);
+    if ( t != idle_thread && (t->status == THREAD_RUNNING || t->status == THREAD_READY) ) {
+      ++rdy_threads;
+    }
+  }
   
   load_avg = multiply_fixed(num1,load_avg) + multiply_fixed_real(num2,rdy_threads);
+  // load_avg = rdy_threads;
 }
 
 void
@@ -903,41 +947,6 @@ allocate_tid (void)
   lock_release (&tid_lock);
 
   return tid;
-}
-
-#define DEBUG_LOG
-
-char DEBUG_CHAR_BUFFER[DEBUG_CHAR_BUFFER_LEN];
-size_t DEBUG_CHAR_BUFFER_HEAD = 0;
-
-void write_debug(void * stuff, size_t n_bytes) {
-#ifdef DEBUG_LOG
-  memcpy(&DEBUG_CHAR_BUFFER[DEBUG_CHAR_BUFFER_HEAD],stuff,n_bytes);
-  DEBUG_CHAR_BUFFER_HEAD+=n_bytes;
-#endif
-}
-void print_debug() {
-#ifdef DEBUG_LOG
-  printf("DEBUG_CHAR_BUFFER_HEAD: %zu\n",DEBUG_CHAR_BUFFER_HEAD);
-  for ( size_t i = 0; i < DEBUG_CHAR_BUFFER_LEN; ++i ) {
-    printf("%c",DEBUG_CHAR_BUFFER[i]);
-  }
-#endif
-}
-
-void write_debug_ptr(void * ptr) {
-#ifdef DEBUG_LOG
-  write_debug("ptr: 0x",sizeof("ptr: 0x"));
-  write_debug((void *)((((size_t)ptr) & 0xF0000000) + '0'),sizeof(char));
-  write_debug((void *)((((size_t)ptr) & 0x0F000000) + '0'),sizeof(char));
-  write_debug((void *)((((size_t)ptr) & 0x00F00000) + '0'),sizeof(char));
-  write_debug((void *)((((size_t)ptr) & 0x000F0000) + '0'),sizeof(char));
-  write_debug((void *)((((size_t)ptr) & 0x0000F000) + '0'),sizeof(char));
-  write_debug((void *)((((size_t)ptr) & 0x00000F00) + '0'),sizeof(char));
-  write_debug((void *)((((size_t)ptr) & 0x000000F0) + '0'),sizeof(char));
-  write_debug((void *)((((size_t)ptr) & 0x0000000F) + '0'),sizeof(char));
-  write_debug((void *)('\n'),sizeof(char));
-#endif
 }
 
 

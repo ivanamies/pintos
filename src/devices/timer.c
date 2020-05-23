@@ -142,7 +142,7 @@ timer_mdelay (int64_t ms)
 
    Busy waiting wastes CPU cycles, and busy waiting with
    interrupts off for the interval between timer ticks or longer
-   will cause timer ticks to be lost.  Thus, use timer_usleep()
+   will cause timer ticks to be lost.  Thus, use timer_usleep()p
    instead if interrupts are enabled. */
 void
 timer_udelay (int64_t us) 
@@ -177,17 +177,15 @@ timer_interrupt (struct intr_frame *args UNUSED)
 
   if ( thread_mlfqs ) {
     // for every 4th tick, beginning with 0, calculate priority for each thread
-    if ( (timer_ticks() & 0x3) == 0 ) {
+    if ( (timer_ticks () & 0x3) == 0 ) {
       thread_mlfqs_update_priorities_all ();
     }
-    // for some reason we assume TIMER_FREQ is 1 sec
-    // read from https://inst.eecs.berkeley.edu/~cs162/su15/static/sections/section3.pdf
-    // and inferred from real time sleep function
-    if ( timer_ticks() % TIMER_FREQ == 0 ) {
-      
+    if ( timer_ticks() > 0 && timer_ticks () % TIMER_FREQ == 0 ) {
+      thread_mlfqs_update_load_avg ();
+      thread_mlfqs_update_recent_cpus_all ();
     }
   }
-
+  
   thread_unsleep();
   ticks++;
   thread_tick ();
