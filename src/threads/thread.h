@@ -105,7 +105,7 @@ struct thread
     void * aux;
     int non_donated_priority;           // tag iamies -- priority that donators cannot touch
     int nice;                           // tag iamies -- the mlfqs nice
-    int recent_cpu;                     // tag iamies -- the mlfqs recent_cpu
+    int recent_cpu;                     // tag iamies -- the mlfqs recent_cpu as a fixed point float
     
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
@@ -152,6 +152,9 @@ void thread_release_sema(struct thread *, struct semaphore *);
 
 int thread_get_priority (void);
 void thread_set_priority (int);
+void thread_mlfqs_update_priorities_all (void);
+void thread_mlfqs_update_load_avg (void);
+void thread_mlfqs_update_recent_cpus_all (void);
 
 int thread_get_nice (void);
 void thread_set_nice (int);

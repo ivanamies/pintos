@@ -16,6 +16,88 @@
 #include "userprog/process.h"
 #endif
 
+/* Random value for struct thread's `magic' member.
+   Used to detect stack overflow.  See the big comment at the top
+   of thread.h for details. */
+#define THREAD_MAGIC 0xcd6abf4b
+
+/* List of processes in THREAD_READY state, that is, processes
+   that are ready to run but not actually running. */
+static struct list ready_list;
+
+// it will be mutually exclusive with ready_list
+// like sema waiters
+static struct list sleep_list;
+
+/* List of all processes.  Processes are added to this list
+   when they are first scheduled and removed when they exit. */
+static struct list all_list;
+
+/* Idle thread. */
+static struct thread *idle_thread;
+
+/* Initial thread, the thread running init.c:main(). */
+static struct thread *initial_thread;
+
+/* Lock used by allocate_tid(). */
+static struct lock tid_lock;
+
+// thread_mlfqs load average
+// as a FIXED POINT float
+static int load_avg;
+
+/* Stack frame for kernel_thread(). */
+struct kernel_thread_frame 
+  {
+    void *eip;                  /* Return address. */
+    thread_func *function;      /* Function to call. */
+    void *aux;                  /* Auxiliary data for function. */
+  };
+
+/* Statistics. */
+static long long idle_ticks;    /* # of timer ticks spent idle. */
+static long long kernel_ticks;  /* # of timer ticks in kernel threads. */
+static long long user_ticks;    /* # of timer ticks in user programs. */
+
+/* Scheduling. */
+#define TIME_SLICE 4            /* # of timer ticks to give each thread. */
+static unsigned thread_ticks;   /* # of timer ticks since last yield. */
+
+/* If false (default), use round-robin scheduler.
+   If true, use multi-level feedback queue scheduler.
+   Controlled by kernel command-line option "-o mlfqs". */
+bool thread_mlfqs;
+
+static void kernel_thread (thread_func *, void *aux);
+
+static void idle (void *aux UNUSED);
+static struct thread *running_thread (void);
+static struct thread *next_thread_to_run (void);
+static void init_thread (struct thread *, const char *name, int priority);
+static bool is_thread (struct thread *) UNUSED;
+static void *alloc_frame (struct thread *, size_t size);
+static void schedule (void);
+void thread_schedule_tail (struct thread *prev);
+static tid_t allocate_tid (void);
+
+static void thread_request_donate_pri(struct thread *);
+
+void thread_mlfqs_thread_update_recent_cpu (struct thread *, void *);
+void thread_mlfqs_thread_update_priority(struct thread *, void *);
+
+
+int to_fixed_point(int);
+int to_real_round_to_zero(int);
+int to_real_round_to_nearest(int);
+int add_fixed(int, int);
+int subtract_fixed(int, int);
+int add_fixed_real(int, int);
+int subtract_fixed_real(int, int);
+int multiply_fixed(int, int);
+int multiply_fixed_real(int, int);
+int divide_fixed(int, int);
+int divide_fixed_real(int, int);
+
 ///////////////// fixed point math here out of laziness to deal with linker
 #define FIXED_P 14
 #define FIXED_Q 14
@@ -27,11 +109,11 @@ int to_fixed_point(int n) {
   return n * FIXED_F;
 }
 
-int to_integer_round_to_zero(int x) {
+int to_real_round_to_zero(int x) {
   return x / FIXED_F;
 }
 
-int to_integer_round_to_nearest(int x) {
+int to_real_round_to_nearest(int x) {
   if ( x >= 0 ) {
     return x + ( FIXED_F / 2 );
   }
@@ -72,72 +154,6 @@ int divide_fixed_real(int x, int n ) {
   return x / n;
 }
 //////////////////////////////////
-
-/* Random value for struct thread's `magic' member.
-   Used to detect stack overflow.  See the big comment at the top
-   of thread.h for details. */
-#define THREAD_MAGIC 0xcd6abf4b
-
-/* List of processes in THREAD_READY state, that is, processes
-   that are ready to run but not actually running. */
-static struct list ready_list;
-
-// it will be mutually exclusive with ready_list
-// like sema waiters
-static struct list sleep_list;
-
-/* List of all processes.  Processes are added to this list
-   when they are first scheduled and removed when they exit. */
-static struct list all_list;
-
-/* Idle thread. */
-static struct thread *idle_thread;
-
-/* Initial thread, the thread running init.c:main(). */
-static struct thread *initial_thread;
-
-/* Lock used by allocate_tid(). */
-static struct lock tid_lock;
-
-// thread_mlfqs load average
-static int load_avg;
-
-/* Stack frame for kernel_thread(). */
-struct kernel_thread_frame 
-  {
-    void *eip;                  /* Return address. */
-    thread_func *function;      /* Function to call. */
-    void *aux;                  /* Auxiliary data for function. */
-  };
-
-/* Statistics. */
-static long long idle_ticks;    /* # of timer ticks spent idle. */
-static long long kernel_ticks;  /* # of timer ticks in kernel threads. */
-static long long user_ticks;    /* # of timer ticks in user programs. */
-
-/* Scheduling. */
-#define TIME_SLICE 4            /* # of timer ticks to give each thread. */
-static unsigned thread_ticks;   /* # of timer ticks since last yield. */
-
-/* If false (default), use round-robin scheduler.
-   If true, use multi-level feedback queue scheduler.
-   Controlled by kernel command-line option "-o mlfqs". */
-bool thread_mlfqs;
-
-static void kernel_thread (thread_func *, void *aux);
-
-static void idle (void *aux UNUSED);
-static struct thread *running_thread (void);
-static struct thread *next_thread_to_run (void);
-static void init_thread (struct thread *, const char *name, int priority);
-static bool is_thread (struct thread *) UNUSED;
-static void *alloc_frame (struct thread *, size_t size);
-static void schedule (void);
-void thread_schedule_tail (struct thread *prev);
-static tid_t allocate_tid (void);
-
-
-static void thread_request_donate_pri(struct thread *);
 
 
 /* Initializes the threading system by transforming the code
@@ -197,10 +213,11 @@ thread_tick (void)
 {
   struct thread *t = thread_current ();
 
-  if ( (timer_ticks() & 0x3) == 0 ) { // on every clock tick...
-    t->priority = PRI_MAX - (to_integer_round_to_nearest(t->recent_cpu) / 4) - (t->nice * 2);
+  if ( thread_mlfqs ) {
+    // add one to recent cpu
+    t->recent_cpu = add_fixed_real(t->recent_cpu,1);
   }
-
+  
   /* Update statistics. */
   if (t == idle_thread)
     idle_ticks++;
@@ -210,10 +227,6 @@ thread_tick (void)
 #endif
   else
     kernel_ticks++;
-
-  // add 1 to recent_cpu...
-  // ... which is a fixed point
-  t->recent_cpu = add_fixed_real(t->recent_cpu,1);
 
   
   /* Enforce preemption. */
@@ -486,7 +499,9 @@ int
 thread_get_load_avg (void) 
 {
   /* Not yet implemented. */
-  return 0;
+  const int tmp_load_avg = multiply_fixed_real(load_avg,100);
+  const int res = to_real_round_to_nearest(tmp_load_avg);
+  return res;
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
@@ -742,6 +757,51 @@ pop_highest_pri_thread (struct list * my_list)
   ASSERT (t);
   list_remove(e);
   return t;
+}
+
+void
+thread_mlfqs_thread_update_priority(struct thread * t, void * aux UNUSED)
+{
+  t->priority = PRI_MAX - (to_real_round_to_nearest(t->recent_cpu) / 4) - (t->nice * 2);
+  if ( t->priority < PRI_MIN ) {
+    t->priority = PRI_MIN;
+  }
+  else if ( t->priority > PRI_MAX ) {
+    t->priority = PRI_MAX;
+  }
+}
+
+void
+thread_mlfqs_update_priorities_all (void)
+{
+  thread_foreach(thread_mlfqs_thread_update_priority,NULL);
+}
+
+void thread_mlfqs_update_load_avg (void) {
+  const int fifty_nine = to_fixed_point(59);
+  const int num1 = divide_fixed_real(fifty_nine,60);
+  const int one = to_fixed_point(1);
+  const int num2 = divide_fixed_real(one,60);
+  const int rdy_threads = list_size(&ready_list);
+  
+  load_avg = multiply_fixed(num1,load_avg) + multiply_fixed_real(num2,rdy_threads);
+}
+
+void
+thread_mlfqs_thread_update_recent_cpu (struct thread * t, void * aux UNUSED)
+{
+  const int num1 = multiply_fixed_real(load_avg,2);
+  const int den1 = add_fixed_real(num1,1);
+  const int num2 = divide_fixed(num1,den1);
+  const int num3 = multiply_fixed(num2,t->recent_cpu);
+  const int res = add_fixed_real(num3,t->nice);
+  
+  t->recent_cpu = res;
+}
+
+void thread_mlfqs_update_recent_cpus_all (void)
+{
+  thread_foreach(thread_mlfqs_thread_update_recent_cpu,NULL);
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
