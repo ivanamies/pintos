@@ -47,7 +47,7 @@ static struct lock tid_lock;
 static int load_avg = 0;
 
 // the ready queues for mlfqs
-static struct list thread_mlfqs_queues[PRI_MAX];
+static struct list thread_mlfqs_queues[PRI_MAX+1];
 
 /* Stack frame for kernel_thread(). */
 struct kernel_thread_frame 
@@ -215,7 +215,7 @@ thread_init (void)
   list_init (&all_list);
 
   if ( thread_mlfqs ) {
-    for ( i = 0; i < PRI_MAX; ++i ) {
+    for ( i = PRI_MIN; i <= PRI_MAX; ++i ) {
       list_init(&thread_mlfqs_queues[i]);
     }
   }
@@ -475,6 +475,7 @@ thread_yield (void)
   
   if (cur != idle_thread) {
     if ( thread_mlfqs ) {
+      ASSERT (PRI_MIN <= cur->priority && cur->priority <= PRI_MAX);
       list_push_back(&thread_mlfqs_queues[cur->priority],
                      &cur->elem);
     }
@@ -888,7 +889,7 @@ next_thread_to_run (void)
   if ( thread_mlfqs ) {
     // go through all ready queues
     curr_list = NULL;
-    for ( i = 0; i < PRI_MAX; ++i ) {
+    for ( i = PRI_MAX; i >= PRI_MIN; --i ) {
       if ( !list_empty(&thread_mlfqs_queues[i]) ) {
         curr_list = &thread_mlfqs_queues[i];
       }
