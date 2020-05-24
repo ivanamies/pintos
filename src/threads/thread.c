@@ -395,13 +395,13 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  if ( thread_mlfqs ) {
-    list_push_back(&thread_mlfqs_queues[t->priority],
-                   &t->elem);
-  }
-  else {
+  /* if ( thread_mlfqs ) { */
+  /*   list_push_back(&thread_mlfqs_queues[t->priority], */
+  /*                  &t->elem); */
+  /* } */
+  /* else { */
     list_push_back (&ready_list, &t->elem);
-  }
+  /* } */
   
   t->status = THREAD_READY;
   intr_set_level (old_level);
@@ -474,14 +474,14 @@ thread_yield (void)
   old_level = intr_disable ();
   
   if (cur != idle_thread) {
-    if ( thread_mlfqs ) {
-      ASSERT (PRI_MIN <= cur->priority && cur->priority <= PRI_MAX);
-      list_push_back(&thread_mlfqs_queues[cur->priority],
-                     &cur->elem);
-    }
-    else {
+    /* if ( thread_mlfqs ) { */
+    /*   ASSERT (PRI_MIN <= cur->priority && cur->priority <= PRI_MAX); */
+    /*   list_push_back(&thread_mlfqs_queues[cur->priority], */
+    /*                  &cur->elem); */
+    /* } */
+    /* else { */
       list_push_back (&ready_list, &cur->elem);
-    }
+    /* } */
   }
   
   cur->status = THREAD_READY;
@@ -540,6 +540,7 @@ thread_set_nice (int nice)
 {
   thread_current ()->nice = nice;
   thread_mlfqs_thread_update_priority (thread_current (), NULL);
+  thread_current ()->priority = PRI_MAX;
   thread_yield ();
 }
 
@@ -555,9 +556,20 @@ int
 thread_get_load_avg (void) 
 {
   /* Not yet implemented. */
-  /* printf("load_avg: %d\n",load_avg); */
-  const int tmp_load_avg = multiply_fixed_real(load_avg,100);
-  const int res = to_real_round_to_nearest(tmp_load_avg);
+  printf("load_avg: %d\n",load_avg);
+  struct list_elem *e;
+  struct thread *t;
+  int res = 0;
+  for (e = list_begin (&ready_list); e != list_end (&ready_list);
+       e = list_next (e)) {
+    t = list_entry (e, struct thread, elem);
+    ++res;
+    printf("t name: %s status: %d\n",t->name,t->status);
+  }
+  
+  /* const int tmp_load_avg = multiply_fixed_real(load_avg,100); */
+  /* const int res = to_real_round_to_nearest(tmp_load_avg); */
+
   return res;
 }
 
@@ -657,7 +669,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   
   if ( thread_mlfqs ) {
-    t->priority = 0;
+    t->priority = PRI_MIN;
   }
   else {
     t->priority = priority;
@@ -670,7 +682,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->recent_cpu = 0;
   
   t->magic = THREAD_MAGIC;
-
+  
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
   intr_set_level (old_level);
@@ -845,17 +857,27 @@ void thread_mlfqs_update_load_avg (void)
   int rdy_threads = 0;
   struct list_elem *e;
   struct thread *t;
-
-  for (e = list_begin (&all_list); e != list_end (&all_list);
-       e = list_next (e)) {
-    t = list_entry (e, struct thread, allelem);
-    if ( t != idle_thread && (t->status == THREAD_RUNNING || t->status == THREAD_READY) ) {
-      ++rdy_threads;
-    }
-  }
   
-  load_avg = multiply_fixed(num1,load_avg) + multiply_fixed_real(num2,rdy_threads);
-  // load_avg = rdy_threads;
+  /* for (e = list_begin (&all_list); e != list_end (&all_list); */
+  /*      e = list_next (e)) { */
+  /*   t = list_entry (e, struct thread, allelem); */
+  /*   if ( t != idle_thread && (t->status == THREAD_RUNNING || t->status == THREAD_READY) ) { */
+  /*     ++rdy_threads; */
+  /*   } */
+  /* } */
+  
+  // for ( int i = PRI_MIN; i < PRI_MAX; ++i ) {
+  //  // add the ready threads
+  /*   rdy_threads += list_size(&thread_mlfqs_queues[i]); */
+  /* } */
+  
+  /* ++rdy_threads; // also add the running thread */
+  
+  rdy_threads += list_size(&ready_list);
+  ++rdy_threads;
+  
+  // load_avg = multiply_fixed(num1,load_avg) + multiply_fixed_real(num2,rdy_threads);
+  load_avg = rdy_threads;
 }
 
 void
@@ -886,25 +908,25 @@ next_thread_to_run (void)
   int i;
   struct list * curr_list;
   struct thread* next_thread;
-  if ( thread_mlfqs ) {
-    // go through all ready queues
-    curr_list = NULL;
-    for ( i = PRI_MAX; i >= PRI_MIN; --i ) {
-      if ( !list_empty(&thread_mlfqs_queues[i]) ) {
-        curr_list = &thread_mlfqs_queues[i];
-      }
-    }
-    if ( curr_list == NULL ) {
-      return idle_thread;
-    }
-    else {
-      next_thread = list_entry(list_pop_front(curr_list),
-                               struct thread,
-                               elem);
-      return next_thread;
-    }
-  }
-  else {
+  /* if ( thread_mlfqs ) { */
+  /*   // go through all ready queues */
+  /*   curr_list = NULL; */
+  /*   for ( i = PRI_MAX; i >= PRI_MIN; --i ) { */
+  /*     if ( !list_empty(&thread_mlfqs_queues[i]) ) { */
+  /*       curr_list = &thread_mlfqs_queues[i]; */
+  /*     } */
+  /*   } */
+  /*   if ( curr_list == NULL ) { */
+  /*     return idle_thread; */
+  /*   } */
+  /*   else { */
+  /*     next_thread = list_entry(list_pop_front(curr_list), */
+  /*                              struct thread, */
+  /*                              elem); */
+  /*     return next_thread; */
+  /*   } */
+  /* } */
+  /* else { */
     if (list_empty (&ready_list)) {
       return idle_thread;
     }
@@ -913,7 +935,7 @@ next_thread_to_run (void)
       next_thread = pop_highest_pri_thread(&ready_list);
       return next_thread;
     }
-  }
+  /* } */
 }
 
 /* Completes a thread switch by activating the new thread's page
@@ -951,7 +973,7 @@ thread_schedule_tail (struct thread *prev)
 #endif
 
   /* If the thread we switched from is dying, destroy its struct
-     thread.  This must happen late so that thread_exit() doesn't
+p     thread.  This must happen late so that thread_exit() doesn't
      pull out the rug under itself.  (We don't free
      initial_thread because its memory was not obtained via
      palloc().) */
