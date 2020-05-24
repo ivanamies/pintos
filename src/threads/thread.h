@@ -11,7 +11,8 @@ enum thread_status
     THREAD_RUNNING,     /* Running thread. */
     THREAD_READY,       /* Not running but ready to run. */
     THREAD_BLOCKED,     /* Waiting for an event to trigger. */
-    THREAD_DYING        /* About to be destroyed. */
+    THREAD_SLEEPING,    // tag iamies -- thread sleep
+    THREAD_DYING,        /* About to be destroyed. */
   };
 
 /* Thread identifier type.
@@ -101,6 +102,7 @@ struct thread
 #endif
 
 // private: :^)
+    int64_t wake_time;
     struct thread *waiting_for;
     void * aux;
     int non_donated_priority;           // tag iamies -- priority that donators cannot touch
@@ -132,8 +134,7 @@ struct thread *thread_current (void);
 tid_t thread_tid (void);
 const char *thread_name (void);
 
-void thread_sleep (void);
-void thread_unsleep (void);
+void thread_sleep (int64_t ticks);
 
 void thread_exit (void) NO_RETURN;
 void thread_yield (void);

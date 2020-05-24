@@ -341,25 +341,26 @@ thread_create (const char *name, int priority,
   return tid;
 }
 
-void thread_sleep(void) {
+// thread_sleep implementation copied from
+// http://www.ccs.neu.edu/home/skotthe/classes/cs5600/fall/2015/notes/pintos-project1.pdf
+void thread_sleep(int64_t ticks) {
   // interrupts are off
   ASSERT (!intr_context ());
   int old_level = intr_disable ();
 
-  // block thread
-  list_push_back (&sleep_list, &thread_current()->elem);
-  thread_block ();
-
+  /* /\* // block thread *\/ */
+  /* /\* list_push_back (&sleep_list, &thread_current()->elem); *\/ */
+  /* /\* thread_block (); *\/ */
+  struct thread * cur = thread_current ();
+  if ( cur != idle_thread ) {
+    list_push_back(&sleep_list,&cur->elem);
+    cur->status = THREAD_SLEEPING;
+    cur->wake_time = timer_ticks() + ticks;
+    schedule ();
+  }
+  
   // maybe interrupts are on again
   intr_set_level (old_level);
-}
-
-void thread_unsleep(void) {
-  // inside the interrupt handler so I can't be interrupted
-  while (!list_empty (&sleep_list)) {
-    thread_unblock (list_entry (list_pop_front (&sleep_list),
-                                struct thread, elem));
-  }
 }
 
 /* Puts the current thread to sleep.  It will not be scheduled
@@ -390,7 +391,7 @@ void
 thread_unblock (struct thread *t) 
 {
   enum intr_level old_level;
-
+  
   ASSERT (is_thread (t));
 
   old_level = intr_disable ();
@@ -403,7 +404,6 @@ thread_unblock (struct thread *t)
     list_push_back (&ready_list, &t->elem);
   /* } */
   
-  t->status = THREAD_READY;
   intr_set_level (old_level);
 }
 
@@ -905,8 +905,8 @@ void thread_mlfqs_update_recent_cpus_all (void)
 static struct thread *
 next_thread_to_run (void) 
 {
-  int i;
-  struct list * curr_list;
+  /* int i; */
+  /* struct list * curr_list; */
   struct thread* next_thread;
   /* if ( thread_mlfqs ) { */
   /*   // go through all ready queues */
@@ -994,14 +994,38 @@ p     thread.  This must happen late so that thread_exit() doesn't
 static void
 schedule (void) 
 {
-  struct thread *cur = running_thread ();
-  struct thread *next = next_thread_to_run ();
-  struct thread *prev = NULL;
-
   ASSERT (intr_get_level () == INTR_OFF);
+  
+  struct thread * cur, * next, * prev;
+
+  if ( !list_empty(&sleep_list) ) {
+    struct list_elem * tmp, * e = list_begin(&sleep_list);
+    int64_t cur_ticks = timer_ticks();
+    
+    // wake up sleeping threads
+    while ( e != list_end(&sleep_list) ) {
+      struct thread * t = list_entry(e,struct thread, elem);
+      if ( cur_ticks >= t->wake_time ) {
+        list_push_back(&ready_list,&t->elem);
+        t->status = THREAD_READY;
+        tmp = e;
+        e = list_next(e);
+        list_remove(tmp);
+      }
+      else {
+        e = list_next(e);
+      }
+    }
+    // at this point the only thread that can run next is the idle_thread
+  }
+  
+  cur = running_thread ();
+  next = next_thread_to_run ();
+  prev = NULL;
+
   ASSERT (cur->status != THREAD_RUNNING);
   ASSERT (is_thread (next));
-
+  
   if (cur != next)
     prev = switch_threads (cur, next);
   thread_schedule_tail (prev);
