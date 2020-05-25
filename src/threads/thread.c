@@ -45,7 +45,7 @@ static struct lock tid_lock;
 // thread_mlfqs load average
 // as a FIXED POINT float
 static int load_avg = 0;
-// resort to runtime behavior changes and asserts because no debugger...
+// resort to runtime behavior changes and asserts because debugger broken...
 static int debug_flag1 = 0;
 static int debug_flag2 = 0;
 static int debug_flag3 = 0;
@@ -255,7 +255,7 @@ void
 thread_tick (void) 
 {
   struct thread *t = thread_current ();
-
+  
   if ( thread_mlfqs ) {
     // add one to recent cpu
     t->recent_cpu = add_fixed_real(t->recent_cpu,1);
@@ -368,6 +368,13 @@ void thread_sleep(int64_t ticks) {
   intr_set_level (old_level);
 }
 
+void add_thread_to_mlfqs(struct thread * t) {
+  ASSERT (is_thread (t));
+  ASSERT (PRI_MIN <= t->priority && t->priority <= PRI_MAX);
+  list_push_back(&thread_mlfqs_queues[t->priority],
+                 &t->elem);
+}
+
 void thread_unsleep(void) {
   struct list_elem * tmp, * e = list_begin(&sleep_list);
   int64_t cur_ticks = timer_ticks();
@@ -379,7 +386,12 @@ void thread_unsleep(void) {
       e = list_next(e);
       list_remove(tmp);
       
-      list_push_back(&ready_list,&t->elem);
+      if ( thread_mlfqs ) {
+        add_thread_to_mlfqs(t);
+      }
+      else {
+        list_push_back(&ready_list,&t->elem);        
+      }
       t->status = THREAD_READY;
       
       /* debug_flag1 = 1; */
@@ -423,13 +435,12 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  /* if ( thread_mlfqs ) { */
-  /*   list_push_back(&thread_mlfqs_queues[t->priority], */
-  /*                  &t->elem); */
-  /* } */
-  /* else { */
+  if ( thread_mlfqs ) {
+    add_thread_to_mlfqs(t);
+  }
+  else {
     list_push_back (&ready_list, &t->elem);
-  /* } */
+  }
   
   intr_set_level (old_level);
 }
@@ -501,14 +512,12 @@ thread_yield (void)
   old_level = intr_disable ();
   
   if (cur != idle_thread) {
-    /* if ( thread_mlfqs ) { */
-    /*   ASSERT (PRI_MIN <= cur->priority && cur->priority <= PRI_MAX); */
-    /*   list_push_back(&thread_mlfqs_queues[cur->priority], */
-    /*                  &cur->elem); */
-    /* } */
-    /* else { */
+    if ( thread_mlfqs ) {
+      add_thread_to_mlfqs(cur);
+    }
+    else {
       list_push_back (&ready_list, &cur->elem);
-    /* } */
+    }
   }
   
   cur->status = THREAD_READY;
@@ -580,7 +589,7 @@ thread_get_nice (void)
 /* Returns 100 times the system load average. */
 int
 thread_get_load_avg (void) 
-{  
+{
   const int tmp_load_avg = multiply_fixed_real(load_avg,100);
   const int res = to_real_round_to_nearest(tmp_load_avg);
 
@@ -870,9 +879,11 @@ void thread_mlfqs_update_load_avg (void)
   const int num1 = divide_fixed_real(fifty_nine,60);
   const int one = to_fixed_point(1);
   const int num2 = divide_fixed_real(one,60);
-  const int rdy_threads = list_size(&ready_list) + (thread_current () != idle_thread);
-      
+  const int rdy_threads = list_size(&all_list) - list_size(&sleep_list) - 1;
+  // rdy_threads = list_size(&ready_list) + (thread_current () != idle_thread);
+  
   load_avg = multiply_fixed(num1,load_avg) + multiply_fixed_real(num2,rdy_threads);
+  /* load_avg = rdy_threads; */
 }
 
 void
@@ -900,37 +911,33 @@ void thread_mlfqs_update_recent_cpus_all (void)
 static struct thread *
 next_thread_to_run (void) 
 {
-  /* int i; */
-  /* struct list * curr_list; */
+  int i;
+  struct list * curr_list;
   struct thread* next_thread;
-  /* if ( thread_mlfqs ) { */
-  /*   // go through all ready queues */
-  /*   curr_list = NULL; */
-  /*   for ( i = PRI_MAX; i >= PRI_MIN; --i ) { */
-  /*     if ( !list_empty(&thread_mlfqs_queues[i]) ) { */
-  /*       curr_list = &thread_mlfqs_queues[i]; */
-  /*     } */
-  /*   } */
-  /*   if ( curr_list == NULL ) { */
-  /*     return idle_thread; */
-  /*   } */
-  /*   else { */
-  /*     next_thread = list_entry(list_pop_front(curr_list), */
-  /*                              struct thread, */
-  /*                              elem); */
-  /*     return next_thread; */
-  /*   } */
-  /* } */
-  /* else { */
-  if ( !list_empty(&ready_list) ) {
-    // schedules the thread with the highest priority
-    next_thread = pop_highest_pri_thread(&ready_list);
-    return next_thread;        
-  }
-  else {
+  if ( thread_mlfqs ) {
+    // go through all ready queues
+    curr_list = NULL;
+    for ( i = PRI_MAX; i >= PRI_MIN; --i ) {
+      if ( !list_empty(&thread_mlfqs_queues[i]) ) {
+        curr_list = &thread_mlfqs_queues[i];
+        next_thread = list_entry(list_pop_front(curr_list),
+                                 struct thread,
+                                 elem);
+        return next_thread;
+      }
+    }
     return idle_thread;
   }
-  /* } */
+  else {
+    if ( !list_empty(&ready_list) ) {
+      // schedules the thread with the highest priority
+      next_thread = pop_highest_pri_thread(&ready_list);
+      return next_thread;        
+    }
+    else {
+      return idle_thread;
+    }
+  }
 }
 
 /* Completes a thread switch by activating the new thread's page
