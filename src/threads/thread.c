@@ -963,11 +963,9 @@ next_thread_to_run (void)
     return next_thread;        
   }
   else if ( !list_empty(&sleep_list) ) {
-    // awake something at random to get interrupts back
-    struct list_elem * tmp = list_pop_front(&sleep_list);
-    struct thread * t = list_entry(tmp,struct thread, elem);
-    t->status = THREAD_READY;
-    return t;
+    next_thread = pop_highest_pri_thread(&sleep_list);
+    next_thread->status = THREAD_READY;
+    return next_thread;
   }
   else {
     return idle_thread;
