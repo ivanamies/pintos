@@ -45,6 +45,11 @@ static struct lock tid_lock;
 // thread_mlfqs load average
 // as a FIXED POINT float
 static int load_avg = 0;
+// resort to runtime behavior changes and asserts because no debugger...
+static int debug_flag1 = 0;
+static int debug_flag2 = 0;
+static int debug_flag3 = 0;
+static int debug_flag4 = 0;
 
 // the ready queues for mlfqs
 static struct list thread_mlfqs_queues[PRI_MAX+1];
@@ -363,6 +368,28 @@ void thread_sleep(int64_t ticks) {
   intr_set_level (old_level);
 }
 
+void thread_unsleep(void) {
+  struct list_elem * tmp, * e = list_begin(&sleep_list);
+  int64_t cur_ticks = timer_ticks();
+  
+  while ( e != list_end(&sleep_list) ) {
+    struct thread * t = list_entry(e, struct thread, elem);
+    if ( cur_ticks >= t->wake_time ) {
+      tmp = e;
+      e = list_next(e);
+      list_remove(tmp);
+      
+      list_push_back(&ready_list,&t->elem);
+      t->status = THREAD_READY;
+      
+      /* debug_flag1 = 1; */
+    }
+    else {
+      e = list_next(e);
+    }
+  }
+}
+
 /* Puts the current thread to sleep.  It will not be scheduled
    again until awoken by thread_unblock().
 
@@ -598,12 +625,13 @@ idle (void *idle_started_ UNUSED)
   idle_thread = thread_current ();
   sema_up (idle_started);
 
-  for (;;) 
-    {
+  for (;;)
+    {      
       /* Let someone else run. */
       intr_disable ();
+      
       thread_block ();
-
+      
       /* Re-enable interrupts and wait for the next one.
 
          The `sti' instruction disables interrupts until the
@@ -618,6 +646,7 @@ idle (void *idle_started_ UNUSED)
          7.11.1 "HLT Instruction". */
       asm volatile ("sti; hlt" : : : "memory");
     }
+  
 }
 
 /* Function used as the basis for a kernel thread. */
@@ -927,14 +956,22 @@ next_thread_to_run (void)
   /*   } */
   /* } */
   /* else { */
-    if (list_empty (&ready_list)) {
-      return idle_thread;
-    }
-    else {
-      // schedules the thread with the highest priority
-      next_thread = pop_highest_pri_thread(&ready_list);
-      return next_thread;
-    }
+  
+  if ( !list_empty(&ready_list) ) {
+    // schedules the thread with the highest priority
+    next_thread = pop_highest_pri_thread(&ready_list);
+    return next_thread;        
+  }
+  else if ( !list_empty(&sleep_list) ) {
+    // awake something at random to get interrupts back
+    struct list_elem * tmp = list_pop_front(&sleep_list);
+    struct thread * t = list_entry(tmp,struct thread, elem);
+    t->status = THREAD_READY;
+    return t;
+  }
+  else {
+    return idle_thread;
+  }
   /* } */
 }
 
@@ -995,30 +1032,12 @@ static void
 schedule (void) 
 {
   ASSERT (intr_get_level () == INTR_OFF);
+
+  // awake threads who should stop sleeping
+  thread_unsleep();
   
   struct thread * cur, * next, * prev;
 
-  if ( !list_empty(&sleep_list) ) {
-    struct list_elem * tmp, * e = list_begin(&sleep_list);
-    int64_t cur_ticks = timer_ticks();
-    
-    // wake up sleeping threads
-    while ( e != list_end(&sleep_list) ) {
-      struct thread * t = list_entry(e,struct thread, elem);
-      if ( cur_ticks >= t->wake_time ) {
-        list_push_back(&ready_list,&t->elem);
-        t->status = THREAD_READY;
-        tmp = e;
-        e = list_next(e);
-        list_remove(tmp);
-      }
-      else {
-        e = list_next(e);
-      }
-    }
-    // at this point the only thread that can run next is the idle_thread
-  }
-  
   cur = running_thread ();
   next = next_thread_to_run ();
   prev = NULL;
@@ -1026,8 +1045,9 @@ schedule (void)
   ASSERT (cur->status != THREAD_RUNNING);
   ASSERT (is_thread (next));
   
-  if (cur != next)
+  if (cur != next) {
     prev = switch_threads (cur, next);
+  }
   thread_schedule_tail (prev);
 }
 
