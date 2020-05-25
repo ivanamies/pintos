@@ -884,27 +884,8 @@ void thread_mlfqs_update_load_avg (void)
   const int one = to_fixed_point(1);
   const int num2 = divide_fixed_real(one,60);
   const int rdy_threads = list_size(&ready_list) + (thread_current () != idle_thread);
-  
-  /* for (e = list_begin (&all_list); e != list_end (&all_list); */
-  /*      e = list_next (e)) { */
-  /*   t = list_entry (e, struct thread, allelem); */
-  /*   if ( t != idle_thread && (t->status == THREAD_RUNNING || t->status == THREAD_READY) ) { */
-  /*     ++rdy_threads; */
-  /*   } */
-  /* } */
-  
-  // for ( int i = PRI_MIN; i < PRI_MAX; ++i ) {
-  //  // add the ready threads
-  /*   rdy_threads += list_size(&thread_mlfqs_queues[i]); */
-  /* } */
-  
-  /* ++rdy_threads; // also add the running thread */
-  
-  /* rdy_threads += list_size(&ready_list); */
-  /* ++rdy_threads; */
-  
+      
   load_avg = multiply_fixed(num1,load_avg) + multiply_fixed_real(num2,rdy_threads);
-  // load_avg = rdy_threads;
 }
 
 void
