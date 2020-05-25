@@ -883,7 +883,7 @@ void thread_mlfqs_update_load_avg (void)
   const int num1 = divide_fixed_real(fifty_nine,60);
   const int one = to_fixed_point(1);
   const int num2 = divide_fixed_real(one,60);
-  const int rdy_threads = list_size(&ready_list) + 1;
+  const int rdy_threads = list_size(&ready_list) + (thread_current () != idle_thread);
   
   /* for (e = list_begin (&all_list); e != list_end (&all_list); */
   /*      e = list_next (e)) { */
@@ -959,11 +959,6 @@ next_thread_to_run (void)
     next_thread = pop_highest_pri_thread(&ready_list);
     return next_thread;        
   }
-  else if ( !list_empty(&sleep_list) ) {
-    next_thread = pop_highest_pri_thread(&sleep_list);
-    next_thread->status = THREAD_READY;
-    return next_thread;
-  }
   else {
     return idle_thread;
   }
@@ -1032,7 +1027,7 @@ schedule (void)
   thread_unsleep();
   
   struct thread * cur, * next, * prev;
-
+  
   cur = running_thread ();
   next = next_thread_to_run ();
   prev = NULL;
