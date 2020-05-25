@@ -567,7 +567,6 @@ thread_set_nice (int nice)
 {
   thread_current ()->nice = nice;
   thread_mlfqs_thread_update_priority (thread_current (), NULL);
-  thread_current ()->priority = PRI_MAX;
   thread_yield ();
 }
 
@@ -581,19 +580,7 @@ thread_get_nice (void)
 /* Returns 100 times the system load average. */
 int
 thread_get_load_avg (void) 
-{
-  /* /\* Not yet implemented. *\/ */
-  // printf("load_avg: %d\n",load_avg);
-  /* struct list_elem *e; */
-  /* struct thread *t; */
-  /* int res = 0; */
-  /* for (e = list_begin (&ready_list); e != list_end (&ready_list); */
-  /*      e = list_next (e)) { */
-  /*   t = list_entry (e, struct thread, elem); */
-  /*   ++res; */
-  /*   printf("t name: %s status: %d\n",t->name,t->status); */
-  /* } */
-  
+{  
   const int tmp_load_avg = multiply_fixed_real(load_avg,100);
   const int res = to_real_round_to_nearest(tmp_load_avg);
 
