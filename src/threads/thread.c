@@ -582,20 +582,20 @@ thread_get_nice (void)
 int
 thread_get_load_avg (void) 
 {
-  /* Not yet implemented. */
-  printf("load_avg: %d\n",load_avg);
-  struct list_elem *e;
-  struct thread *t;
-  int res = 0;
-  for (e = list_begin (&ready_list); e != list_end (&ready_list);
-       e = list_next (e)) {
-    t = list_entry (e, struct thread, elem);
-    ++res;
-    printf("t name: %s status: %d\n",t->name,t->status);
-  }
+  /* /\* Not yet implemented. *\/ */
+  // printf("load_avg: %d\n",load_avg);
+  /* struct list_elem *e; */
+  /* struct thread *t; */
+  /* int res = 0; */
+  /* for (e = list_begin (&ready_list); e != list_end (&ready_list); */
+  /*      e = list_next (e)) { */
+  /*   t = list_entry (e, struct thread, elem); */
+  /*   ++res; */
+  /*   printf("t name: %s status: %d\n",t->name,t->status); */
+  /* } */
   
-  /* const int tmp_load_avg = multiply_fixed_real(load_avg,100); */
-  /* const int res = to_real_round_to_nearest(tmp_load_avg); */
+  const int tmp_load_avg = multiply_fixed_real(load_avg,100);
+  const int res = to_real_round_to_nearest(tmp_load_avg);
 
   return res;
 }
@@ -883,9 +883,7 @@ void thread_mlfqs_update_load_avg (void)
   const int num1 = divide_fixed_real(fifty_nine,60);
   const int one = to_fixed_point(1);
   const int num2 = divide_fixed_real(one,60);
-  int rdy_threads = 0;
-  struct list_elem *e;
-  struct thread *t;
+  const int rdy_threads = list_size(&ready_list) + 1;
   
   /* for (e = list_begin (&all_list); e != list_end (&all_list); */
   /*      e = list_next (e)) { */
@@ -902,11 +900,11 @@ void thread_mlfqs_update_load_avg (void)
   
   /* ++rdy_threads; // also add the running thread */
   
-  rdy_threads += list_size(&ready_list);
-  ++rdy_threads;
+  /* rdy_threads += list_size(&ready_list); */
+  /* ++rdy_threads; */
   
-  // load_avg = multiply_fixed(num1,load_avg) + multiply_fixed_real(num2,rdy_threads);
-  load_avg = rdy_threads;
+  load_avg = multiply_fixed(num1,load_avg) + multiply_fixed_real(num2,rdy_threads);
+  // load_avg = rdy_threads;
 }
 
 void
@@ -956,7 +954,6 @@ next_thread_to_run (void)
   /*   } */
   /* } */
   /* else { */
-  
   if ( !list_empty(&ready_list) ) {
     // schedules the thread with the highest priority
     next_thread = pop_highest_pri_thread(&ready_list);
