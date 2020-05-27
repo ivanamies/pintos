@@ -115,14 +115,43 @@ int
 process_wait (tid_t child_tid UNUSED) 
 {
   // the recommended infinite loop
-  while ( true ) {
-    intr_disable();
-    intr_enable();
+
+  struct thread * t = thread_current ();
+
+  int child_acquire_success = 1;
+  // prevent self from being interrupted while getting the thread by pid
+  // then prevent races on the thread data structure itself by turning
+  // off interrupts
+  int old_level = intr_disable ();
+  struct thread * target = get_thread_by_pid (child_tid);
+  if ( target != NULL && target->parent_process == t &&
+       /* if we reached this function and the thread hasn't started yet, abort*/
+       target->process_status != PROCESS_UNDEFINED &&
+       /* if some other process is/previously has monitoring/ed this, abort */
+       target->monitoring_process != -1 ) {
+    t->waiting_for_status = target->process_status;
+    t->monitoring_process = thread_pid ();
+    child_acquire_success = 0;
   }
-  // how do I get process name from tid??
-  // how do I get process exit status from tid??
-  printf ("%s: exit(%d)\n", "dunno", -1); // tagiamies wtf is going on
-  return -1;
+  intr_set_level (old_level);
+
+  if ( child_acquire_success ) {
+    return -1;
+  }
+  
+  // repeatedly examine the current thread's child target status
+  // for finish, yielding the cpu between checks
+  // this is not thread safe in general, but it's fine because
+  // the child thread can only set to EXIT_SUCCESS or EXIT_FAILURE once
+  // and then must immediately exit with no ability to set the status
+  // to something else
+  // it is also impossible for multiple processes to monitor one child
+  while ( t->waiting_for_status != 0 /* EXIT_SUCCESS */ &&
+          t->waiting_for_status != 1 /* EXIT_FAILURE */ ) {
+    thread_yield();
+  }
+  
+  return t->waiting_for_status;
 }
 
 /* Free the current process's resources. */
@@ -253,15 +282,15 @@ load (struct input_args * ia, void (**eip) (void), void **esp)
   bool success = false;
   int i;
 
-  t->waiting_for = -1;
-  t->waiting_for_status = PROCESS_UNDEFINED;
-  t->process_status = PROCESS_BAD_EXIT;
+  ASSERT (INPUT_ARGS_MAX_ARG_LENGTH == PROCESS_NAME_MAX_LENGTH);
+  strlcpy(t->process_name,file_name,PROCESS_NAME_MAX_LENGTH);
+  
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
   if (t->pagedir == NULL) 
     goto done;
   process_activate ();
-
+  
   /* Open executable file. */
   file = filesys_open (file_name);
   if (file == NULL) 

@@ -182,6 +182,12 @@ thread_create (const char *name, int priority,
   /* Initialize thread. */
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
+  
+#ifdef USERPROG
+  t->monitoring_process = -1;
+  t->waiting_for_status = PROCESS_UNDEFINED;
+  t->process_status = PROCESS_UNDEFINED;
+#endif
 
   /* Stack frame for kernel_thread(). */
   kf = alloc_frame (t, sizeof *kf);
@@ -279,6 +285,25 @@ pid_t thread_pid (void)
 {
   return thread_current ()->tid; // lmao
 }
+
+struct thread*
+get_thread_by_pid (pid_t target) {
+  ASSERT (intr_get_level () == INTR_OFF);
+
+  struct thread * t;
+  struct list_elem *e;
+  
+  for (e = list_begin (&all_list); e != list_end (&all_list); e = list_next (e)) {
+    t = list_entry (e, struct thread, allelem);
+    if ( t->tid /* pid == tid */ == target) {
+      return t;
+    }
+  }
+  
+  return NULL;
+
+}
+
 
 /* Deschedules the current thread and destroys it.  Never
    returns to the caller. */

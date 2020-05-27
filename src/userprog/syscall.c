@@ -68,15 +68,14 @@ syscall_handler (struct intr_frame *f UNUSED)
   else if (syscall_no == SYS_EXIT ) {
     status = *((int *)esp);
     esp += word_size;
-    printf("exit status: %d\n",status);
-    if (cur->parent_process != NULL && cur->parent_process->waiting_for == thread_pid()) {
-      if ( status == 0 ) { // 0 is EXIT_SUCCESS
-        cur->parent_process->waiting_for_status = PROCESS_GOOD_EXIT;
-      }
-      else {
-        cur->parent_process->waiting_for_status = PROCESS_BAD_EXIT;
-      }
+    cur->process_status = status;
+    // set parent's waiting_for_status to indicate exit
+    if (cur->parent_process != NULL ) {
+      // 0 is PROCESS_GOOD_EXIT and EXIT_SUCCESS
+      // 1 is PROCESS_BAD_EXIT and EXIT_FAILURE
+      cur->parent_process->waiting_for_status = status;
     }
+    printf("%s: exit(%d)\n",cur->process_name,cur->process_status);
     process_terminate();
     return;
   }
@@ -102,7 +101,6 @@ syscall_handler (struct intr_frame *f UNUSED)
     esp += word_size;
     unsigned size = *((unsigned *)esp);
     esp += word_size;
-    /* printf("fd: %d buffer: %p size: %d\n",fd,buffer,(int)size); */
     if ( fd == 1 ) {
       putbuf(buffer,size);
     }

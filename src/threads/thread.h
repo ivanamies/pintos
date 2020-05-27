@@ -16,10 +16,10 @@ enum thread_status
 
 enum process_status_e
   {
-    PROCESS_UNDEFINED,          /* never associated with a process */
-    PROCESS_RUNNING,            /* currently running a process */
     PROCESS_GOOD_EXIT,    /* the process it was running finished without errors */
     PROCESS_BAD_EXIT,  /* the process it was running finished with some error */
+    PROCESS_RUNNING,            /* currently running a process */
+    PROCESS_UNDEFINED,          /* never associated with a process */
   };
 
 /* Thread identifier type.
@@ -110,9 +110,10 @@ struct thread
     uint32_t *pagedir;                  /* Page directory. */
     char process_name[PROCESS_NAME_MAX_LENGTH];
     struct thread* parent_process;
+    pid_t monitoring_process;
     enum process_status_e process_status; // used to print the exit status
-    pid_t waiting_for;
-    enum process_status_e waiting_for_status;
+    enum process_status_e waiting_for_status; // status of child process being monitored by process_wait
+    // the child process will DIRECTLY SET this variable by dereferencing the parent_process
 #endif
 
     /* Owned by thread.c. */
@@ -139,6 +140,7 @@ void thread_unblock (struct thread *);
 struct thread *thread_current (void);
 tid_t thread_tid (void);
 pid_t thread_pid (void);
+struct thread* get_thread_by_pid (pid_t target);
 const char *thread_name (void);
 
 void thread_exit (void) NO_RETURN;
