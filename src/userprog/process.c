@@ -517,7 +517,8 @@ setup_stack (struct input_args * ia, void **esp)
         // esp is always rounded to a word length
         // push on nullptr for argv[argc]
         (*esp) = push_stack(&nothing,sizeof(void *),*esp);
-        // push on the other string pointers
+        // push on the other string pointers in the order
+        // we pushed them on
         for ( i = 0; i < num_strings_pushed; ++i ) {
           (*esp) = push_stack(&strings_on_stack[i],sizeof(void *),*esp);
         }

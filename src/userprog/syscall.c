@@ -31,7 +31,7 @@ static int check_user_ptr ( void * p) {
   else if ( is_kernel_vaddr(p) ) {
     return 1;
   }
-  else if ( lookup_page(thread_current ()->pagedir,p, 0/*do not create*/) == NULL ) {
+  else if ( pagedir_get_page(thread_current ()->pagedir,p) == NULL ) {
     return 1;
   }
   else {
@@ -93,6 +93,7 @@ syscall_handler (struct intr_frame *f UNUSED)
   else if ( syscall_no == SYS_FILESIZE ) {
   }
   else if ( syscall_no == SYS_READ ) {
+    // blah
   }
   else if ( syscall_no == SYS_WRITE ) {
     int fd = *((int *)esp);
