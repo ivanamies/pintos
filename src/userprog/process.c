@@ -518,7 +518,7 @@ setup_stack (struct input_args * ia, void **esp)
         // push on nullptr for argv[argc]
         (*esp) = push_stack(&nothing,sizeof(void *),*esp);
         // push on the other string pointers
-        for ( i = ia->argc-1; i >= 0; --i ) {
+        for ( i = 0; i < num_strings_pushed; ++i ) {
           (*esp) = push_stack(&strings_on_stack[i],sizeof(void *),*esp);
         }
         // push on the &argv[0] that lives on stack
@@ -529,8 +529,8 @@ setup_stack (struct input_args * ia, void **esp)
         (*esp) = push_stack(&nothing,sizeof(void *),*esp);
         
         // tagiamies -- debug
-        int SIZE = (int)PHYS_BASE - (int)*esp;
-        hex_dump((int)*esp,*esp,SIZE,1);
+        /* int SIZE = (int)PHYS_BASE - (int)*esp; */
+        /* hex_dump((int)*esp,*esp,SIZE,1); */
         /* while ( true ) { */
         /*   intr_disable(); */
         /*   intr_enable(); */
