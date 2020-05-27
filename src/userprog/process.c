@@ -474,7 +474,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 void* push_stack(void * data, size_t n, void * esp_) {
   char * esp = (char *)esp_; // cast to char* to avoid pointer arithematic outside of 1 byte types
   
-  // reserve n rounded to a word length of space on stack
+  // reserve n rounded to a multiple of word length
   // I assume a word length is sizeof void*
   size_t to_reserve = (n + sizeof(void *)-1) & (0xFFFFFFFF ^ (sizeof(void*)-1));
   
@@ -511,7 +511,7 @@ setup_stack (struct input_args * ia, void **esp)
         // push on arguments
         for ( i = ia->argc-1; i >= 0; --i ) {
           (*esp) = push_stack(ia->argv[i],strlen(ia->argv[i])+1 /* include null */, *esp);
-          strings_on_stack[num_strings_pushed] = esp;
+          strings_on_stack[num_strings_pushed] = *esp;
           ++num_strings_pushed;
         }
         // esp is always rounded to a word length
@@ -519,7 +519,7 @@ setup_stack (struct input_args * ia, void **esp)
         (*esp) = push_stack(&nothing,sizeof(void *),*esp);
         // push on the other string pointers
         for ( i = ia->argc-1; i >= 0; --i ) {
-          (*esp) = push_stack(strings_on_stack[i],sizeof(void *),*esp);
+          (*esp) = push_stack(&strings_on_stack[i],sizeof(void *),*esp);
         }
         // push on the &argv[0] that lives on stack
         (*esp) = push_stack(&(*esp),sizeof(void *),*esp);
@@ -529,8 +529,12 @@ setup_stack (struct input_args * ia, void **esp)
         (*esp) = push_stack(&nothing,sizeof(void *),*esp);
         
         // tagiamies -- debug
-        /* int SIZE = (int)PHYS_BASE - (int)*esp; */
-        /* hex_dump((int)*esp,*esp,SIZE,1); */        
+        int SIZE = (int)PHYS_BASE - (int)*esp;
+        hex_dump((int)*esp,*esp,SIZE,1);
+        /* while ( true ) { */
+        /*   intr_disable(); */
+        /*   intr_enable(); */
+        /* } */
       }
       else {
         palloc_free_page (kpage);
