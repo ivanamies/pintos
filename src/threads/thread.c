@@ -275,6 +275,11 @@ thread_tid (void)
   return thread_current ()->tid;
 }
 
+pid_t thread_pid (void)
+{
+  return thread_current ()->tid; // lmao
+}
+
 /* Deschedules the current thread and destroys it.  Never
    returns to the caller. */
 void

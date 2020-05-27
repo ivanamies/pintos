@@ -1,6 +1,5 @@
 #include <console.h>
 #include <stdarg.h>
-#include <stdio.h>
 #include "devices/serial.h"
 #include "devices/vga.h"
 #include "threads/init.h"

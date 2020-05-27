@@ -18,10 +18,8 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 
-#define INPUT_ARGS_MAX_ARGS 63
-#define INPUT_ARGS_MAX_ARG_LENGTH 64
-
 struct input_args {
+  struct thread * parent_process;
   int argc;
   char argv[INPUT_ARGS_MAX_ARGS][INPUT_ARGS_MAX_ARG_LENGTH];
 };
@@ -53,6 +51,8 @@ process_execute (const char *input)
     return TID_ERROR;
   }
   memset(ia,0,PGSIZE);
+
+  ia->parent_process = thread_current();
   
   for (token = strtok_r (input_copy, " ", &save_ptr); token != NULL;
        token = strtok_r (NULL, " ", &save_ptr)) {
@@ -61,7 +61,7 @@ process_execute (const char *input)
     strlcpy (ia->argv[ia->argc],token,INPUT_ARGS_MAX_ARG_LENGTH);
     ++ia->argc;
   }
-    
+  
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (input, PRI_DEFAULT, start_process, ia);
   if (tid == TID_ERROR)
@@ -131,7 +131,7 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
-
+  
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
@@ -253,6 +253,9 @@ load (struct input_args * ia, void (**eip) (void), void **esp)
   bool success = false;
   int i;
 
+  t->waiting_for = -1;
+  t->waiting_for_status = PROCESS_UNDEFINED;
+  t->process_status = PROCESS_BAD_EXIT;
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
   if (t->pagedir == NULL) 
@@ -347,7 +350,13 @@ load (struct input_args * ia, void (**eip) (void), void **esp)
   *eip = (void (*) (void)) ehdr.e_entry;
 
   success = true;
-
+  
+  if ( success ) {
+    // set parent process
+    t->parent_process = ia->parent_process;
+    // set execution status
+    t->process_status = PROCESS_RUNNING;
+  }
  done:
   /* We arrive here whether the load is successful or not. */
   file_close (file);
@@ -485,7 +494,7 @@ setup_stack (struct input_args * ia, void **esp)
   uint8_t *kpage;
   int i;
   bool success = false;
-  void * nothing = NULL;
+  const void * nothing = NULL;
   
   int num_strings_pushed = 0;
   void * strings_on_stack[INPUT_ARGS_MAX_ARGS];
@@ -497,7 +506,8 @@ setup_stack (struct input_args * ia, void **esp)
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
       if (success) {
         *esp = PHYS_BASE;
-        
+        // set up process stack
+        //
         // push on arguments
         for ( i = ia->argc-1; i >= 0; --i ) {
           (*esp) = push_stack(ia->argv[i],strlen(ia->argv[i])+1 /* include null */, *esp);
@@ -517,7 +527,8 @@ setup_stack (struct input_args * ia, void **esp)
         (*esp) = push_stack(&ia->argc,sizeof(int),*esp);
         // push on dummy return address
         (*esp) = push_stack(&nothing,sizeof(void *),*esp);
-                
+        
+        // tagiamies -- debug
         /* int SIZE = (int)PHYS_BASE - (int)*esp; */
         /* hex_dump((int)*esp,*esp,SIZE,1); */        
       }

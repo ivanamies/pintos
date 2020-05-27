@@ -3,6 +3,9 @@
 
 #include "threads/thread.h"
 
+#define INPUT_ARGS_MAX_ARGS 63
+#define INPUT_ARGS_MAX_ARG_LENGTH 64
+
 tid_t process_execute (const char *file_name);
 int process_wait (tid_t);
 void process_exit (void);

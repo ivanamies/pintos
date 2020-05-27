@@ -14,15 +14,27 @@ enum thread_status
     THREAD_DYING        /* About to be destroyed. */
   };
 
+enum process_status_e
+  {
+    PROCESS_UNDEFINED,          /* never associated with a process */
+    PROCESS_RUNNING,            /* currently running a process */
+    PROCESS_GOOD_EXIT,    /* the process it was running finished without errors */
+    PROCESS_BAD_EXIT,  /* the process it was running finished with some error */
+  };
+
 /* Thread identifier type.
    You can redefine this to whatever type you like. */
 typedef int tid_t;
 #define TID_ERROR ((tid_t) -1)          /* Error value for tid_t. */
+typedef tid_t pid_t;
+#define PID_ERROR ((pid_t) -1)          /* error value for pid_t */
 
 /* Thread priorities. */
 #define PRI_MIN 0                       /* Lowest priority. */
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
+
+#define PROCESS_NAME_MAX_LENGTH 64
 
 /* A kernel thread or user process.
 
@@ -96,6 +108,11 @@ struct thread
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
+    char process_name[PROCESS_NAME_MAX_LENGTH];
+    struct thread* parent_process;
+    enum process_status_e process_status; // used to print the exit status
+    pid_t waiting_for;
+    enum process_status_e waiting_for_status;
 #endif
 
     /* Owned by thread.c. */
@@ -121,6 +138,7 @@ void thread_unblock (struct thread *);
 
 struct thread *thread_current (void);
 tid_t thread_tid (void);
+pid_t thread_pid (void);
 const char *thread_name (void);
 
 void thread_exit (void) NO_RETURN;
