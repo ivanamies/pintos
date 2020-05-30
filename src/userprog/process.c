@@ -18,6 +18,10 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 
+// a static table of parent pid to child pid
+
+int parent_to_child [MAX_PROCESSES][MAX_CHILD_PROCESSES];
+
 struct input_args {
   struct thread * parent_process;
   int argc;
@@ -64,6 +68,7 @@ process_execute (const char *input)
   
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (input, PRI_DEFAULT, start_process, ia);
+  
   if (tid == TID_ERROR)
     palloc_free_page (input_copy); 
   return tid;
@@ -282,8 +287,13 @@ load (struct input_args * ia, void (**eip) (void), void **esp)
   bool success = false;
   int i;
 
+  // no need to lock any of these thread structs
+
   ASSERT (INPUT_ARGS_MAX_ARG_LENGTH == PROCESS_NAME_MAX_LENGTH);
   strlcpy(t->process_name,file_name,PROCESS_NAME_MAX_LENGTH);
+
+  // t->child_processes was already init'd
+  add_child_process(t,);
   
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();

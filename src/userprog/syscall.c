@@ -46,6 +46,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 
   int syscall_no;
   int status;
+  struct child_process_elem * cpe;
   size_t word_size = sizeof(void *);
   struct thread * cur = thread_current();
   char * esp = f->esp; // user's stack pointer
@@ -71,9 +72,10 @@ syscall_handler (struct intr_frame *f UNUSED)
     cur->process_status = status;
     // set parent's waiting_for_status to indicate exit
     if (cur->parent_process != NULL ) {
+      cpe = get_child_process_elem_by_pid(cur->parent_proces, get_pid());
       // 0 is PROCESS_GOOD_EXIT and EXIT_SUCCESS
       // 1 is PROCESS_BAD_EXIT and EXIT_FAILURE
-      cur->parent_process->waiting_for_status = status;
+      cpe->process_status = status;
     }
     printf("%s: exit(%d)\n",cur->process_name,cur->process_status);
     process_terminate();

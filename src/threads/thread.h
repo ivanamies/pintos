@@ -113,7 +113,8 @@ struct thread
     pid_t monitoring_process;
     enum process_status_e process_status; // used to print the exit status
     enum process_status_e waiting_for_status; // status of child process being monitored by process_wait
-    // the child process will DIRECTLY SET this variable by dereferencing the parent_process
+    int num_child_processes;
+    struct child_process_info child_processes[MAX_CHILD_PROCESSES];
 #endif
 
     /* Owned by thread.c. */
@@ -124,6 +125,9 @@ struct thread
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
 extern bool thread_mlfqs;
+
+// forward declare child_processes_elem that live in struct list child_processes
+struct child_processes_elem;
 
 void thread_init (void);
 void thread_start (void);
@@ -140,7 +144,8 @@ void thread_unblock (struct thread *);
 struct thread *thread_current (void);
 tid_t thread_tid (void);
 pid_t thread_pid (void);
-struct thread* get_thread_by_pid (pid_t target);
+struct thread* get_thread_by_pid (pid_t);
+struct child_process_elem* get_child_process_elem_by_pid (struct thread *, pid_t);
 const char *thread_name (void);
 
 void thread_exit (void) NO_RETURN;
