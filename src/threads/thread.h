@@ -14,6 +14,14 @@ enum thread_status
     THREAD_DYING        /* About to be destroyed. */
   };
 
+enum process_status_e
+  {
+    PROCESS_UNDEFINED,          /* never associated with a process */
+    PROCESS_RUNNING,            /* currently running a process */
+    PROCESS_GOOD_EXIT,    /* the process it was running finished without errors */
+    PROCESS_BAD_EXIT,  /* the process it was running finished with some error */
+  };
+
 /* Thread identifier type.
    You can redefine this to whatever type you like. */
 typedef int tid_t;
@@ -100,8 +108,11 @@ struct thread
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
-    int parent_pid;
     char process_name[PROCESS_NAME_MAX_LENGTH];
+    struct thread* parent_process;
+    enum process_status_e process_status; // used to print the exit status
+    pid_t waiting_for;
+    enum process_status_e waiting_for_status;
 #endif
 
     /* Owned by thread.c. */

@@ -19,9 +19,7 @@ syscall_init (void)
 }
 
 static void process_terminate () {
-  printf("===tagiamies 5\n");
   process_exit();
-  printf("===tagiamies 99\n");
   thread_exit ();  
 }
 
@@ -58,7 +56,6 @@ syscall_handler (struct intr_frame *f UNUSED)
   // verify that it's a good pointer
   if (check_user_ptr(esp)) {
     printf("invalid address\n");
-    set_child_process_status(cur->parent_pid,thread_pid(),(process_status_e)PROCESS_KILLED);
     process_terminate();
     return;
   }
@@ -69,14 +66,18 @@ syscall_handler (struct intr_frame *f UNUSED)
   if ( syscall_no == SYS_HALT ) {
   }
   else if (syscall_no == SYS_EXIT ) {
-    printf("===tagiamies 2\n");
-
     status = *((int *)esp);
     esp += word_size;
-    set_child_process_status(cur->parent_pid,thread_pid(),(process_status_e)status);
-    printf("===tagiamies 3\n");
+    printf("exit status: %d\n",status);
+    if (cur->parent_process != NULL && cur->parent_process->waiting_for == thread_pid()) {
+      if ( status == 0 ) { // 0 is EXIT_SUCCESS
+        cur->parent_process->waiting_for_status = PROCESS_GOOD_EXIT;
+      }
+      else {
+        cur->parent_process->waiting_for_status = PROCESS_BAD_EXIT;
+      }
+    }
     process_terminate();
-    printf("===tagiamies 4\n");
     return;
   }
   else if ( syscall_no == SYS_EXEC ) {

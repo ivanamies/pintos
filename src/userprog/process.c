@@ -19,128 +19,8 @@
 #include "threads/vaddr.h"
 #include "threads/synch.h"
 
-#define INPUT_ARGS_MAX_ARGS 60
+#define INPUT_ARGS_MAX_ARGS 63
 #define INPUT_ARGS_MAX_ARG_LENGTH 64
-
-#define MAX_PROCESSES 64
-#define MAX_CHILD_PROCESSES 64
-
-struct process_info {
-  int pid;
-  process_status_e process_status;
-};
-
-// a table of processes to child proceses
-// the first entry is parent pid
-// the subsequent entries are child pids
-static struct lock process_table_lock;
-static int num_processes;
-static struct process_info process_table[MAX_PROCESSES][MAX_CHILD_PROCESSES];
-
-// must acquire lock before calling
-static int get_parent_idx_by_pid(int pid) {
-  int i;
-  for ( i = 0; i < MAX_PROCESSES; ++i ) {
-    if ( process_table[i][0].pid == pid ) {
-      return i;
-    }
-  }
-  return -1;
-}
-
-// must acquire lock before calling
-static int get_child_idx_by_pid(int parent_pid_idx, int pid) {
-  ASSERT(parent_pid_idx < MAX_PROCESSES);
-  int i;
-  for ( i = 0; i < MAX_CHILD_PROCESSES; ++i ) {
-    if ( process_table[parent_pid_idx][i].pid == pid ) {
-      return i;
-    }
-  }
-  return -1;
-}
-
-void init_process_table(void) {
-  lock_init(&process_table_lock);
-  int i, j;
-  num_processes = 0;
-  for ( i = 0; i < MAX_PROCESSES; ++i ) {
-    for ( j = 0; j < MAX_CHILD_PROCESSES; ++j ) {
-      process_table[i][j].pid = -1;
-      process_table[i][j].process_status = PROCESS_UNDEFINED;
-    }
-  }
-}
-
-void add_parent_process(int pid) {
-  lock_acquire(&process_table_lock);
-  ASSERT(num_processes < MAX_PROCESSES);
-  int i;
-  for ( i = 0; i < MAX_PROCESSES; ++i ) {
-    // if we 've seen this process before, do nothing
-    if ( process_table[i][0].pid == pid ) {
-      break;
-    }
-    else if ( process_table[i][0].pid == -1  ) {
-      process_table[i][0].pid = pid;
-      process_table[i][0].process_status = PROCESS_RUNNING;
-      break;
-    }
-  }
-  ASSERT(i < MAX_PROCESSES);
-  ++num_processes;
-  lock_release(&process_table_lock);
-}
-
-void remove_parent_process(int pid, process_status_e status) {
-  lock_acquire(&process_table_lock);
-  int parent_pid_idx = get_parent_idx_by_pid(pid);
-  ASSERT(0 <= parent_pid_idx && parent_pid_idx < MAX_PROCESSES);
-  process_table[parent_pid_idx][0].process_status = status;
-  // never remove the parent pids
-  // process_table[parent_pid_idx][0].pid = -1;
-  // --num_processes;
-  lock_release(&process_table_lock);
-}
-
-void add_child_process(int parent_pid, int child_pid, process_status_e child_status) {
-  lock_acquire(&process_table_lock);
-  int i;
-  int parent_pid_idx = get_parent_idx_by_pid(parent_pid);
-  ASSERT(0 <= parent_pid_idx && parent_pid_idx < MAX_PROCESSES);
-  // find parent_pid table entry
-  for ( i = 0; i < MAX_CHILD_PROCESSES; ++i ) {
-    if ( process_table[parent_pid_idx][i].pid == -1 ) {
-      process_table[parent_pid_idx][i].pid = child_pid;
-      process_table[parent_pid_idx][i].process_status = child_status;
-      break;
-    }
-  }
-  ASSERT ( i != MAX_CHILD_PROCESSES );
-  lock_release(&process_table_lock);
-}
-
-void set_child_process_status(int parent_pid, int child_pid, process_status_e child_status ) {
-  lock_acquire(&process_table_lock);
-  int parent_pid_idx = get_parent_idx_by_pid(parent_pid);
-  ASSERT(0 <= parent_pid_idx && parent_pid_idx < MAX_PROCESSES);
-  int child_pid_idx = get_child_idx_by_pid(parent_pid_idx, child_pid);
-  ASSERT(0 <= child_pid_idx && child_pid_idx < MAX_CHILD_PROCESSES);
-  process_table[parent_pid_idx][child_pid_idx].process_status = child_status;
-  lock_release(&process_table_lock);
-}
-
-process_status_e get_child_process_status(int parent_pid, int child_pid) {
-  lock_acquire(&process_table_lock);
-  int parent_pid_idx = get_parent_idx_by_pid(parent_pid);
-  ASSERT(0 <= parent_pid_idx && parent_pid_idx < MAX_PROCESSES);
-  int child_pid_idx = get_child_idx_by_pid(parent_pid_idx,child_pid);
-  ASSERT(0 <= child_pid_idx && child_pid_idx < MAX_CHILD_PROCESSES);
-  process_status_e status = process_table[parent_pid_idx][child_pid_idx].process_status;
-  ASSERT(status < PROCESS_UNDEFINED);
-  lock_release(&process_table_lock);
-  return status;
-}
 
 struct input_args {
   pid_t parent_pid;
@@ -182,8 +62,7 @@ process_execute (const char *input)
     return TID_ERROR;
   }
   memset(ia,0,PGSIZE);
-  ia->parent_pid = thread_pid();
-  add_parent_process(thread_pid());
+
   lock_init(&ia->lk);
   cond_init(&ia->cv);
   
@@ -196,12 +75,13 @@ process_execute (const char *input)
   }
   
   /* Create a new thread to execute FILE_NAME. */
-  
   tid = thread_create (input, PRI_DEFAULT, start_process, ia);
-  // wait until the process was created successfully or not
+
   lock_acquire(&ia->lk);
   cond_wait(&ia->cv,&ia->lk);
   lock_release(&ia->lk);
+  
+  palloc_free_page (ia);
   
   if (tid == TID_ERROR)
     palloc_free_page (input_copy); 
@@ -226,11 +106,9 @@ start_process (void *input_args_)
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (ia, &if_.eip, &if_.esp);
   
-  /* If load failed, quit. */
-  palloc_free_page (ia);
   if (!success) 
     thread_exit ();
-  
+
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
@@ -242,38 +120,26 @@ start_process (void *input_args_)
 }
 
 /* Waits for thread TID to die and returns its exit status.  If
-   1. it was terminated by the kernel (i.e. killed due to an
-   exception), returns -1 immediately
-   2. If TID is invalid, return -1 immediatly
-   3. if it was not a child of the calling process, return -1 immediatly
-   4. if process_wait() has already been successfully called for the given TID, returns -1
-   immediately
+   it was terminated by the kernel (i.e. killed due to an
+   exception), returns -1.  If TID is invalid or if it was not a
+   child of the calling process, or if process_wait() has already
+   been successfully called for the given TID, returns -1
+   immediately, without waiting.
 
-   immediately means "do not wait"
-   
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
 process_wait (tid_t child_tid UNUSED) 
 {
-  printf("===tagiamies 1\n");
-  int pid = thread_pid();
-  int child_pid_idx = get_child_idx_by_pid(get_parent_idx_by_pid(pid),child_tid);
-  if ( child_pid_idx == -1 ) {
-    return -1;
+  // the recommended infinite loop
+  while ( true ) {
+    intr_disable();
+    intr_enable();
   }
-  // yield until the child status is not RUNNING
-  int status;
-  while ( (status = get_child_process_status(pid,child_tid)) == PROCESS_RUNNING ) {
-    thread_yield();
-  }
-  if ( status == PROCESS_KILLED || status == PROCESS_SUCCESSFUL_WAIT_QUERY ) {
-    return -1;
-  }
-  else {
-    set_child_process_status(pid,child_tid,PROCESS_SUCCESSFUL_WAIT_QUERY);
-    return status;
-  }
+  // how do I get process name from tid??
+  // how do I get process exit status from tid??
+  printf ("%s: exit(%d)\n", "dunno", -1); // tagiamies wtf is going on
+  return -1;
 }
 
 /* Free the current process's resources. */
@@ -296,12 +162,9 @@ process_exit (void)
          directory, or our active page directory will be one
          that's been freed (and cleared). */
       cur->pagedir = NULL;
-      printf("t->pagedir: %p\n",pd);
       pagedir_activate (NULL);
-      printf("===tagiamies 7\n");
       pagedir_destroy (pd);
     }
-  printf("===tagiamies 98\n");
 }
 
 /* Sets up the CPU for running user code in the current
@@ -407,9 +270,11 @@ load (struct input_args * ia, void (**eip) (void), void **esp)
   bool success = false;
   int i;
 
+  t->waiting_for = -1;
+  t->waiting_for_status = PROCESS_UNDEFINED;
+  t->process_status = PROCESS_BAD_EXIT;
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
-  printf("t->pagedir: %p\n",t->pagedir);
   if (t->pagedir == NULL) 
     goto done;
   process_activate ();
@@ -504,16 +369,15 @@ load (struct input_args * ia, void (**eip) (void), void **esp)
   success = true;
   
   if ( success ) {
-    t->parent_pid = ia->parent_pid;
-    add_parent_process(thread_pid());
-    add_child_process(ia->parent_pid,thread_pid(),PROCESS_RUNNING);
+    // set execution status
+    t->process_status = PROCESS_RUNNING;
   }
- done:  
-  // signal to the creating thread that process start up finished
+ done:
+
   lock_acquire(&ia->lk);
   cond_signal(&ia->cv,&ia->lk);
   lock_release(&ia->lk);
-
+  
   /* We arrive here whether the load is successful or not. */
   file_close (file);
   return success;
