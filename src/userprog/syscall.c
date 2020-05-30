@@ -9,7 +9,7 @@
 #include "userprog/process.h"
 
 static void syscall_handler (struct intr_frame *);
-static void process_terminate (void);
+static void process_terminate (int);
 static int check_user_ptr ( void * p);
 
 void
@@ -18,7 +18,8 @@ syscall_init (void)
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
-static void process_terminate () {
+static void process_terminate (int status) {
+  printf("%s: exit(%d)\n",thread_current()->process_name,status);
   process_exit();
   thread_exit ();  
 }
@@ -56,7 +57,8 @@ syscall_handler (struct intr_frame *f UNUSED)
   // verify that it's a good pointer
   if (check_user_ptr(esp)) {
     printf("invalid address\n");
-    process_terminate();
+    set_child_process_status(cur->parent_pid,thread_pid(),(process_status_e)PROCESS_KILLED);
+    process_terminate(1);
     return;
   }
   
@@ -68,16 +70,8 @@ syscall_handler (struct intr_frame *f UNUSED)
   else if (syscall_no == SYS_EXIT ) {
     status = *((int *)esp);
     esp += word_size;
-    printf("exit status: %d\n",status);
-    if (cur->parent_process != NULL && cur->parent_process->waiting_for == thread_pid()) {
-      if ( status == 0 ) { // 0 is EXIT_SUCCESS
-        cur->parent_process->waiting_for_status = PROCESS_GOOD_EXIT;
-      }
-      else {
-        cur->parent_process->waiting_for_status = PROCESS_BAD_EXIT;
-      }
-    }
-    process_terminate();
+    set_child_process_status(cur->parent_pid,thread_pid(),(process_status_e)status);
+    process_terminate(status);
     return;
   }
   else if ( syscall_no == SYS_EXEC ) {
@@ -119,6 +113,6 @@ syscall_handler (struct intr_frame *f UNUSED)
   else {
     printf("didn't get a project 2 sys call\n");
     ASSERT(false);
-    process_terminate();
+    process_terminate(1);
   }  
 }
