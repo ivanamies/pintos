@@ -56,9 +56,8 @@ syscall_handler (struct intr_frame *f UNUSED)
   
   // verify that it's a good pointer
   if (check_user_ptr(esp)) {
-    printf("invalid address\n");
     set_child_process_status(cur->parent_pid,thread_pid(),(process_status_e)PROCESS_KILLED);
-    process_terminate(1);
+    process_terminate(-1);
     return;
   }
   
