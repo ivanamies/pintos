@@ -59,13 +59,6 @@ static unsigned thread_ticks;   /* # of timer ticks since last yield. */
    Controlled by kernel command-line option "-o mlfqs". */
 bool thread_mlfqs;
 
-// for sub processes inside struct list chid_processes
-struct child_processes_elem {
-  struct list_elem elem;
-  pid_t pid;
-  enum process_status_e process_status;
-};
-
 static void kernel_thread (thread_func *, void *aux);
 
 static void idle (void *aux UNUSED);
@@ -189,12 +182,6 @@ thread_create (const char *name, int priority,
   /* Initialize thread. */
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
-  
-#ifdef USERPROG
-  t->monitoring_process = -1;
-  t->waiting_for_status = PROCESS_UNDEFINED;
-  t->process_status = PROCESS_UNDEFINED;
-#endif
 
   /* Stack frame for kernel_thread(). */
   kf = alloc_frame (t, sizeof *kf);
@@ -292,38 +279,6 @@ pid_t thread_pid (void)
 {
   return thread_current ()->tid; // lmao
 }
-
-struct child_process_elem*
-get_child_process_elem_by_pid (struct thread * t, pid_t target) {
-  struct list_elem *e;
-  struct child_process_elem * c;
-  
-  for (e = list_begin (&t->child_processes); e != list_end (&child_processes); e = list_next (e)) {
-    c = list_entry (e, struct child_process_elem, elem);
-    if ( c->pid == target) {
-      return c;
-    }
-  }
-  return NULL;
-}
-
-
-struct thread*
-get_thread_by_pid (pid_t target) {
-  ASSERT (intr_get_level () == INTR_OFF);
-
-  struct thread * t;
-  struct list_elem *e;
-  
-  for (e = list_begin (&all_list); e != list_end (&all_list); e = list_next (e)) {
-    t = list_entry (e, struct thread, allelem);
-    if ( t->tid /* pid == tid */ == target) {
-      return t;
-    }
-  }
-  return NULL;
-}
-
 
 /* Deschedules the current thread and destroys it.  Never
    returns to the caller. */
@@ -514,11 +469,6 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   t->magic = THREAD_MAGIC;
 
-#ifdef USERPROG
-  // for child_rpocesses
-  list_init(&t->child_processes);
-#endif
-  
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
   intr_set_level (old_level);

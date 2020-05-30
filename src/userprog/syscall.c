@@ -19,7 +19,9 @@ syscall_init (void)
 }
 
 static void process_terminate () {
+  printf("===tagiamies 5\n");
   process_exit();
+  printf("===tagiamies 99\n");
   thread_exit ();  
 }
 
@@ -46,7 +48,6 @@ syscall_handler (struct intr_frame *f UNUSED)
 
   int syscall_no;
   int status;
-  struct child_process_elem * cpe;
   size_t word_size = sizeof(void *);
   struct thread * cur = thread_current();
   char * esp = f->esp; // user's stack pointer
@@ -57,6 +58,7 @@ syscall_handler (struct intr_frame *f UNUSED)
   // verify that it's a good pointer
   if (check_user_ptr(esp)) {
     printf("invalid address\n");
+    set_child_process_status(cur->parent_pid,thread_pid(),(process_status_e)PROCESS_KILLED);
     process_terminate();
     return;
   }
@@ -67,18 +69,14 @@ syscall_handler (struct intr_frame *f UNUSED)
   if ( syscall_no == SYS_HALT ) {
   }
   else if (syscall_no == SYS_EXIT ) {
+    printf("===tagiamies 2\n");
+
     status = *((int *)esp);
     esp += word_size;
-    cur->process_status = status;
-    // set parent's waiting_for_status to indicate exit
-    if (cur->parent_process != NULL ) {
-      cpe = get_child_process_elem_by_pid(cur->parent_proces, get_pid());
-      // 0 is PROCESS_GOOD_EXIT and EXIT_SUCCESS
-      // 1 is PROCESS_BAD_EXIT and EXIT_FAILURE
-      cpe->process_status = status;
-    }
-    printf("%s: exit(%d)\n",cur->process_name,cur->process_status);
+    set_child_process_status(cur->parent_pid,thread_pid(),(process_status_e)status);
+    printf("===tagiamies 3\n");
     process_terminate();
+    printf("===tagiamies 4\n");
     return;
   }
   else if ( syscall_no == SYS_EXEC ) {
@@ -103,6 +101,7 @@ syscall_handler (struct intr_frame *f UNUSED)
     esp += word_size;
     unsigned size = *((unsigned *)esp);
     esp += word_size;
+    /* printf("fd: %d buffer: %p size: %d\n",fd,buffer,(int)size); */
     if ( fd == 1 ) {
       putbuf(buffer,size);
     }
