@@ -40,6 +40,18 @@ static int check_user_ptr ( void * p) {
   }
 }
 
+static int check_user_ptr_with_terminate(void * p) {
+  if (check_user_ptr(p)) {
+    struct thread * cur = thread_current();
+    set_child_process_status(cur->parent_pid,thread_pid(),(process_status_e)PROCESS_KILLED);
+    process_terminate(-1);
+    return 1;
+  }
+  else {
+    return 0;
+  }
+}
+
 static void
 syscall_handler (struct intr_frame *f UNUSED) 
 {
@@ -51,13 +63,11 @@ syscall_handler (struct intr_frame *f UNUSED)
   struct thread * cur = thread_current();
   char * esp = f->esp; // user's stack pointer
                        // cast to char * to have 1 byte type
-
+  
   /* int success = 1; */
   
   // verify that it's a good pointer
-  if (check_user_ptr(esp)) {
-    set_child_process_status(cur->parent_pid,thread_pid(),(process_status_e)PROCESS_KILLED);
-    process_terminate(-1);
+  if ( check_user_ptr_with_terminate(esp) ) {
     return;
   }
   
@@ -67,6 +77,9 @@ syscall_handler (struct intr_frame *f UNUSED)
   if ( syscall_no == SYS_HALT ) {
   }
   else if (syscall_no == SYS_EXIT ) {
+    if ( check_user_ptr_with_terminate(esp) ) {
+      return;
+    }
     status = *((int *)esp);
     esp += word_size;
     set_child_process_status(cur->parent_pid,thread_pid(),(process_status_e)status);
@@ -89,10 +102,19 @@ syscall_handler (struct intr_frame *f UNUSED)
     // blah
   }
   else if ( syscall_no == SYS_WRITE ) {
+    if ( check_user_ptr_with_terminate(esp) ) {
+      return;
+    }
     int fd = *((int *)esp);
     esp += word_size;
+    if ( check_user_ptr_with_terminate(esp) ) {
+      return;
+    }
     const void * buffer = *((void **)esp);
     esp += word_size;
+    if ( check_user_ptr_with_terminate(esp) ) {
+      return;
+    }
     unsigned size = *((unsigned *)esp);
     esp += word_size;
     /* printf("fd: %d buffer: %p size: %d\n",fd,buffer,(int)size); */
