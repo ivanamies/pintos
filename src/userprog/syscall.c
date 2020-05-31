@@ -17,7 +17,7 @@
 
 static void syscall_handler (struct intr_frame *);
 static void process_terminate (int);
-static int check_user_ptr (char * p);
+static int check_user_ptr (void * p);
 
 #define MAX_PAGES_IN_FILE 8
 #define MAX_FILE_NAME_LEN 64
@@ -75,8 +75,12 @@ static void destroy_fd_table(void) {
 
 static int create_fd(const char * file_name, size_t sz) {
   int i, fd, num_pages;
-  
+
+  ASSERT ( file_name != NULL );
   if ( strcmp(file_name,"") == 0 ) {
+    return -1;
+  }
+  else if ( strlen(file_name)+1 >= MAX_FILE_NAME_LEN) {
     return -1;
   }
   
@@ -138,7 +142,8 @@ static void process_terminate (int status) {
   thread_exit ();  
 }
 
-static int check_user_ptr (char * p) {
+static int check_user_ptr (void * p_) {
+  const char * p = p_;
   int i;
   int success;
   const int word_size = sizeof(void *);
@@ -239,6 +244,10 @@ syscall_handler (struct intr_frame *f UNUSED)
       }
       tmp_int = *((int *)esp);
       esp += word_size;
+    }
+
+    if ( check_user_ptr_with_terminate((void *)tmp_char_ptr /*file_name*/) ) {
+      return;
     }
     
     fd = create_fd(tmp_char_ptr,tmp_int);
