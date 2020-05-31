@@ -7,6 +7,7 @@
 #include "threads/vaddr.h"
 #include "userprog/pagedir.h"
 #include "userprog/process.h"
+#include "userprog/exception.h"
 
 static void syscall_handler (struct intr_frame *);
 static void process_terminate (int);
@@ -24,19 +25,33 @@ static void process_terminate (int status) {
   thread_exit ();  
 }
 
-// apparently doesn't work...
 static int check_user_ptr (char * p) {
   if ( p == NULL ) {
     return 1;
   }
-  else if ( is_kernel_vaddr(p-(sizeof(void *)+1) ) ) {
-    return 1;
-  }
-  else if ( pagedir_get_page(thread_current ()->pagedir,p) == NULL ) {
-    return 1;
-  }
   else {
-    return 0;
+    int success = 0;
+    int word_size = sizeof(void *);
+    
+    for ( int i = word_size-1; i; --i ) {
+      int valid = is_kernel_vaddr(p+i);
+      success = valid; // make sure every byte is also in user space
+      if ( success ) {
+        break;
+      }
+    }
+    
+    if ( success ) {
+      return success;
+    }
+    
+    for ( int i = word_size-1; i; --i ) {
+      success = (pagedir_get_page(thread_current ()->pagedir,p+i) == NULL);
+      if ( success ) {
+        break;
+      }
+    }
+    return success;
   }
 }
 
@@ -67,11 +82,11 @@ syscall_handler (struct intr_frame *f UNUSED)
   if ( check_user_ptr_with_terminate(esp) ) {
     return;
   }
-  
+    
   syscall_no = *((int *)esp);
-  printf("syscall_no: %d\n",syscall_no);
+  /* printf("syscall_no: %d\n",syscall_no); */
   esp += word_size;
-  
+
   if ( syscall_no == SYS_HALT ) {
   }
   else if (syscall_no == SYS_EXIT ) {
