@@ -48,11 +48,11 @@ void init_fd_table(void) {
   }
   fd_count = 2;
   
-  /* // create some inodes in sector 3 */
+  /* // create some inodes in sector 0 */
   /* // ... I don't know man */
   /* for ( i = 0; i < 10; ++i ) { */
   /*   printf("what\n"); */
-  /*   success = inode_create(3, 1024); */
+  /*   int success = inode_create(0, 1024); */
   /*   if ( !success ) { */
   /*     ASSERT (false && "inode create failed\n"); */
   /*   } */
@@ -74,7 +74,7 @@ static void destroy_fd_table(void) {
 }
 
 static int create_fd(const char * file_name, size_t sz) {
-  int i, fd, num_pages;
+  int i, fd, fd_idx, num_pages;
 
   ASSERT ( file_name != NULL );
   if ( strcmp(file_name,"") == 0 ) {
@@ -86,9 +86,20 @@ static int create_fd(const char * file_name, size_t sz) {
   
   lock_acquire(&fd_table_lock);
 
+  fd_idx = -1;
+  // find if the file already exists
+  for ( i = 0; i < MAX_FILES; ++i ) {
+    if ( strcmp(fd_table[i].file_name,file_name) == 0 ) {
+      fd_idx = i;
+    }
+  }
+  if ( fd_idx != -1 ) {
+    // file already exists
+    fd = -1;
+    goto create_fd_done;
+  }
   
   // find an empty file slow
-  int fd_idx = -1;
   for ( i = 0; i < MAX_FILES; ++i ) {
     if (fd_table[i].fd == -1) {
       fd_idx = i;
@@ -97,7 +108,8 @@ static int create_fd(const char * file_name, size_t sz) {
   }
   
   if ( fd_idx == -1 ) {
-    return -1;
+    fd = -1;
+    goto create_fd_done;
   }
   
   fd = fd_count; // must start at 2
@@ -122,7 +134,8 @@ static int create_fd(const char * file_name, size_t sz) {
   /* // just completely ignore sz */
   /* // inode is free'd when file is closed */
   /* fd_table[fd_idx].file = file_open(inode); */
-  
+
+ create_fd_done:
   lock_release(&fd_table_lock);
 
   return fd;
