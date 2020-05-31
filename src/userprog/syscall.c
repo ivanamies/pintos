@@ -10,7 +10,7 @@
 
 static void syscall_handler (struct intr_frame *);
 static void process_terminate (int);
-static int check_user_ptr ( void * p);
+static int check_user_ptr (char * p);
 
 void
 syscall_init (void) 
@@ -25,11 +25,11 @@ static void process_terminate (int status) {
 }
 
 // apparently doesn't work...
-static int check_user_ptr ( void * p) {
+static int check_user_ptr (char * p) {
   if ( p == NULL ) {
     return 1;
   }
-  else if ( is_kernel_vaddr(p) ) {
+  else if ( is_kernel_vaddr(p-(sizeof(void *)+1) ) ) {
     return 1;
   }
   else if ( pagedir_get_page(thread_current ()->pagedir,p) == NULL ) {
@@ -55,7 +55,6 @@ static int check_user_ptr_with_terminate(void * p) {
 static void
 syscall_handler (struct intr_frame *f UNUSED) 
 {
-  /* printf ("system call!\n"); */
 
   int syscall_no;
   int status;
@@ -64,14 +63,13 @@ syscall_handler (struct intr_frame *f UNUSED)
   char * esp = f->esp; // user's stack pointer
                        // cast to char * to have 1 byte type
   
-  /* int success = 1; */
-  
   // verify that it's a good pointer
   if ( check_user_ptr_with_terminate(esp) ) {
     return;
   }
   
   syscall_no = *((int *)esp);
+  printf("syscall_no: %d\n",syscall_no);
   esp += word_size;
   
   if ( syscall_no == SYS_HALT ) {

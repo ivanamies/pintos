@@ -27,7 +27,7 @@
 
 struct process_info {
   int pid;
-  process_status_e process_status;
+  int process_status;
 };
 
 // a table of processes to child proceses
@@ -92,7 +92,7 @@ void add_parent_process(int pid) {
   lock_release(&process_table_lock);
 }
 
-void remove_parent_process(int pid, process_status_e status) {
+void remove_parent_process(int pid, int status) {
   lock_acquire(&process_table_lock);
   int parent_pid_idx = get_parent_idx_by_pid(pid);
   ASSERT(0 <= parent_pid_idx && parent_pid_idx < MAX_PROCESSES);
@@ -103,7 +103,7 @@ void remove_parent_process(int pid, process_status_e status) {
   lock_release(&process_table_lock);
 }
 
-void add_child_process(int parent_pid, int child_pid, process_status_e child_status) {
+void add_child_process(int parent_pid, int child_pid, int child_status) {
   lock_acquire(&process_table_lock);
   int i;
   int parent_pid_idx = get_parent_idx_by_pid(parent_pid);
@@ -120,24 +120,27 @@ void add_child_process(int parent_pid, int child_pid, process_status_e child_sta
   lock_release(&process_table_lock);
 }
 
-void set_child_process_status(int parent_pid, int child_pid, process_status_e child_status ) {
+void set_child_process_status(int parent_pid, int child_pid, int child_status ) {
   lock_acquire(&process_table_lock);
   int parent_pid_idx = get_parent_idx_by_pid(parent_pid);
   ASSERT(0 <= parent_pid_idx && parent_pid_idx < MAX_PROCESSES);
   int child_pid_idx = get_child_idx_by_pid(parent_pid_idx, child_pid);
   ASSERT(0 <= child_pid_idx && child_pid_idx < MAX_CHILD_PROCESSES);
+  /* printf("parent_pid %d parent_pid_idx %d child_pid %d child_pid_idx %d child_status %d\n", */
+  /*        parent_pid, parent_pid_idx, child_pid, child_pid_idx, child_status); */
   process_table[parent_pid_idx][child_pid_idx].process_status = child_status;
   lock_release(&process_table_lock);
 }
 
-process_status_e get_child_process_status(int parent_pid, int child_pid) {
+int get_child_process_status(int parent_pid, int child_pid) {
   lock_acquire(&process_table_lock);
   int parent_pid_idx = get_parent_idx_by_pid(parent_pid);
   ASSERT(0 <= parent_pid_idx && parent_pid_idx < MAX_PROCESSES);
   int child_pid_idx = get_child_idx_by_pid(parent_pid_idx,child_pid);
   ASSERT(0 <= child_pid_idx && child_pid_idx < MAX_CHILD_PROCESSES);
-  process_status_e status = process_table[parent_pid_idx][child_pid_idx].process_status;
-  ASSERT(status < PROCESS_UNDEFINED);
+  int status = process_table[parent_pid_idx][child_pid_idx].process_status;
+  // status can be anything, actually, even something that doesn't make sense
+  /* ASSERT(status < PROCESS_UNDEFINED); */
   lock_release(&process_table_lock);
   return status;
 }
