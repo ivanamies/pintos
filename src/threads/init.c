@@ -102,6 +102,7 @@ pintos_init (void)
   /* Segmentation. */
 #ifdef USERPROG
   init_process_table();
+  init_fd_table();
   
   tss_init ();
   gdt_init ();
