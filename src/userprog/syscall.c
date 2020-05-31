@@ -26,10 +26,10 @@ static int check_user_ptr (char * p);
 typedef struct fd_file {
   int fd;
   char file_name[MAX_FILE_NAME_LEN];
-  struct file * file;
-  /* int sz; */
-  /* int pos; */
-  /* void * pages[MAX_PAGES_IN_FILE]; */
+  /* struct file * file; */
+  int sz;
+  int pos;
+  void * pages[MAX_PAGES_IN_FILE];
   
 } fd_file_t;
 
@@ -41,39 +41,47 @@ static int fd_count; // never recycle these
 void init_fd_table(void) {
   lock_init(&fd_table_lock);
   int i;
-  int success;
+  /* int success; */
   memset(fd_table,0,sizeof(fd_file_t)*MAX_FILES);
   for ( i = 0; i < MAX_FILES; ++i ) {
     fd_table[i].fd = -1;
   }
-  fd_count = 0;
+  fd_count = 2;
   
-  // create some inodes in sector 3
-  // ... I don't know man
-  for ( i = 0; i < 10; ++i ) {
-    printf("what\n");
-    success = inode_create(3, 1024);
-    if ( !success ) {
-      ASSERT (false && "inode create failed\n");
-    }
-  }
+  /* // create some inodes in sector 3 */
+  /* // ... I don't know man */
+  /* for ( i = 0; i < 10; ++i ) { */
+  /*   printf("what\n"); */
+  /*   success = inode_create(3, 1024); */
+  /*   if ( !success ) { */
+  /*     ASSERT (false && "inode create failed\n"); */
+  /*   } */
+  /* } */
 }
 
 static void destroy_fd_table(void) {
   lock_acquire(&fd_table_lock);
-  int i;
+  int i, j;
   for ( i = 0; i < MAX_FILES; ++i ) {
-    if ( fd_table[i].file != NULL ) {
-      file_close(fd_table[i].file);
+    for ( j = 0; j < MAX_PAGES_IN_FILE; ++j ) {
+      palloc_free_page(fd_table[i].pages[j]);
     }
+    /* if ( fd_table[i].file != NULL ) { */
+    /*   file_close(fd_table[i].file); */
+    /* } */
   }
   lock_release(&fd_table_lock);
 }
 
 static int create_fd(const char * file_name, size_t sz) {
+  int i, fd, num_pages;
+  
+  if ( strcmp(file_name,"") == 0 ) {
+    return -1;
+  }
+  
   lock_acquire(&fd_table_lock);
 
-  int i, fd;
   
   // find an empty file slow
   int fd_idx = -1;
@@ -83,22 +91,33 @@ static int create_fd(const char * file_name, size_t sz) {
       break;
     }
   }
-
+  
   if ( fd_idx == -1 ) {
     return -1;
   }
   
+  fd = fd_count; // must start at 2
   ++fd_count;
-  fd = fd_count;
   
   fd_table[fd_idx].fd = fd;
   strlcpy(fd_table[fd_idx].file_name,file_name,MAX_FILE_NAME_LEN);
+  fd_table[fd_idx].sz = sz;
+  fd_table[fd_idx].pos = 0;
   
-  // what the fuck
-  struct inode * inode = inode_open(3); // picked 3 at random
-  // just completely ignore sz
-  // inode is free'd when file is closed
-  fd_table[fd_idx].file = file_open(inode);
+  num_pages = sz / PGSIZE;
+  if ( sz % PGSIZE != 0 ) {
+    ++num_pages;
+  }
+  
+  for ( i = 0; i < num_pages && i < MAX_PAGES_IN_FILE; ++i ) {
+    fd_table[fd_idx].pages[i] = palloc_get_page(0);
+  }
+  
+  /* // what the fuck */
+  /* struct inode * inode = inode_open(3); // picked 3 at random */
+  /* // just completely ignore sz */
+  /* // inode is free'd when file is closed */
+  /* fd_table[fd_idx].file = file_open(inode); */
   
   lock_release(&fd_table_lock);
 
