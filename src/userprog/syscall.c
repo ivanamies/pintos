@@ -30,6 +30,7 @@ typedef struct fd_file {
   struct file * file;
   int sz;
   int pos;
+  int pid; // pid of owning process
 } fd_file_t;
 
 // maintain static table of file descriptors out of laziness
@@ -43,9 +44,10 @@ void init_fd_table(void) {
   memset(fd_table,0,sizeof(fd_file_t)*MAX_FILES);
   for ( i = 0; i < MAX_FILES; ++i ) {
     fd_table[i].fd = -1;
+    fd_table[i].pid = -1;
   }
   // must start at 2
-  // 0 is undefined
+  // 0 is stdin
   // 1 is stdout
   fd_count = 2;  
 }
@@ -64,6 +66,24 @@ static void destroy_fd_table(void) {
   lock_release(&fd_table_lock);
 }
 
+// find the fd_table idx if it exists
+// return -1 if it doesn't exist
+static int find_fd_idx(const char * file_name) {
+  lock_acquire(&fd_table_lock);
+  int fd_idx = -1;
+  int i;
+  for ( i = 0; i < MAX_FILES; ++i ) {
+    int fd_idx_pid = fd_table[i].pid;
+    int pid = thread_pid();
+    if ( strcmp(fd_table[i].file_name,file_name) == 0 &&
+         (fd_idx_pid == -1 || fd_idx_pid == pid) ) {
+      fd_idx = i;
+    }
+  }
+  lock_release(&fd_table_lock);
+  return fd_idx;
+}
+
 static int create_fd(const char * file_name, size_t sz) {
   int i, fd, fd_idx;
 
@@ -75,15 +95,10 @@ static int create_fd(const char * file_name, size_t sz) {
     return -1;
   }
   
+  fd_idx = find_fd_idx(file_name);
+  
   lock_acquire(&fd_table_lock);
 
-  fd_idx = -1;
-  // find if the file already exists
-  for ( i = 0; i < MAX_FILES; ++i ) {
-    if ( strcmp(fd_table[i].file_name,file_name) == 0 ) {
-      fd_idx = i;
-    }
-  }
   if ( fd_idx != -1 ) {
     // file already exists
     fd = -1;
@@ -116,6 +131,7 @@ static int create_fd(const char * file_name, size_t sz) {
   fd_table[fd_idx].sz = sz;
   fd_table[fd_idx].pos = 0;
   fd_table[fd_idx].file = NULL;
+  fd_table[fd_idx].pid = thread_pid();
     
  create_fd_done:
   lock_release(&fd_table_lock);
@@ -123,6 +139,29 @@ static int create_fd(const char * file_name, size_t sz) {
   return fd;
 }
 
+static int open_fd(const char * const file_name) {
+  int fd;
+  int fd_idx = find_fd_idx(file_name);
+  
+  lock_acquire(&fd_table_lock);
+  
+  if ( fd_idx == -1 ) {
+    fd = -1;
+    goto open_fd_done;
+  }
+
+  fd = fd_table[fd_idx].fd;
+  fd_table[fd_idx].file = filesys_open(file_name);
+  if ( fd_table[fd_idx].file == NULL ) {
+    fd = -1;
+    goto open_fd_done;
+  }
+  
+ open_fd_done:
+  lock_release(&fd_table_lock);
+
+  return fd;
+}
 
 void
 syscall_init (void) 
@@ -256,6 +295,15 @@ syscall_handler (struct intr_frame *f UNUSED)
   else if ( syscall_no == SYS_REMOVE ) {
   }
   else if ( syscall_no == SYS_OPEN ) {
+    {
+      if ( check_user_ptr_with_terminate(esp) ) {
+        return;
+      }
+      tmp_char_ptr = *((char **)esp);
+      esp += word_size;
+    }
+    fd = open_fd(tmp_char_ptr);
+    f->eax = fd;
   }
   else if ( syscall_no == SYS_FILESIZE ) {
   }
