@@ -67,24 +67,10 @@ static void destroy_fd_table(void) {
   lock_release(&fd_table_lock);
 }
 
-// find the fd_table idx if it exists
-// return -1 if it doesn't exist
-static int find_fd_idx_no_lock(const char * file_name) {
-  int fd_idx = -1;
-  int i;
-  for ( i = 0; i < MAX_FILES; ++i ) {
-    int fd_idx_pid = fd_table[i].pid;
-    int pid = thread_pid();
-    if ( strcmp(fd_table[i].file_name,file_name) == 0 &&
-         (fd_idx_pid == -1 || fd_idx_pid == pid) ) {
-      fd_idx = i;
-    }
-  }
-  return fd_idx;
-}
-
 static int create_fd(const char * file_name, size_t sz, struct file * file) {
-  int i, fd, fd_idx;
+  int i;
+  int fd;
+  int fd_idx;
 
   ASSERT ( file_name != NULL );
   if ( strcmp(file_name,"") == 0 ) {
@@ -93,36 +79,23 @@ static int create_fd(const char * file_name, size_t sz, struct file * file) {
   else if ( strlen(file_name)+1 >= MAX_FILE_NAME_LEN) {
     return -1;
   }
-  
+    
   lock_acquire(&fd_table_lock);
   
-  fd_idx = find_fd_idx_no_lock(file_name);
-  
-  /* printf("create_fd fd_idx: %d\n",fd_idx); */
-  
-  if ( fd_idx != -1 ) {
-    // file already exists
-    fd = -1;
-    goto create_fd_done;
-  }
-  
-  // find an empty file slot
+  fd_idx = -1;
   for ( i = 0; i < MAX_FILES; ++i ) {
-    if (fd_table[i].fd == -1) {
+    if ( fd_table[i].fd == -1 ) {
       fd_idx = i;
-      break;
     }
   }
-  
+    
   if ( fd_idx == -1 ) {
+    printf("ERROR: fd table is full\n");
     fd = -1;
     goto create_fd_done;
   }
 
-  if ( !file && filesys_create(file_name,sz) == 0 ) {
-    fd = -1;
-    goto create_fd_done;
-  }
+  ASSERT( file != NULL );
   
   fd = fd_count; // must start at 2
   ++fd_count;
@@ -132,7 +105,7 @@ static int create_fd(const char * file_name, size_t sz, struct file * file) {
   fd_table[fd_idx].sz = sz;
   fd_table[fd_idx].pos = 0;
   fd_table[fd_idx].file = file;
-  fd_table[fd_idx].is_open = 0;
+  fd_table[fd_idx].is_open = 1; // ONLY call from open_fd
   fd_table[fd_idx].pid = thread_pid();
     
  create_fd_done:
@@ -142,45 +115,45 @@ static int create_fd(const char * file_name, size_t sz, struct file * file) {
 }
 
 static int open_fd(const char * const file_name) {
-  int fd, fd_idx;
+  int fd;
   struct file * file = filesys_open(file_name); // I assume this is thread safe?
   if ( file == NULL ) {
     fd = -1;
     return fd;
   }
+    
+  fd = create_fd(file_name,file_length(file),file);
   
-  lock_acquire(&fd_table_lock);
-  
-  fd_idx = find_fd_idx_no_lock(file_name);
-  printf("fd_idx: %d file: %p\n",fd_idx,file);
-  
-  if ( fd_idx == -1 ) {
-    // if we didn't system call create_fd on this file before
-    // make the file descriptors
-
-    // release
-    lock_release(&fd_table_lock);
-    // reacquire
-    fd = create_fd(file_name,file_length(file),file); // what is the size?
-    /* printf("fd: %d\n",fd); */
-    // release
-    // reacquire
-    lock_acquire(&fd_table_lock);
-  }
-  else {
-    ASSERT(fd_table[fd_idx].pid == thread_pid());
-    fd = fd_table[fd_idx].fd;
-    fd_table[fd_idx].file = file;
-  }
-  
-  if ( fd == -1 ) {
-    goto open_fd_done;
-  }
-  
- open_fd_done:
-  lock_release(&fd_table_lock);
 
   return fd;
+}
+
+static void clear_fd(struct fd_file * fd_file) {
+  fd_file->fd = -1;
+  fd_file->file_name[0] = 0;
+  fd_file->sz = 0;
+  fd_file->pos = 0;
+  fd_file->file = NULL;
+  fd_file->is_open = 0;
+  fd_file->pid = -1;
+}
+
+static void close_fd(int fd) {
+  lock_acquire(&fd_table_lock);
+
+  int i;
+  int fd_idx = -1;
+  for ( i = 0; i < MAX_FILES; ++i ) {
+    if ( fd_table[i].fd == fd ) {
+      fd_idx = i;
+    }
+  }
+  
+  if ( fd_idx != -1 ) {
+    clear_fd(&fd_table[fd_idx]);
+  }
+  
+  lock_release(&fd_table_lock);
 }
 
 void
@@ -361,6 +334,15 @@ syscall_handler (struct intr_frame *f UNUSED)
   else if ( syscall_no == SYS_TELL ) {
   }
   else if ( syscall_no == SYS_CLOSE ) {
+    {
+      if ( check_user_ptr_with_terminate(esp) ) {
+        return;
+      }
+      tmp_int = *((int *)esp);
+      esp += word_size;
+    }
+    int fd = tmp_int;
+    close_fd(fd);
   }
   else {
     printf("didn't get a project 2 sys call\n");
