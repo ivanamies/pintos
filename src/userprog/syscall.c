@@ -341,26 +341,20 @@ syscall_handler (struct intr_frame *f UNUSED)
   void * user_args[MAX_ARGS_ON_USER_STACK];
   memset(user_args,0,MAX_ARGS_ON_USER_STACK*sizeof(void *));
 
-  // only do this for syscall read for now
-  if ( syscall_no == SYS_READ || syscall_no == SYS_FILESIZE ) { 
-    for ( int i = 0; i < num_args; ++i ) {
-      if ( check_user_ptr_with_terminate(esp) ) {
-        return;
-      }
-      user_args[i] = *((void **)esp);
-      esp += word_size;
+  // only do this for syscall read and file size for now
+  for ( int i = 0; i < num_args; ++i ) {
+    if ( check_user_ptr_with_terminate(esp) ) {
+      return;
     }
+    user_args[i] = *((void **)esp);
+    esp += word_size;
   }
   
   if ( syscall_no == SYS_HALT ) {
     shutdown_power_off();
   }
   else if (syscall_no == SYS_EXIT ) {
-    if ( check_user_ptr_with_terminate(esp) ) {
-      return;
-    }
-    status = *((int *)esp);
-    esp += word_size;
+    status = (int)user_args[0];
     set_child_process_status(cur->parent_pid,thread_pid(),(process_status_e)status);
     process_terminate(status);
     return;
@@ -370,22 +364,8 @@ syscall_handler (struct intr_frame *f UNUSED)
   else if ( syscall_no == SYS_WAIT ) {
   }
   else if ( syscall_no == SYS_CREATE ) {
-
-    {
-      if ( check_user_ptr_with_terminate(esp) ) {
-        return;
-      }
-      tmp_char_ptr = *((char **)esp);
-      esp += word_size;
-    }
-
-    {
-      if ( check_user_ptr_with_terminate(esp) ) {
-        return;
-      }
-      tmp_int = *((int *)esp);
-      esp += word_size;
-    }
+    tmp_char_ptr = (char *)user_args[0];
+    tmp_int = (int)user_args[1];
 
     if ( check_user_ptr_with_terminate((void *)tmp_char_ptr /*file_name*/) ) {
       return;
@@ -397,13 +377,7 @@ syscall_handler (struct intr_frame *f UNUSED)
   else if ( syscall_no == SYS_REMOVE ) {
   }
   else if ( syscall_no == SYS_OPEN ) {
-    {
-      if ( check_user_ptr_with_terminate(esp) ) {
-        return;
-      }
-      tmp_char_ptr = *((char **)esp);
-      esp += word_size;
-    }
+    tmp_char_ptr = (char *)user_args[0];    
     if ( check_user_ptr_with_terminate((void *)tmp_char_ptr /*file_name*/) ) {
       return;
     }
@@ -439,42 +413,27 @@ syscall_handler (struct intr_frame *f UNUSED)
     }
   }
   else if ( syscall_no == SYS_WRITE ) {
-    if ( check_user_ptr_with_terminate(esp) ) {
+    int fd = (int)user_args[0];
+    void * p = user_args[1];
+    unsigned size = (unsigned)user_args[2];
+    if ( check_user_ptr_with_terminate(p) ) {
       return;
     }
-    int fd = *((int *)esp);
-    esp += word_size;
-    if ( check_user_ptr_with_terminate(esp) ) {
-      return;
-    }
-    const void * buffer = *((void **)esp);
-    esp += word_size;
-    if ( check_user_ptr_with_terminate(esp) ) {
-      return;
-    }
-    unsigned size = *((unsigned *)esp);
-    esp += word_size;
-    /* printf("fd: %d buffer: %p size: %d\n",fd,buffer,(int)size); */
+    
     if ( fd == 1 ) {
-      putbuf(buffer,size);
+      putbuf(p,size);
     }
     else {
       // deal with file descriptors later
     }
+    f->eax = size;
   }
   else if ( syscall_no == SYS_SEEK ) {
   }
   else if ( syscall_no == SYS_TELL ) {
   }
   else if ( syscall_no == SYS_CLOSE ) {
-    {
-      if ( check_user_ptr_with_terminate(esp) ) {
-        return;
-      }
-      tmp_int = *((int *)esp);
-      esp += word_size;
-    }
-    int fd = tmp_int;
+    int fd = (int)user_args[0];
     close_fd(fd);
   }
   else {
