@@ -185,6 +185,7 @@ static int read_fd(int fd, void * p, unsigned sz) {
   int fd_idx = fd_to_fd_idx_no_lock(fd);
   int ret = is_valid_fd_entry_no_lock(fd_idx);
   if ( ret == 1 ) {
+    ASSERT(fd_table[fd_idx].file != NULL);
     ASSERT(fd_table[fd_idx].pid == thread_pid());  
     ret = file_read(fd_table[fd_idx].file,p,sz);
   }
@@ -198,6 +199,7 @@ static int filesize_fd(int fd) {
   int ret = is_valid_fd_entry_no_lock(fd_idx);
   if ( ret == 1 ) {
     ASSERT(fd_table[fd_idx].file != NULL);
+    ASSERT(fd_table[fd_idx].pid == thread_pid());  
     ret = file_length(fd_table[fd_idx].file);
   }
   lock_release(&fd_table_lock);
@@ -209,8 +211,34 @@ static int write_fd(int fd, void * p, unsigned sz) {
   int fd_idx = fd_to_fd_idx_no_lock(fd);
   int ret = is_valid_fd_entry_no_lock(fd_idx);
   if ( ret == 1 ) {
+    ASSERT(fd_table[fd_idx].file != NULL);
     ASSERT(fd_table[fd_idx].pid == thread_pid());
     ret = file_write(fd_table[fd_idx].file,p,sz);
+  }
+  lock_release(&fd_table_lock);
+  return ret;
+}
+
+static void seek_fd(int fd, unsigned pos) {
+  lock_acquire(&fd_table_lock);
+  int fd_idx = fd_to_fd_idx_no_lock(fd);
+  int ret = is_valid_fd_entry_no_lock(fd_idx);
+  if ( ret == 1 ) {
+    ASSERT(fd_table[fd_idx].file != NULL);
+    ASSERT(fd_table[fd_idx].pid == thread_pid());
+    file_seek(fd_table[fd_idx].file,pos);
+  }
+  lock_release(&fd_table_lock);
+}
+
+static int tell_fd(int fd) {
+  lock_acquire(&fd_table_lock);
+  int fd_idx = fd_to_fd_idx_no_lock(fd);
+  int ret = is_valid_fd_entry_no_lock(fd_idx);
+  if ( ret == 1 ) {
+    ASSERT(fd_table[fd_idx].file != NULL);
+    ASSERT(fd_table[fd_idx].pid == thread_pid());
+    ret = file_tell(fd_table[fd_idx].file);
   }
   lock_release(&fd_table_lock);
   return ret;
@@ -438,8 +466,13 @@ syscall_handler (struct intr_frame *f UNUSED)
     }
   }
   else if ( syscall_no == SYS_SEEK ) {
+    int fd = (int)user_args[0];
+    unsigned pos = (unsigned)user_args[1];
+    seek_fd(fd,pos);
   }
   else if ( syscall_no == SYS_TELL ) {
+    int fd = (int)user_args[0];
+    f->eax = tell_fd(fd);
   }
   else if ( syscall_no == SYS_CLOSE ) {
     int fd = (int)user_args[0];
