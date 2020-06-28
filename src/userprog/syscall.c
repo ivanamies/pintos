@@ -30,6 +30,7 @@ typedef struct fd_file {
   struct file * file;
   int sz;
   int pos;
+  int is_open; // 0 if this fd is closed, 1 if this fd is open
   int pid; // pid of owning process
 } fd_file_t;
 
@@ -68,8 +69,7 @@ static void destroy_fd_table(void) {
 
 // find the fd_table idx if it exists
 // return -1 if it doesn't exist
-static int find_fd_idx(const char * file_name) {
-  lock_acquire(&fd_table_lock);
+static int find_fd_idx_no_lock(const char * file_name) {
   int fd_idx = -1;
   int i;
   for ( i = 0; i < MAX_FILES; ++i ) {
@@ -80,11 +80,10 @@ static int find_fd_idx(const char * file_name) {
       fd_idx = i;
     }
   }
-  lock_release(&fd_table_lock);
   return fd_idx;
 }
 
-static int create_fd(const char * file_name, size_t sz) {
+static int create_fd(const char * file_name, size_t sz, struct file * file) {
   int i, fd, fd_idx;
 
   ASSERT ( file_name != NULL );
@@ -95,17 +94,19 @@ static int create_fd(const char * file_name, size_t sz) {
     return -1;
   }
   
-  fd_idx = find_fd_idx(file_name);
-  
   lock_acquire(&fd_table_lock);
-
+  
+  fd_idx = find_fd_idx_no_lock(file_name);
+  
+  /* printf("create_fd fd_idx: %d\n",fd_idx); */
+  
   if ( fd_idx != -1 ) {
     // file already exists
     fd = -1;
     goto create_fd_done;
   }
   
-  // find an empty file slow
+  // find an empty file slot
   for ( i = 0; i < MAX_FILES; ++i ) {
     if (fd_table[i].fd == -1) {
       fd_idx = i;
@@ -118,7 +119,7 @@ static int create_fd(const char * file_name, size_t sz) {
     goto create_fd_done;
   }
 
-  if ( filesys_create(file_name,sz) == 0 ) {
+  if ( !file && filesys_create(file_name,sz) == 0 ) {
     fd = -1;
     goto create_fd_done;
   }
@@ -130,7 +131,8 @@ static int create_fd(const char * file_name, size_t sz) {
   strlcpy(fd_table[fd_idx].file_name,file_name,MAX_FILE_NAME_LEN);
   fd_table[fd_idx].sz = sz;
   fd_table[fd_idx].pos = 0;
-  fd_table[fd_idx].file = NULL;
+  fd_table[fd_idx].file = file;
+  fd_table[fd_idx].is_open = 0;
   fd_table[fd_idx].pid = thread_pid();
     
  create_fd_done:
@@ -140,20 +142,38 @@ static int create_fd(const char * file_name, size_t sz) {
 }
 
 static int open_fd(const char * const file_name) {
-  int fd;
-  int fd_idx = find_fd_idx(file_name);
+  int fd, fd_idx;
+  struct file * file = filesys_open(file_name); // I assume this is thread safe?
+  if ( file == NULL ) {
+    fd = -1;
+    return fd;
+  }
   
   lock_acquire(&fd_table_lock);
   
+  fd_idx = find_fd_idx_no_lock(file_name);
+  printf("fd_idx: %d file: %p\n",fd_idx,file);
+  
   if ( fd_idx == -1 ) {
-    fd = -1;
-    goto open_fd_done;
-  }
+    // if we didn't system call create_fd on this file before
+    // make the file descriptors
 
-  fd = fd_table[fd_idx].fd;
-  fd_table[fd_idx].file = filesys_open(file_name);
-  if ( fd_table[fd_idx].file == NULL ) {
-    fd = -1;
+    // release
+    lock_release(&fd_table_lock);
+    // reacquire
+    fd = create_fd(file_name,file_length(file),file); // what is the size?
+    /* printf("fd: %d\n",fd); */
+    // release
+    // reacquire
+    lock_acquire(&fd_table_lock);
+  }
+  else {
+    ASSERT(fd_table[fd_idx].pid == thread_pid());
+    fd = fd_table[fd_idx].fd;
+    fd_table[fd_idx].file = file;
+  }
+  
+  if ( fd == -1 ) {
     goto open_fd_done;
   }
   
@@ -228,6 +248,8 @@ syscall_handler (struct intr_frame *f UNUSED)
   
   int tmp_int;
   char * tmp_char_ptr;
+
+  int success;
   
   int syscall_no;
   int status;
@@ -284,13 +306,8 @@ syscall_handler (struct intr_frame *f UNUSED)
       return;
     }
     
-    fd = create_fd(tmp_char_ptr,tmp_int);
-    if (fd == -1 ) {
-      f->eax = 0;
-    }
-    else {
-      f->eax = 1;
-    }
+    success = filesys_create(tmp_char_ptr,tmp_int);
+    f->eax = success;
   }
   else if ( syscall_no == SYS_REMOVE ) {
   }
@@ -302,7 +319,12 @@ syscall_handler (struct intr_frame *f UNUSED)
       tmp_char_ptr = *((char **)esp);
       esp += word_size;
     }
-    fd = open_fd(tmp_char_ptr);
+    if ( check_user_ptr_with_terminate((void *)tmp_char_ptr /*file_name*/) ) {
+      return;
+    }
+    else {
+      fd = open_fd(tmp_char_ptr);
+    }
     f->eax = fd;
   }
   else if ( syscall_no == SYS_FILESIZE ) {
