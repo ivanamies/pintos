@@ -151,6 +151,7 @@ struct input_args {
   // signals that the process finished, either successfully or not
   struct lock lk;
   struct condition cv;
+  int signal; // -1 for not initialized, 0 for fail, 1 for success
   
   int argc;
   char argv[INPUT_ARGS_MAX_ARGS][INPUT_ARGS_MAX_ARG_LENGTH];
@@ -171,7 +172,7 @@ process_execute (const char *input)
   char *input_copy;
   char *token, *save_ptr;
   tid_t tid;
-
+  
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
   input_copy = palloc_get_page (0);
@@ -200,12 +201,19 @@ process_execute (const char *input)
   
   /* Create a new thread to execute FILE_NAME. */
   
-  tid = thread_create (input, PRI_DEFAULT, start_process, ia);
+  ia->signal = -1; 
+  tid = thread_create (input, PRI_DEFAULT, start_process, ia); // shouldn't this be input_copy?
   // wait until the process was created successfully or not
   lock_acquire(&ia->lk);
-  cond_wait(&ia->cv,&ia->lk);
+  while ( ia->signal == -1 ) {
+    cond_wait(&ia->cv,&ia->lk);
+  }
   lock_release(&ia->lk);
 
+  if ( ia->signal == 0 ) { // failed to make process
+    tid = TID_ERROR;
+  }
+  
   // free allocated page
   palloc_free_page (ia);
   
@@ -512,6 +520,7 @@ load (struct input_args * ia, void (**eip) (void), void **esp)
  done:  
   // signal to the creating thread that process start up finished
   lock_acquire(&ia->lk);
+  ia->signal = success;
   cond_signal(&ia->cv,&ia->lk);
   lock_release(&ia->lk);
 

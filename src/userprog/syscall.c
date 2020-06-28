@@ -399,6 +399,12 @@ syscall_handler (struct intr_frame *f UNUSED)
     return;
   }
   else if ( syscall_no == SYS_EXEC ) {
+    tmp_char_ptr = (char *)user_args[0];
+    if ( check_user_ptr_with_terminate(tmp_char_ptr) ) {
+      return;
+    }
+    tid_t p = process_execute(tmp_char_ptr);
+    f->eax = p;
   }
   else if ( syscall_no == SYS_WAIT ) {
   }
