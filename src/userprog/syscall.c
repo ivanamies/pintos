@@ -201,8 +201,19 @@ static int filesize_fd(int fd) {
     ret = file_length(fd_table[fd_idx].file);
   }
   lock_release(&fd_table_lock);
+  return ret;  
+}
+
+static int write_fd(int fd, void * p, unsigned sz) {
+  lock_acquire(&fd_table_lock);
+  int fd_idx = fd_to_fd_idx_no_lock(fd);
+  int ret = is_valid_fd_entry_no_lock(fd_idx);
+  if ( ret == 1 ) {
+    ASSERT(fd_table[fd_idx].pid == thread_pid());
+    ret = file_write(fd_table[fd_idx].file,p,sz);
+  }
+  lock_release(&fd_table_lock);
   return ret;
-  
 }
 
 void
@@ -409,7 +420,7 @@ syscall_handler (struct intr_frame *f UNUSED)
       f->eax = sz;
     }
     else {
-      f->eax = read_fd(fd,p,sz);      
+      f->eax = read_fd(fd,p,sz);
     }
   }
   else if ( syscall_no == SYS_WRITE ) {
@@ -419,14 +430,12 @@ syscall_handler (struct intr_frame *f UNUSED)
     if ( check_user_ptr_with_terminate(p) ) {
       return;
     }
-    
     if ( fd == 1 ) {
       putbuf(p,size);
     }
     else {
-      // deal with file descriptors later
+      f->eax = write_fd(fd,p,size);
     }
-    f->eax = size;
   }
   else if ( syscall_no == SYS_SEEK ) {
   }
