@@ -53,15 +53,23 @@ void init_fd_table(void) {
   fd_count = 2;  
 }
 
-static void destroy_fd_table(void) {
+static void clear_fd(struct fd_file * fd_file) {
+  fd_file->fd = -1;
+  fd_file->file_name[0] = 0;
+  if ( fd_file->file != NULL ) {
+    file_close(fd_file->file);
+    fd_file->file = NULL;
+  }
+  fd_file->is_open = 0;
+  fd_file->pid = -1;
+}
+
+static void destroy_fd(int pid) {
   lock_acquire(&fd_table_lock);
   int i;
-  int success;
   for ( i = 0; i < MAX_FILES; ++i ) {
-    const char * const file_name = fd_table[i].file_name;
-    if ( file_name != NULL && strcmp(file_name,"") != 0 ) {
-      success = filesys_remove(file_name);
-      ASSERT(success);
+    if ( fd_table[i].pid == pid ) {
+      clear_fd(&fd_table[i]);
     }
   }
   lock_release(&fd_table_lock);
@@ -129,14 +137,6 @@ static int open_fd(const char * const file_name) {
   
 
   return fd;
-}
-
-static void clear_fd(struct fd_file * fd_file) {
-  fd_file->fd = -1;
-  fd_file->file_name[0] = 0;
-  fd_file->file = NULL;
-  fd_file->is_open = 0;
-  fd_file->pid = -1;
 }
 
 static void close_fd(int fd) {
@@ -252,7 +252,7 @@ syscall_init (void)
 
 static void process_terminate (int status) {
   printf("%s: exit(%d)\n",thread_current()->process_name,status);
-  destroy_fd_table();
+  destroy_fd(thread_pid());
   process_exit();
   thread_exit ();  
 }
@@ -292,7 +292,7 @@ static int check_user_ptr (void * p_) {
 static int check_user_ptr_with_terminate(void * p) {
   if (check_user_ptr(p)) {
     struct thread * cur = thread_current();
-    set_child_process_status(cur->parent_pid,thread_pid(),(process_status_e)PROCESS_KILLED);
+    set_child_process_status(cur->parent_pid,thread_pid(),PROCESS_KILLED,-1);
     process_terminate(-1);
     return 1;
   }
@@ -394,7 +394,7 @@ syscall_handler (struct intr_frame *f UNUSED)
   }
   else if (syscall_no == SYS_EXIT ) {
     status = (int)user_args[0];
-    set_child_process_status(cur->parent_pid,thread_pid(),(process_status_e)status);
+    set_child_process_status(cur->parent_pid,thread_pid(),PROCESS_SUCCESSFUL_EXIT,status);
     process_terminate(status);
     return;
   }

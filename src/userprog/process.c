@@ -27,7 +27,10 @@
 
 struct process_info {
   int pid;
-  int process_status;
+  int current_execution_status; // whether the process is running, exited, killed, etc.
+  // PROCESS_SUCCESSFUL_EXIT, PROCESS_UNSUCCESSFUL_EXIT, PROCESS_KILLED, enums in .h
+  int exit_value; // -1, 0, 2, 3
+  int was_queried;
 };
 
 // a table of processes to child proceses
@@ -67,7 +70,9 @@ void init_process_table(void) {
   for ( i = 0; i < MAX_PROCESSES; ++i ) {
     for ( j = 0; j < MAX_CHILD_PROCESSES; ++j ) {
       process_table[i][j].pid = -1;
-      process_table[i][j].process_status = PROCESS_UNDEFINED;
+      process_table[i][j].current_execution_status = PROCESS_UNDEFINED;
+      process_table[i][j].exit_value = 0;
+      process_table[i][j].was_queried = 0;
     }
   }
 }
@@ -83,7 +88,7 @@ void add_parent_process(int pid) {
     }
     else if ( process_table[i][0].pid == -1  ) {
       process_table[i][0].pid = pid;
-      process_table[i][0].process_status = PROCESS_RUNNING;
+      process_table[i][0].current_execution_status = PROCESS_RUNNING;
       break;
     }
   }
@@ -92,18 +97,19 @@ void add_parent_process(int pid) {
   lock_release(&process_table_lock);
 }
 
-void remove_parent_process(int pid, int status) {
+void remove_parent_process(int pid, int current_execution_status, int exit_value) {
   lock_acquire(&process_table_lock);
   int parent_pid_idx = get_parent_idx_by_pid(pid);
   ASSERT(0 <= parent_pid_idx && parent_pid_idx < MAX_PROCESSES);
-  process_table[parent_pid_idx][0].process_status = status;
+  process_table[parent_pid_idx][0].current_execution_status = current_execution_status;
+  process_table[parent_pid_idx][0].exit_value = exit_value;
   // never remove the parent pids
   // process_table[parent_pid_idx][0].pid = -1;
   // --num_processes;
   lock_release(&process_table_lock);
 }
 
-void add_child_process(int parent_pid, int child_pid, int child_status) {
+void add_child_process(int parent_pid, int child_pid) {
   lock_acquire(&process_table_lock);
   int i;
   int parent_pid_idx = get_parent_idx_by_pid(parent_pid);
@@ -112,7 +118,7 @@ void add_child_process(int parent_pid, int child_pid, int child_status) {
   for ( i = 0; i < MAX_CHILD_PROCESSES; ++i ) {
     if ( process_table[parent_pid_idx][i].pid == -1 ) {
       process_table[parent_pid_idx][i].pid = child_pid;
-      process_table[parent_pid_idx][i].process_status = child_status;
+      process_table[parent_pid_idx][i].current_execution_status = PROCESS_RUNNING;
       break;
     }
   }
@@ -120,29 +126,47 @@ void add_child_process(int parent_pid, int child_pid, int child_status) {
   lock_release(&process_table_lock);
 }
 
-void set_child_process_status(int parent_pid, int child_pid, int child_status ) {
+void set_child_process_status(int parent_pid, int child_pid, int current_execution_status, int exit_value ) {
   lock_acquire(&process_table_lock);
   int parent_pid_idx = get_parent_idx_by_pid(parent_pid);
   ASSERT(0 <= parent_pid_idx && parent_pid_idx < MAX_PROCESSES);
   int child_pid_idx = get_child_idx_by_pid(parent_pid_idx, child_pid);
   ASSERT(0 <= child_pid_idx && child_pid_idx < MAX_CHILD_PROCESSES);
-  /* printf("parent_pid %d parent_pid_idx %d child_pid %d child_pid_idx %d child_status %d\n", */
-  /*        parent_pid, parent_pid_idx, child_pid, child_pid_idx, child_status); */
-  process_table[parent_pid_idx][child_pid_idx].process_status = child_status;
+  process_table[parent_pid_idx][child_pid_idx].current_execution_status = current_execution_status;
+  process_table[parent_pid_idx][child_pid_idx].exit_value = exit_value;
   lock_release(&process_table_lock);
 }
 
-int get_child_process_status(int parent_pid, int child_pid) {
+void get_child_process_status(int parent_pid, int child_pid, int * current_execution_status, int * exit_value) {
   lock_acquire(&process_table_lock);
   int parent_pid_idx = get_parent_idx_by_pid(parent_pid);
   ASSERT(0 <= parent_pid_idx && parent_pid_idx < MAX_PROCESSES);
   int child_pid_idx = get_child_idx_by_pid(parent_pid_idx,child_pid);
   ASSERT(0 <= child_pid_idx && child_pid_idx < MAX_CHILD_PROCESSES);
-  int status = process_table[parent_pid_idx][child_pid_idx].process_status;
-  // status can be anything, actually, even something that doesn't make sense
-  /* ASSERT(status < PROCESS_UNDEFINED); */
+  *current_execution_status = process_table[parent_pid_idx][child_pid_idx].current_execution_status;
+  *exit_value = process_table[parent_pid_idx][child_pid_idx].exit_value;
   lock_release(&process_table_lock);
-  return status;
+}
+
+static void set_child_process_queried(int parent_pid, int child_pid, int queried) {
+  lock_acquire(&process_table_lock);
+  int parent_pid_idx = get_parent_idx_by_pid(parent_pid);
+  ASSERT(0 <= parent_pid_idx && parent_pid_idx < MAX_PROCESSES);
+  int child_pid_idx = get_child_idx_by_pid(parent_pid_idx, child_pid);
+  ASSERT(0 <= child_pid_idx && child_pid_idx < MAX_CHILD_PROCESSES);
+  process_table[parent_pid_idx][child_pid_idx].was_queried = queried;
+  lock_release(&process_table_lock);
+}
+
+static int get_child_process_queried(int parent_pid, int child_pid) {
+  lock_acquire(&process_table_lock);
+  int parent_pid_idx = get_parent_idx_by_pid(parent_pid);
+  ASSERT(0 <= parent_pid_idx && parent_pid_idx < MAX_PROCESSES);
+  int child_pid_idx = get_child_idx_by_pid(parent_pid_idx, child_pid);
+  ASSERT(0 <= child_pid_idx && child_pid_idx < MAX_CHILD_PROCESSES);
+  int ret = process_table[parent_pid_idx][child_pid_idx].was_queried;
+  lock_release(&process_table_lock);
+  return ret;
 }
 
 struct input_args {
@@ -269,22 +293,34 @@ start_process (void *input_args_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
+  // if child_tid was not spawned by this pid, return -1
   int pid = thread_pid();
   int child_pid_idx = get_child_idx_by_pid(get_parent_idx_by_pid(pid),child_tid);
   if ( child_pid_idx == -1 ) {
     return -1;
   }
-  // yield until the child status is not RUNNING
-  int status;
-  while ( (status = get_child_process_status(pid,child_tid)) == PROCESS_RUNNING ) {
-    thread_yield();
+  // if we already queried this child pid, return -1
+  if ( get_child_process_queried(pid,child_tid) == 1 ) {
+    return -1;
   }
-  if ( status == PROCESS_KILLED || status == PROCESS_SUCCESSFUL_WAIT_QUERY ) {
+  // yield until the child status is not RUNNING
+  int current_execution_status;
+  int exit_value;
+  do {
+    get_child_process_status(pid,child_tid,&current_execution_status,&exit_value);
+    if ( current_execution_status == PROCESS_RUNNING ) {
+      thread_yield();
+    }
+  } while ( current_execution_status == PROCESS_RUNNING );
+  
+  // returns -1 if this process has been killed or has been the product of a successful
+  // wait query
+  if ( current_execution_status == PROCESS_KILLED ) {
     return -1;
   }
   else {
-    set_child_process_status(pid,child_tid,PROCESS_SUCCESSFUL_WAIT_QUERY);
-    return status;
+    set_child_process_queried(pid,child_tid,1);
+    return exit_value;
   }
 }
 
@@ -515,7 +551,7 @@ load (struct input_args * ia, void (**eip) (void), void **esp)
   if ( success ) {
     t->parent_pid = ia->parent_pid;
     add_parent_process(thread_pid());
-    add_child_process(ia->parent_pid,thread_pid(),PROCESS_RUNNING);
+    add_child_process(ia->parent_pid,thread_pid());
   }
  done:  
   // signal to the creating thread that process start up finished
