@@ -407,6 +407,7 @@ syscall_handler (struct intr_frame *f UNUSED)
     f->eax = p;
   }
   else if ( syscall_no == SYS_WAIT ) {
+    f->eax = process_wait((int)user_args[0]);
   }
   else if ( syscall_no == SYS_CREATE ) {
     tmp_char_ptr = (char *)user_args[0];
