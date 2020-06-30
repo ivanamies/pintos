@@ -101,6 +101,7 @@ struct thread
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
     int parent_pid;
+    int exec_fd;
     char process_name[PROCESS_NAME_MAX_LENGTH];
 #endif
 

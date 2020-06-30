@@ -127,7 +127,7 @@ static int create_fd(const char * file_name, struct file * file) {
   return fd;
 }
 
-static int open_fd(const char * const file_name) {
+int open_fd(const char * const file_name) {
   int fd;
   struct file * file = filesys_open(file_name); // I assume this is thread safe?
   if ( file == NULL ) {
@@ -243,6 +243,18 @@ static int tell_fd(int fd) {
   return ret;
 }
 
+void deny_write_fd(int fd) {
+  lock_acquire(&fd_table_lock);
+  int fd_idx = fd_to_fd_idx_no_lock(fd);
+  int ret = is_valid_fd_entry_no_lock(fd_idx);
+  if ( ret == 1 ) {
+    ASSERT(fd_table[fd_idx].file != NULL);
+    ASSERT(fd_table[fd_idx].pid == thread_pid());
+    file_deny_write(fd_table[fd_idx].file);
+  }
+  lock_release(&fd_table_lock);
+}
+
 void
 syscall_init (void) 
 {
@@ -251,6 +263,11 @@ syscall_init (void)
 
 static void process_terminate (int status) {
   printf("%s: exit(%d)\n",thread_current()->process_name,status);
+  // destroy the file descriptors I own that aren't closed
+  // will also destroy the executable file descriptor
+  //
+  // This technically races because now another file can modify
+  // this process's executable before process_exit is called but whatever
   destroy_fd(thread_pid());
   process_exit();
   thread_exit ();  

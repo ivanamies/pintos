@@ -8,6 +8,7 @@
 #include "userprog/gdt.h"
 #include "userprog/pagedir.h"
 #include "userprog/tss.h"
+#include "userprog/syscall.h"
 #include "filesys/directory.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
@@ -224,7 +225,6 @@ process_execute (const char *input)
   }
   
   /* Create a new thread to execute FILE_NAME. */
-  
   ia->signal = -1; 
   tid = thread_create (input, PRI_DEFAULT, start_process, ia); // shouldn't this be input_copy?
   // wait until the process was created successfully or not
@@ -552,6 +552,9 @@ load (struct input_args * ia, void (**eip) (void), void **esp)
     t->parent_pid = ia->parent_pid;
     add_parent_process(thread_pid());
     add_child_process(ia->parent_pid,thread_pid());
+    t->exec_fd = open_fd(file_name);
+    ASSERT (t->exec_fd >= 2);
+    deny_write_fd(t->exec_fd);
   }
  done:  
   // signal to the creating thread that process start up finished
