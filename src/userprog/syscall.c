@@ -18,7 +18,6 @@
 #include <string.h>
 
 static void syscall_handler (struct intr_frame *);
-static void process_terminate (int);
 static int check_user_ptr (void * p);
 
 #define MAX_PAGES_IN_FILE 8
@@ -66,7 +65,7 @@ static void clear_fd(struct fd_file * fd_file) {
   fd_file->pid = -1;
 }
 
-static void destroy_fd(int pid) {
+void destroy_fd(int pid) {
   lock_acquire(&fd_table_lock);
   int i;
   for ( i = 0; i < MAX_FILES; ++i ) {
@@ -261,18 +260,6 @@ syscall_init (void)
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
-static void process_terminate (int status) {
-  printf("%s: exit(%d)\n",thread_current()->process_name,status);
-  // destroy the file descriptors I own that aren't closed
-  // will also destroy the executable file descriptor
-  //
-  // This technically races because now another file can modify
-  // this process's executable before process_exit is called but whatever
-  destroy_fd(thread_pid());
-  process_exit();
-  thread_exit ();  
-}
-
 static int check_user_ptr (void * p_) {
   const char * p = p_;
   int i;
@@ -307,9 +294,7 @@ static int check_user_ptr (void * p_) {
 
 static int check_user_ptr_with_terminate(void * p) {
   if (check_user_ptr(p)) {
-    struct thread * cur = thread_current();
-    set_child_process_status(cur->parent_pid,thread_pid(),PROCESS_KILLED,-1);
-    process_terminate(-1);
+    process_terminate(PROCESS_KILLED,-1);
     return 1;
   }
   else {
@@ -379,7 +364,6 @@ syscall_handler (struct intr_frame *f UNUSED)
   int syscall_no;
   int status;
   size_t word_size = sizeof(void *);
-  struct thread * cur = thread_current();
   char * esp = f->esp; // user's stack pointer
                        // cast to char * to have 1 byte type
   
@@ -410,8 +394,7 @@ syscall_handler (struct intr_frame *f UNUSED)
   }
   else if (syscall_no == SYS_EXIT ) {
     status = (int)user_args[0];
-    set_child_process_status(cur->parent_pid,thread_pid(),PROCESS_SUCCESSFUL_EXIT,status);
-    process_terminate(status);
+    process_terminate(PROCESS_SUCCESSFUL_EXIT,status);
     return;
   }
   else if ( syscall_no == SYS_EXEC ) {
@@ -504,6 +487,6 @@ syscall_handler (struct intr_frame *f UNUSED)
   else {
     printf("didn't get a project 2 sys call\n");
     ASSERT(false);
-    process_terminate(1);
+    process_terminate(PROCESS_KILLED,-1);
   }  
 }

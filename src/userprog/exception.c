@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include "userprog/gdt.h"
 #include "threads/interrupt.h"
+#include "userprog/process.h"
 #include "threads/thread.h"
 
 /* Number of page faults processed. */
@@ -78,7 +79,9 @@ kill (struct intr_frame *f)
      the kernel.  Real Unix-like operating systems pass most
      exceptions back to the process via signals, but we don't
      implement them. */
-     
+
+  int is_process = thread_is_process();
+  
   /* The interrupt frame's code segment value tells us where the
      exception originated. */
   switch (f->cs)
@@ -89,22 +92,35 @@ kill (struct intr_frame *f)
       printf ("%s: dying due to interrupt %#04x (%s).\n",
               thread_name (), f->vec_no, intr_name (f->vec_no));
       intr_dump_frame (f);
-      thread_exit (); 
-
+      if ( is_process ) {
+        process_terminate(PROCESS_KILLED,-1);
+      }
+      else {
+        thread_exit ();
+      }
+      break; // don't reach this...
+      
     case SEL_KCSEG:
       /* Kernel's code segment, which indicates a kernel bug.
          Kernel code shouldn't throw exceptions.  (Page faults
          may cause kernel exceptions--but they shouldn't arrive
          here.)  Panic the kernel to make the point.  */
       intr_dump_frame (f);
-      PANIC ("Kernel bug - unexpected interrupt in kernel"); 
+      PANIC ("Kernel bug - unexpected interrupt in kernel");
+      break; // don't reach this...
 
     default:
       /* Some other code segment?  Shouldn't happen.  Panic the
          kernel. */
       printf ("Interrupt %#04x (%s) in unknown segment %04x\n",
              f->vec_no, intr_name (f->vec_no), f->cs);
-      thread_exit ();
+      if ( is_process ) {
+        process_terminate(PROCESS_KILLED,-1);
+      }
+      else {
+        thread_exit ();
+      }
+      break; // don't reach this...
     }
 }
 

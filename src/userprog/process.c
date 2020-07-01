@@ -324,6 +324,19 @@ process_wait (tid_t child_tid UNUSED)
   }
 }
 
+void process_terminate (int current_execution_status, int exit_code) {
+  printf("%s: exit(%d)\n",thread_current()->process_name,exit_code);
+  struct thread * cur = thread_current();
+  set_child_process_status(cur->parent_pid,thread_pid(),current_execution_status,exit_code);
+  // destroy the file descriptors I own that aren't closed
+  // will also destroy the executable file descriptor
+  //
+  // This technically races because now another file can modify
+  // this process's executable before process_exit is called but whatever
+  destroy_fd(thread_pid());
+  thread_exit ();  
+}
+
 /* Free the current process's resources. */
 void
 process_exit (void)

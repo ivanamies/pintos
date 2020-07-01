@@ -280,6 +280,11 @@ pid_t thread_pid (void)
   return thread_current ()->tid; // lmao
 }
 
+// 0 if false, 1 if true
+int thread_is_process(void) {
+  return thread_current ()->exec_fd != -1;
+}
+
 /* Deschedules the current thread and destroys it.  Never
    returns to the caller. */
 void

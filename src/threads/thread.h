@@ -129,6 +129,7 @@ void thread_unblock (struct thread *);
 struct thread *thread_current (void);
 tid_t thread_tid (void);
 pid_t thread_pid (void);
+int thread_is_process (void); // 0 if false, 1 if true
 const char *thread_name (void);
 
 void thread_exit (void) NO_RETURN;
