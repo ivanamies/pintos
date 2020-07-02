@@ -23,8 +23,8 @@
 #define INPUT_ARGS_MAX_ARGS 60
 #define INPUT_ARGS_MAX_ARG_LENGTH 64
 
-#define MAX_PROCESSES 64
-#define MAX_CHILD_PROCESSES 64
+#define MAX_PROCESSES 32
+#define MAX_CHILD_PROCESSES 32
 
 struct process_info {
   int pid;
@@ -39,7 +39,7 @@ struct process_info {
 // the subsequent entries are child pids
 static struct lock process_table_lock;
 static int num_processes;
-static struct process_info process_table[MAX_PROCESSES][MAX_CHILD_PROCESSES];
+static struct process_info ** process_table;
 
 // must acquire lock before calling
 static int get_parent_idx_by_pid(int pid) {
@@ -68,6 +68,28 @@ void init_process_table(void) {
   lock_init(&process_table_lock);
   int i, j;
   num_processes = 0;
+
+  // allocate pages for pointers
+  int num_bytes_for_ptrs = MAX_PROCESSES * sizeof(struct process_info *);
+  int num_pages_for_ptrs = num_bytes_for_ptrs / PGSIZE;
+  if (num_pages_for_ptrs == 0 || num_pages_for_ptrs % PGSIZE != 0 ) {
+    ++num_pages_for_ptrs;
+  }
+  struct process_info ** p1 = palloc_get_multiple(num_pages_for_ptrs,PAL_ZERO);
+  ASSERT ( p1 != NULL );
+  int num_bytes_per_row = MAX_CHILD_PROCESSES * sizeof(struct process_info);
+  int num_pages_per_row = num_bytes_per_row / PGSIZE;
+  if ( num_pages_per_row == 0 || num_pages_per_row % PGSIZE != 0 ) {
+    ++num_pages_per_row;
+  }
+  for ( int i = 0; i < MAX_PROCESSES; ++i ) {
+    struct process_info * p2 = palloc_get_multiple(num_pages_per_row,PAL_ZERO);
+    ASSERT( p2 != NULL);
+    p1[i] = p2;
+  }  
+
+  process_table = p1;
+  
   for ( i = 0; i < MAX_PROCESSES; ++i ) {
     for ( j = 0; j < MAX_CHILD_PROCESSES; ++j ) {
       process_table[i][j].pid = -1;
@@ -76,6 +98,7 @@ void init_process_table(void) {
       process_table[i][j].was_queried = 0;
     }
   }
+
 }
 
 void add_parent_process(int pid) {

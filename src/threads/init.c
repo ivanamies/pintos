@@ -98,16 +98,13 @@ pintos_init (void)
   palloc_init (user_page_limit);
   malloc_init ();
   paging_init ();
-
+  
   /* Segmentation. */
 #ifdef USERPROG
-  init_process_table();
-  init_fd_table();
-  
   tss_init ();
   gdt_init ();
 #endif
-
+  
   /* Initialize interrupt handlers. */
   intr_init ();
   timer_init ();
@@ -131,6 +128,11 @@ pintos_init (void)
 #endif
 
   printf ("Boot complete.\n");
+
+#ifdef USERPROG
+  init_process_table();
+  init_fd_table();
+#endif
   
   if (*argv != NULL) {
     /* Run actions specified on kernel command line. */
@@ -138,7 +140,7 @@ pintos_init (void)
   } else {
     // TODO: no command line passed to kernel. Run interactively 
   }
-
+  
   /* Finish up. */
   shutdown ();
   thread_exit ();
