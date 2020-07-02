@@ -23,8 +23,8 @@
 #define INPUT_ARGS_MAX_ARGS 60
 #define INPUT_ARGS_MAX_ARG_LENGTH 64
 
-#define MAX_PROCESSES 32
-#define MAX_CHILD_PROCESSES 32
+#define MAX_PROCESSES 128
+#define MAX_CHILD_PROCESSES 128
 
 struct process_info {
   int pid;
@@ -87,7 +87,7 @@ void init_process_table(void) {
     ASSERT( p2 != NULL);
     p1[i] = p2;
   }  
-
+  
   process_table = p1;
   
   for ( i = 0; i < MAX_PROCESSES; ++i ) {

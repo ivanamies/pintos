@@ -22,7 +22,7 @@ static int check_user_ptr (void * p);
 
 #define MAX_PAGES_IN_FILE 8
 #define MAX_FILE_NAME_LEN 64
-#define MAX_FILES 128
+#define MAX_FILES 4096
 #define MAX_ARGS_ON_USER_STACK 4
 
 typedef struct fd_file {
@@ -35,16 +35,26 @@ typedef struct fd_file {
 
 // maintain static table of file descriptors out of laziness
 static struct lock fd_table_lock;
-static fd_file_t fd_table[MAX_FILES];
+static fd_file_t* fd_table;
 static int fd_count; // never recycle these
 
 void init_fd_table(void) {
   lock_init(&fd_table_lock);
   int i;
-  memset(fd_table,0,sizeof(fd_file_t)*MAX_FILES);
+  int num_bytes_fd = MAX_FILES * sizeof(fd_file_t);
+  int num_pages_fd = num_bytes_fd / PGSIZE;
+  if ( num_pages_fd == 0 || num_pages_fd % PGSIZE != 0 ) {
+    ++num_pages_fd;
+  }
+  fd_table = palloc_get_multiple(num_pages_fd,PAL_ZERO);
+  ASSERT (fd_table != NULL);
   for ( i = 0; i < MAX_FILES; ++i ) {
     fd_table[i].fd = -1;
+    fd_table[i].file_name[0] = 0;
+    fd_table[i].file = NULL;
+    fd_table[i].is_open = 0;
     fd_table[i].pid = -1;
+    
   }
   // must start at 2
   // 0 is stdin
