@@ -87,15 +87,27 @@ static void clear_fd(struct fd_file * fd_file) {
   fd_file->pid = -1;
 }
 
+static void clean_fd_table_no_lock(void) {
+  /* printf("clean_fd_table_if_full_no_lock 1\n"); */
+  for ( int i = empty_fd_idx-1; i >= 2; --i ) {
+    if ( fd_table[i].fd == -1 ) {
+      --empty_fd_idx;
+    }
+    else {
+      break;
+    }
+  }
+}
+
 void destroy_fd(int pid) {
   lock_acquire(&fd_table_lock);
-
   int i;
   for ( i = 0; i < MAX_FILES; ++i ) {
     if ( fd_table[i].pid == pid ) {
       clear_fd(&fd_table[i]);
     }
   }
+  clean_fd_table_no_lock();
   lock_release(&fd_table_lock);
 }
 
