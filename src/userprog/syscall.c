@@ -36,7 +36,16 @@ typedef struct fd_file {
 // maintain static table of file descriptors out of laziness
 static struct lock fd_table_lock;
 static fd_file_t* fd_table;
-static int fd_count; // never recycle these
+static int empty_fd_idx;
+
+void debug_fd_table(int aux) {
+  printf("===tag iamies debug fd table %d\n",aux);
+  for ( int i = 0; i < MAX_FILES; ++i ) {
+    if ( fd_table[i].file_name[0] != 0 ) {
+      printf("fd_table[%d] filename: %s\n",i,fd_table[i].file_name);
+    }
+  }
+}
 
 void init_fd_table(void) {
   lock_init(&fd_table_lock);
@@ -46,7 +55,10 @@ void init_fd_table(void) {
   if ( num_pages_fd == 0 || num_pages_fd % PGSIZE != 0 ) {
     ++num_pages_fd;
   }
-  fd_table = palloc_get_multiple(num_pages_fd,PAL_ZERO);
+  /* printf("num_pages_fd: %d\n",num_pages_fd); */
+  // this asserts
+  /* fd_table = palloc_get_multiple(num_pages_fd,PAL_ASSERT | PAL_ZERO); */
+  fd_table = get_pages_from_stack_allocator(0,num_pages_fd);
   ASSERT (fd_table != NULL);
   for ( i = 0; i < MAX_FILES; ++i ) {
     fd_table[i].fd = -1;
@@ -54,12 +66,12 @@ void init_fd_table(void) {
     fd_table[i].file = NULL;
     fd_table[i].is_open = 0;
     fd_table[i].pid = -1;
-    
   }
-  // must start at 2
-  // 0 is stdin
-  // 1 is stdout
-  fd_count = 2;  
+  
+  // do not use 0, which is stdin
+  // do not use 1, which is stdout
+  // start at 2 so fd and fd_idx are 1 to 1
+  empty_fd_idx = 2;  
 }
 
 static void clear_fd(struct fd_file * fd_file) {
@@ -77,6 +89,7 @@ static void clear_fd(struct fd_file * fd_file) {
 
 void destroy_fd(int pid) {
   lock_acquire(&fd_table_lock);
+
   int i;
   for ( i = 0; i < MAX_FILES; ++i ) {
     if ( fd_table[i].pid == pid ) {
@@ -87,7 +100,6 @@ void destroy_fd(int pid) {
 }
 
 static int create_fd(const char * file_name, struct file * file) {
-  int i;
   int fd;
   int fd_idx;
 
@@ -100,39 +112,23 @@ static int create_fd(const char * file_name, struct file * file) {
   }
   
   lock_acquire(&fd_table_lock);
-  
-  fd_idx = -1;
-  for ( i = 0; i < MAX_FILES; ++i ) {
-    if ( fd_table[i].fd == -1 ) {
-      fd_idx = i;
-      break;
-    }
-  }
-  
-  /* printf("create_fd fd_idx: %d\n",fd_idx); */
-  
-  if ( fd_idx == -1 ) {
-    printf("ERROR: fd table is full\n");
-    fd = -1;
-    goto create_fd_done;
-  }
 
+  ASSERT ( empty_fd_idx < MAX_FILES );
+  fd_idx = empty_fd_idx;
+  ++empty_fd_idx;
+      
   ASSERT( file != NULL );
   
-  fd = fd_count; // must start at 2
-  ++fd_count;
-
+  fd = fd_idx; // must start at 2
+  
   fd_table[fd_idx].fd = fd;
   strlcpy(fd_table[fd_idx].file_name,file_name,MAX_FILE_NAME_LEN);
   fd_table[fd_idx].file = file;
   fd_table[fd_idx].is_open = 1; // ONLY call from open_fd
   fd_table[fd_idx].pid = thread_pid();
-
-  /* printf("fd_table[%d] %p fd %d\n",fd_idx,&fd_table[fd_idx],fd_table[fd_idx].fd); */
   
- create_fd_done:
   lock_release(&fd_table_lock);
-
+  
   return fd;
 }
 
@@ -150,23 +146,16 @@ int open_fd(const char * const file_name) {
 }
 
 static int fd_to_fd_idx_no_lock(int fd) {
-  int i;
-  int fd_idx = -1;
-  for ( i = 0; i < MAX_FILES; ++i ) {
-    if ( fd_table[i].fd == fd && fd_table[i].pid == thread_pid() ) {
-      fd_idx = i;
-      break;
-    }
-  }
-  return fd_idx;
+  return fd;
 }
 
 static int is_valid_fd_entry_no_lock(int fd_idx) {
-  if ( fd_idx == -1 ) {
+  if ( fd_idx == 0 || fd_idx == 1 || fd_idx >= empty_fd_idx ) {
     return 0;
   }
   else if ( fd_table[fd_idx].file == NULL ||
-            fd_table[fd_idx].is_open == 0 ) {
+            fd_table[fd_idx].is_open == 0 ||
+            fd_table[fd_idx].pid != thread_pid() ) {
     return 0;
   }
   return 1;
@@ -174,12 +163,11 @@ static int is_valid_fd_entry_no_lock(int fd_idx) {
 
 static void close_fd(int fd) {
   lock_acquire(&fd_table_lock);
-  
+
   int fd_idx = fd_to_fd_idx_no_lock(fd);
   int ret = is_valid_fd_entry_no_lock(fd_idx);
   if ( ret == 1 ) {
     ASSERT(fd_table[fd_idx].file != NULL);
-    ASSERT(fd_table[fd_idx].pid == thread_pid());
     file_close(fd_table[fd_idx].file);
     fd_table[fd_idx].fd = -1;
     fd_table[fd_idx].is_open = 0;
@@ -383,7 +371,6 @@ syscall_handler (struct intr_frame *f UNUSED)
   }
   
   syscall_no = *((int *)esp);
-  /* printf("syscall_no: %d\n",syscall_no); */
   esp += word_size;
 
   int num_args = get_num_args(syscall_no);

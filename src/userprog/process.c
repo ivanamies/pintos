@@ -75,7 +75,8 @@ void init_process_table(void) {
   if (num_pages_for_ptrs == 0 || num_pages_for_ptrs % PGSIZE != 0 ) {
     ++num_pages_for_ptrs;
   }
-  struct process_info ** p1 = palloc_get_multiple(num_pages_for_ptrs,PAL_ZERO);
+  /* struct process_info ** p1 = palloc_get_multiple(num_pages_for_ptrs,PAL_ZERO); */
+  struct process_info ** p1 = get_pages_from_stack_allocator(0,num_pages_for_ptrs);
   ASSERT ( p1 != NULL );
   int num_bytes_per_row = MAX_CHILD_PROCESSES * sizeof(struct process_info);
   int num_pages_per_row = num_bytes_per_row / PGSIZE;
@@ -83,7 +84,8 @@ void init_process_table(void) {
     ++num_pages_per_row;
   }
   for ( int i = 0; i < MAX_PROCESSES; ++i ) {
-    struct process_info * p2 = palloc_get_multiple(num_pages_per_row,PAL_ZERO);
+    /* struct process_info * p2 = palloc_get_multiple(num_pages_per_row,PAL_ZERO); */
+    struct process_info * p2 = get_pages_from_stack_allocator(0,num_pages_per_row);    
     ASSERT( p2 != NULL);
     p1[i] = p2;
   }  
@@ -220,15 +222,20 @@ process_execute (const char *input)
   char *input_copy;
   char *token, *save_ptr;
   tid_t tid;
-  
+
+  ASSERT(sizeof(struct input_args) <= PGSIZE);
+      
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
-  input_copy = palloc_get_page (0);
+  /* input_copy = palloc_get_page (PAL_ZERO); */
+  input_copy = get_pages_from_stack_allocator(0,1);
+  
   if (input_copy == NULL)
     return TID_ERROR;
   strlcpy (input_copy, input, PGSIZE);
-
-  ia = palloc_get_page (0);
+  
+  /* ia = palloc_get_page (0); */
+  ia = get_pages_from_stack_allocator(0,1);
   ASSERT(sizeof(ia) <= PGSIZE);
   if ( ia == NULL ) {
     return TID_ERROR;
@@ -238,7 +245,7 @@ process_execute (const char *input)
   add_parent_process(thread_pid());
   lock_init(&ia->lk);
   cond_init(&ia->cv);
-  
+         
   for (token = strtok_r (input_copy, " ", &save_ptr); token != NULL;
        token = strtok_r (NULL, " ", &save_ptr)) {
     ASSERT (ia->argc < INPUT_ARGS_MAX_ARGS);
@@ -246,7 +253,7 @@ process_execute (const char *input)
     strlcpy (ia->argv[ia->argc],token,INPUT_ARGS_MAX_ARG_LENGTH);
     ++ia->argc;
   }
-  
+    
   /* Create a new thread to execute FILE_NAME. */
   ia->signal = -1; 
   tid = thread_create (input, PRI_DEFAULT, start_process, ia); // shouldn't this be input_copy?
@@ -260,12 +267,16 @@ process_execute (const char *input)
   if ( ia->signal == 0 ) { // failed to make process
     tid = TID_ERROR;
   }
-  
+    
   // free allocated page
-  palloc_free_page (ia);
+  /* palloc_free_page (ia); */
+  free_pages_from_stack_allocator(0,ia);
   
-  if (tid == TID_ERROR)
-    palloc_free_page (input_copy); 
+  if (tid == TID_ERROR) {
+    /* palloc_free_page (input_copy); */
+    free_pages_from_stack_allocator(0,ia);
+  }
+
   return tid;
 }
 
@@ -356,7 +367,9 @@ void process_terminate (int current_execution_status, int exit_code) {
   //
   // This technically races because now another file can modify
   // this process's executable before process_exit is called but whatever
+  /* printf("process terminate 1\n"); */
   destroy_fd(thread_pid());
+  /* printf("process terminate 2\n"); */
   thread_exit ();  
 }
 
@@ -768,15 +781,7 @@ setup_stack (struct input_args * ia, void **esp)
         // push on argc
         (*esp) = push_stack(&ia->argc,sizeof(int),*esp);
         // push on dummy return address
-        (*esp) = push_stack(&nothing,sizeof(void *),*esp);
-        
-        // tagiamies -- debug
-        /* int SIZE = (int)PHYS_BASE - (int)*esp; */
-        /* hex_dump((int)*esp,*esp,SIZE,1); */
-        /* while ( true ) { */
-        /*   intr_disable(); */
-        /*   intr_enable(); */
-        /* } */
+        (*esp) = push_stack(&nothing,sizeof(void *),*esp);        
       }
       else {
         palloc_free_page (kpage);

@@ -17,4 +17,9 @@ void *palloc_get_multiple (enum palloc_flags, size_t page_cnt);
 void palloc_free_page (void *);
 void palloc_free_multiple (void *, size_t page_cnt);
 
+// evil stack allocator to work around palloc fragmentation
+void stack_allocator_init(void);
+void* get_pages_from_stack_allocator(int user, int num_pages);
+void free_pages_from_stack_allocator(int user, void * p);
+
 #endif /* threads/palloc.h */
