@@ -7,4 +7,7 @@ void frame_table_init(void);
 void * frame_alloc(void);
 void frame_dealloc(void *);
 
+// for debugging
+void frame_table_dump(int);
+
 #endif /* vm/frame.h */

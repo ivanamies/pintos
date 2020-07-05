@@ -19,6 +19,7 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "threads/synch.h"
+#include "vm/frame.h"
 
 #define INPUT_ARGS_MAX_ARGS 60
 #define INPUT_ARGS_MAX_ARG_LENGTH 64
@@ -227,7 +228,9 @@ process_execute (const char *input)
   
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
-  input_copy = palloc_get_page (PAL_ZERO | PAL_USER);
+  /* input_copy = palloc_get_page (PAL_ZERO | PAL_USER); */
+  input_copy = frame_alloc();
+  /* frame_table_dump(1); */
   ia = palloc_get_page (PAL_ZERO | PAL_USER);
   
   if (input_copy == NULL) {
@@ -273,8 +276,10 @@ process_execute (const char *input)
  process_execute_done:
   // free allocated pages
   palloc_free_page (ia);  
-  palloc_free_page (input_copy);
-
+  /* palloc_free_page (input_copy); */
+  frame_dealloc(input_copy);
+  /* frame_table_dump(2); */
+  
   return tid;
 }
 

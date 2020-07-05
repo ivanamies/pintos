@@ -9,6 +9,8 @@
 // but let's use it and see what it gives me
 #include "lib/kernel/bitmap.h"
 
+#include <stdio.h>
+
 #define MAX_FRAMES 64
 
 typedef struct lock lock_t;
@@ -23,6 +25,7 @@ typedef struct frame_table {
   void* frames; // MAX_FRAME total, continguous in memory, allocated from palloc_get_multiple
   frame_aux_info_t frame_aux_info[MAX_FRAMES];
   struct bitmap *bitmap;
+  uint8_t bitmap_data[MAX_FRAMES];
   
 } frame_table_t;
 
@@ -53,7 +56,10 @@ void frame_table_init(void) {
   ASSERT(frame_table_user.frames != NULL);
   
   // let bitmap memory leak too
-  frame_table_user.bitmap = bitmap_create(MAX_FRAMES);
+  size_t bit_cnt = MAX_FRAMES;
+  void * block = &frame_table_user.bitmap_data;
+  size_t block_size = bit_cnt * sizeof(uint8_t);
+  frame_table_user.bitmap = bitmap_create_in_buf(bit_cnt,block,block_size);
 }
 
 static void* frame_alloc_multiple(int n) {
@@ -70,7 +76,7 @@ static void* frame_alloc_multiple(int n) {
   return res;
 }
 
-void* frame_alloc() {
+void* frame_alloc(void) {
   return frame_alloc_multiple(1);
 }
 
@@ -79,4 +85,18 @@ void frame_dealloc(void * p) {
   int idx = frame_get_index_no_lock(p);
   bitmap_flip(frame_table_user.bitmap,idx);
   lock_release(&frame_table_user.lock);
+}
+
+void frame_table_dump(int aux) {
+  lock_acquire(&frame_table_user.lock);
+
+  printf("===frame table dump %d===\n",aux);
+  for ( int i = 0; i < MAX_FRAMES; ++i ) {
+    char * p = frame_table_user.frames;
+    p += (PGSIZE * i);
+    printf("frame[%d]: %p\n",i,p);
+  }
+  bitmap_dump(frame_table_user.bitmap);
+  
+  lock_release(&frame_table_user.lock);  
 }
