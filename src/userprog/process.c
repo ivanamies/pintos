@@ -38,7 +38,7 @@ struct process_info {
 // the first entry is parent pid
 // the subsequent entries are child pids
 static struct lock process_table_lock;
-/* static int num_processes; */
+static int num_processes;
 static struct process_info ** process_table;
 
 // must acquire lock before calling
@@ -67,7 +67,7 @@ static int get_child_idx_by_pid(int parent_pid_idx, int pid) {
 void init_process_table(void) {
   lock_init(&process_table_lock);
   int i, j;
-  /* num_processes = 0; */
+  num_processes = 0;
 
   // allocate pages for pointers
   int num_bytes_for_ptrs = MAX_PROCESSES * sizeof(struct process_info *);
@@ -105,44 +105,22 @@ void init_process_table(void) {
 
 void add_parent_process(int pid) {
   lock_acquire(&process_table_lock);
-  /* ASSERT(num_processes < MAX_PROCESSES); */
+  ASSERT(num_processes < MAX_PROCESSES);
   int i;
   for ( i = 0; i < MAX_PROCESSES; ++i ) {
     // if we 've seen this process before, do nothing
     if ( process_table[i][0].pid == pid ) {
       break;
     }
-    else if ( process_table[i][0].pid == -1 ) {
+    else if ( process_table[i][0].pid == -1  ) {
       process_table[i][0].pid = pid;
       process_table[i][0].current_execution_status = PROCESS_RUNNING;
       break;
     }
   }
   ASSERT(i < MAX_PROCESSES);
-  /* ++num_processes; */
+  ++num_processes;
   lock_release(&process_table_lock);
-}
-
-static void remove_parent_process_no_lock(void) {
-  int total_killed = 0;
-  for ( int i = MAX_PROCESSES-1; i >= 0; --i ) {
-    if ( process_table[i][0].current_execution_status != PROCESS_RUNNING ) {
-      int all_killed = 1;
-      for (int j = 1; j < MAX_CHILD_PROCESSES; ++j) {
-        if ( process_table[i][j].current_execution_status == PROCESS_RUNNING ) {
-          all_killed = 0;
-          break;
-        }
-      }
-      if ( all_killed ) {
-        process_table[i][0].pid = -1;
-        ++total_killed;
-        if ( total_killed > 20 ) {
-          return;
-        }
-      }
-    }
-  }
 }
 
 void remove_parent_process(int pid, int current_execution_status, int exit_value) {
@@ -152,9 +130,8 @@ void remove_parent_process(int pid, int current_execution_status, int exit_value
   process_table[parent_pid_idx][0].current_execution_status = current_execution_status;
   process_table[parent_pid_idx][0].exit_value = exit_value;
   // never remove the parent pids
-  /* process_table[parent_pid_idx][0].pid = -1; */
-  /* --num_processes; */
-  remove_parent_process_no_lock();
+  // process_table[parent_pid_idx][0].pid = -1;
+  // --num_processes;
   lock_release(&process_table_lock);
 }
 
@@ -189,7 +166,7 @@ void set_child_process_status(int parent_pid, int child_pid, int current_executi
 void get_child_process_status(int parent_pid, int child_pid, int * current_execution_status, int * exit_value) {
   lock_acquire(&process_table_lock);
   int parent_pid_idx = get_parent_idx_by_pid(parent_pid);
-  /* ASSERT(0 <= parent_pid_idx && parent_pid_idx < MAX_PROCESSES); */
+  ASSERT(0 <= parent_pid_idx && parent_pid_idx < MAX_PROCESSES);
   int child_pid_idx = get_child_idx_by_pid(parent_pid_idx,child_pid);
   ASSERT(0 <= child_pid_idx && child_pid_idx < MAX_CHILD_PROCESSES);
   *current_execution_status = process_table[parent_pid_idx][child_pid_idx].current_execution_status;
@@ -251,18 +228,14 @@ process_execute (const char *input)
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
   /* input_copy = palloc_get_page (PAL_ZERO); */
-  /* printf("process execute 1\n"); */
-  /* input_copy = palloc_get_page (PAL_ASSERT | PAL_ZERO); */
+  input_copy = get_pages_from_stack_allocator(0,1);
   
-  /* if (input_copy == NULL) */
-  /*   return TID_ERROR; */
-  /* strlcpy (input_copy, input, PGSIZE); */
+  if (input_copy == NULL)
+    return TID_ERROR;
+  strlcpy (input_copy, input, PGSIZE);
   
   /* ia = palloc_get_page (0); */
-  /* printf("process execute 2\n"); */
-  /* ia = get_pages_from_stack_allocator(0,1); */
-  ia = palloc_get_page (PAL_ASSERT | PAL_ZERO);
-  /* printf("process execute 3\n"); */
+  ia = get_pages_from_stack_allocator(0,1);
   ASSERT(sizeof(ia) <= PGSIZE);
   if ( ia == NULL ) {
     return TID_ERROR;
@@ -273,17 +246,17 @@ process_execute (const char *input)
   lock_init(&ia->lk);
   cond_init(&ia->cv);
          
-  for (token = strtok_r (input, " ", &save_ptr); token != NULL;
+  for (token = strtok_r (input_copy, " ", &save_ptr); token != NULL;
        token = strtok_r (NULL, " ", &save_ptr)) {
     ASSERT (ia->argc < INPUT_ARGS_MAX_ARGS);
     ASSERT (strlen(token) < INPUT_ARGS_MAX_ARG_LENGTH);
     strlcpy (ia->argv[ia->argc],token,INPUT_ARGS_MAX_ARG_LENGTH);
     ++ia->argc;
   }
-  
+    
   /* Create a new thread to execute FILE_NAME. */
   ia->signal = -1; 
-  tid = thread_create (ia->argv[0], PRI_DEFAULT, start_process, ia); // shouldn't this be input_copy?
+  tid = thread_create (input, PRI_DEFAULT, start_process, ia); // shouldn't this be input_copy?
   // wait until the process was created successfully or not
   lock_acquire(&ia->lk);
   while ( ia->signal == -1 ) {
@@ -296,13 +269,13 @@ process_execute (const char *input)
   }
     
   // free allocated page
-  palloc_free_page (ia);
-  /* free_pages_from_stack_allocator(0,ia); */
+  /* palloc_free_page (ia); */
+  free_pages_from_stack_allocator(0,ia);
   
-  /* if (tid == TID_ERROR) { */
-  /*   /\* palloc_free_page (input_copy); *\/ */
-  /*   free_pages_from_stack_allocator(0,input_copy); */
-  /* } */
+  if (tid == TID_ERROR) {
+    /* palloc_free_page (input_copy); */
+    free_pages_from_stack_allocator(0,ia);
+  }
 
   return tid;
 }
@@ -389,7 +362,6 @@ void process_terminate (int current_execution_status, int exit_code) {
   printf("%s: exit(%d)\n",thread_current()->process_name,exit_code);
   struct thread * cur = thread_current();
   set_child_process_status(cur->parent_pid,thread_pid(),current_execution_status,exit_code);
-  remove_parent_process(cur->parent_pid,current_execution_status,exit_code);
   // destroy the file descriptors I own that aren't closed
   // will also destroy the executable file descriptor
   //
