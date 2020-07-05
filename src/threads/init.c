@@ -31,6 +31,9 @@
 #else
 #include "tests/threads/tests.h"
 #endif
+#ifdef VM
+#include "vm/frame.h"
+#endif
 #ifdef FILESYS
 #include "devices/block.h"
 #include "devices/ide.h"
@@ -133,6 +136,7 @@ pintos_init (void)
 #ifdef USERPROG
   init_process_table();
   init_fd_table();
+  frame_table_init();
 #endif
   
   if (*argv != NULL) {

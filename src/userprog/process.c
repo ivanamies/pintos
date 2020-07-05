@@ -224,21 +224,22 @@ process_execute (const char *input)
   tid_t tid;
 
   ASSERT(sizeof(struct input_args) <= PGSIZE);
-      
+  
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
-  /* input_copy = palloc_get_page (PAL_ZERO); */
-  input_copy = get_pages_from_stack_allocator(0,1);
+  input_copy = palloc_get_page (PAL_ZERO | PAL_USER);
+  ia = palloc_get_page (PAL_ZERO | PAL_USER);
   
-  if (input_copy == NULL)
-    return TID_ERROR;
+  if (input_copy == NULL) {
+    tid = TID_ERROR;
+    goto process_execute_done;
+  }
   strlcpy (input_copy, input, PGSIZE);
   
-  /* ia = palloc_get_page (0); */
-  ia = get_pages_from_stack_allocator(0,1);
   ASSERT(sizeof(ia) <= PGSIZE);
   if ( ia == NULL ) {
-    return TID_ERROR;
+    tid = TID_ERROR;
+    goto process_execute_done;
   }
   memset(ia,0,PGSIZE);
   ia->parent_pid = thread_pid();
@@ -266,16 +267,13 @@ process_execute (const char *input)
 
   if ( ia->signal == 0 ) { // failed to make process
     tid = TID_ERROR;
+    goto process_execute_done;
   }
-    
-  // free allocated page
-  /* palloc_free_page (ia); */
-  free_pages_from_stack_allocator(0,ia);
-  
-  if (tid == TID_ERROR) {
-    /* palloc_free_page (input_copy); */
-    free_pages_from_stack_allocator(0,ia);
-  }
+
+ process_execute_done:
+  // free allocated pages
+  palloc_free_page (ia);  
+  palloc_free_page (input_copy);
 
   return tid;
 }
