@@ -228,26 +228,20 @@ process_execute (const char *input)
   
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
+  printf("process alloc 1\n");
   input_copy = frame_alloc();
+  ASSERT(input_copy != NULL);
+  printf("process alloc 2\n");
   ia = frame_alloc();
+  ASSERT(ia != NULL);
   
-  if (input_copy == NULL) {
-    tid = TID_ERROR;
-    goto process_execute_done;
-  }
   strlcpy (input_copy, input, PGSIZE);
   
-  ASSERT(sizeof(ia) <= PGSIZE);
-  if ( ia == NULL ) {
-    tid = TID_ERROR;
-    goto process_execute_done;
-  }
-  memset(ia,0,PGSIZE);
   ia->parent_pid = thread_pid();
   add_parent_process(thread_pid());
   lock_init(&ia->lk);
   cond_init(&ia->cv);
-         
+  
   for (token = strtok_r (input_copy, " ", &save_ptr); token != NULL;
        token = strtok_r (NULL, " ", &save_ptr)) {
     ASSERT (ia->argc < INPUT_ARGS_MAX_ARGS);
@@ -255,7 +249,7 @@ process_execute (const char *input)
     strlcpy (ia->argv[ia->argc],token,INPUT_ARGS_MAX_ARG_LENGTH);
     ++ia->argc;
   }
-    
+  
   /* Create a new thread to execute FILE_NAME. */
   ia->signal = -1; 
   tid = thread_create (input, PRI_DEFAULT, start_process, ia); // shouldn't this be input_copy?
@@ -366,9 +360,7 @@ void process_terminate (int current_execution_status, int exit_code) {
   //
   // This technically races because now another file can modify
   // this process's executable before process_exit is called but whatever
-  /* printf("process terminate 1\n"); */
   destroy_fd(thread_pid());
-  /* printf("process terminate 2\n"); */
   thread_exit ();  
 }
 
@@ -697,7 +689,10 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
       /* Get a page of memory. */
+      printf("process alloc 3\n");
       uint8_t *kpage = frame_alloc();
+      ASSERT (kpage != NULL);
+
       if (kpage == NULL)
         return false;
 
@@ -752,8 +747,11 @@ setup_stack (struct input_args * ia, void **esp)
   int num_strings_pushed = 0;
   void * strings_on_stack[INPUT_ARGS_MAX_ARGS];
   memset(&strings_on_stack,0,INPUT_ARGS_MAX_ARGS*sizeof(void *));
-  
+
+  printf("process alloc 4\n");
   kpage = frame_alloc();
+  ASSERT (kpage != NULL);
+  
   if (kpage != NULL) 
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
