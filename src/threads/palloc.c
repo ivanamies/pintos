@@ -199,26 +199,26 @@ void stack_allocator_init() {
   kernel_mem.pages = palloc_get_multiple(PAL_ASSERT | PAL_ZERO,stack_allocator_max_pages);
   kernel_mem.page_num = 0;
   
-  lock_init(&user_mem.lk);
-  user_mem.pages = palloc_get_multiple(PAL_ASSERT | PAL_ZERO | PAL_USER,stack_allocator_max_pages);
-  user_mem.page_num = 0;
+  /* lock_init(&user_mem.lk); */
+  /* user_mem.pages = palloc_get_multiple(PAL_ASSERT | PAL_ZERO | PAL_USER,stack_allocator_max_pages); */
+  /* user_mem.page_num = 0; */
 }
 
 void* get_pages_from_stack_allocator(int user, int num_pages) {
   void * p = NULL;
   if ( user ) {
-    lock_acquire(&kernel_mem.lk);
-    p = kernel_mem.pages + kernel_mem.page_num*PGSIZE;
-    kernel_mem.page_num += num_pages;
-    ASSERT(kernel_mem.page_num < stack_allocator_max_pages);
-    lock_release(&kernel_mem.lk);
-  }
-  else {
     lock_acquire(&user_mem.lk);
     p = user_mem.pages + user_mem.page_num*PGSIZE;
     user_mem.page_num += num_pages;
     ASSERT(user_mem.page_num < stack_allocator_max_pages);
     lock_release(&user_mem.lk);    
+  }
+  else {
+    lock_acquire(&kernel_mem.lk);
+    p = kernel_mem.pages + kernel_mem.page_num*PGSIZE;
+    kernel_mem.page_num += num_pages;
+    ASSERT(kernel_mem.page_num < stack_allocator_max_pages);
+    lock_release(&kernel_mem.lk);
   }  
   
   ASSERT( p != NULL );

@@ -11,7 +11,7 @@
 
 #include <stdio.h>
 
-#define MAX_FRAMES 64
+#define MAX_FRAMES 128
 
 typedef struct lock lock_t;
 
@@ -31,7 +31,7 @@ typedef struct frame_table {
 
 frame_table_t frame_table_user;
 
-static size_t frame_get_index_no_lock(void * p_in) {
+static int frame_get_index_no_lock(void * p_in) {
   // do operations on char *
   char * first_frame = (char *)frame_table_user.frames;
   char * p = p_in;
@@ -68,12 +68,10 @@ static void* frame_alloc_multiple(int n) {
   size_t start = 0;
   size_t val = 0;
   size_t idx = bitmap_scan_and_flip(frame_table_user.bitmap,start,n,val);
-  printf("alloc idx: %ld n: %d\n",idx,n);
   void * res = NULL;
   if ( idx != BITMAP_ERROR ) {
     res = frame_get_frame_no_lock(idx);
   }
-  ASSERT ( res != NULL );
   lock_release(&frame_table_user.lock);
   return res;
 }
@@ -84,9 +82,7 @@ void* frame_alloc(void) {
 
 void frame_dealloc(void * p) {
   lock_acquire(&frame_table_user.lock);
-  size_t idx = frame_get_index_no_lock(p);
-  printf("dealloc idx: %ld\n",idx);
-  // this can't dealloc multiple, store # continguous pages in aux info
+  int idx = frame_get_index_no_lock(p);
   bitmap_flip(frame_table_user.bitmap,idx);
   lock_release(&frame_table_user.lock);
 }
