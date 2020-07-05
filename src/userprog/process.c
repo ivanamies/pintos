@@ -228,10 +228,8 @@ process_execute (const char *input)
   
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
-  /* input_copy = palloc_get_page (PAL_ZERO | PAL_USER); */
   input_copy = frame_alloc();
-  /* frame_table_dump(1); */
-  ia = palloc_get_page (PAL_ZERO | PAL_USER);
+  ia = frame_alloc();
   
   if (input_copy == NULL) {
     tid = TID_ERROR;
@@ -275,10 +273,8 @@ process_execute (const char *input)
 
  process_execute_done:
   // free allocated pages
-  palloc_free_page (ia);  
-  /* palloc_free_page (input_copy); */
+  frame_dealloc(ia);
   frame_dealloc(input_copy);
-  /* frame_table_dump(2); */
   
   return tid;
 }
@@ -701,14 +697,14 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
       /* Get a page of memory. */
-      uint8_t *kpage = palloc_get_page (PAL_USER);
+      uint8_t *kpage = frame_alloc();
       if (kpage == NULL)
         return false;
 
       /* Load this page. */
       if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
         {
-          palloc_free_page (kpage);
+          frame_dealloc(kpage);
           return false; 
         }
       memset (kpage + page_read_bytes, 0, page_zero_bytes);
@@ -716,7 +712,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       /* Add the page to the process's address space. */
       if (!install_page (upage, kpage, writable)) 
         {
-          palloc_free_page (kpage);
+          frame_dealloc(kpage);
           return false; 
         }
 
@@ -757,7 +753,7 @@ setup_stack (struct input_args * ia, void **esp)
   void * strings_on_stack[INPUT_ARGS_MAX_ARGS];
   memset(&strings_on_stack,0,INPUT_ARGS_MAX_ARGS*sizeof(void *));
   
-  kpage = palloc_get_page (PAL_USER | PAL_ZERO);
+  kpage = frame_alloc();
   if (kpage != NULL) 
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
@@ -787,7 +783,7 @@ setup_stack (struct input_args * ia, void **esp)
         (*esp) = push_stack(&nothing,sizeof(void *),*esp);        
       }
       else {
-        palloc_free_page (kpage);
+        frame_dealloc(kpage);
       }
     }
   return success;
