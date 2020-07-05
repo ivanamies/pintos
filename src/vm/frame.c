@@ -72,6 +72,7 @@ static void* frame_alloc_multiple(int n) {
   if ( idx != BITMAP_ERROR ) {
     res = frame_get_frame_no_lock(idx);
   }
+  ASSERT (res != NULL);
   lock_release(&frame_table_user.lock);
   return res;
 }
@@ -81,6 +82,7 @@ void* frame_alloc(void) {
 }
 
 void frame_dealloc(void * p) {
+  ASSERT (p != NULL);
   lock_acquire(&frame_table_user.lock);
   int idx = frame_get_index_no_lock(p);
   bitmap_flip(frame_table_user.bitmap,idx);
