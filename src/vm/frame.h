@@ -3,8 +3,10 @@
 
 #define SOME_FRAME_DEFINE
 
+struct thread;
+
 void frame_table_init(void);
-void * frame_alloc(void);
+void * frame_alloc(struct thread *);
 void frame_dealloc(void *);
 
 // for debugging

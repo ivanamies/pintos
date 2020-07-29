@@ -228,8 +228,8 @@ process_execute (const char *input)
   
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
-  input_copy = frame_alloc();
-  ia = frame_alloc();
+  input_copy = frame_alloc(thread_current());
+  ia = frame_alloc(thread_current());
   
   if (input_copy == NULL) {
     tid = TID_ERROR;
@@ -499,10 +499,12 @@ load (struct input_args * ia, void (**eip) (void), void **esp)
   off_t file_ofs;
   bool success = false;
   int i;
+
+  // copy process name into thread
+  strlcpy(t->process_name,file_name,PROCESS_NAME_MAX_LENGTH);
   
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
-  strlcpy(t->process_name,file_name,PROCESS_NAME_MAX_LENGTH);
   if (t->pagedir == NULL) 
     goto done;
   process_activate ();
@@ -697,7 +699,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
       /* Get a page of memory. */
-      uint8_t *kpage = frame_alloc();
+      uint8_t *kpage = frame_alloc(thread_current());
       if (kpage == NULL)
         return false;
 
@@ -753,7 +755,7 @@ setup_stack (struct input_args * ia, void **esp)
   void * strings_on_stack[INPUT_ARGS_MAX_ARGS];
   memset(&strings_on_stack,0,INPUT_ARGS_MAX_ARGS*sizeof(void *));
   
-  kpage = frame_alloc();
+  kpage = frame_alloc(thread_current());
   if (kpage != NULL) 
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);

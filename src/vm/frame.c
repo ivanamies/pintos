@@ -4,10 +4,12 @@
 #include "threads/palloc.h"
 #include "threads/vaddr.h"
 #include "threads/synch.h"
+#include "threads/thread.h"
 
 // I don't really trust bitmap since the palloc_get_multiple snafu
 // but let's use it and see what it gives me
 #include "lib/kernel/bitmap.h"
+#include "lib/string.h"
 
 #include <stdio.h>
 
@@ -17,6 +19,7 @@ typedef struct lock lock_t;
 
 typedef struct frame_aux_info {
   int aux;
+  struct thread * owner; // which process owns the frame, if frame is in use
 } frame_aux_info_t;
 
 typedef struct frame_table {
@@ -51,6 +54,9 @@ static void * frame_get_frame_no_lock(int idx) {
 void frame_table_init(void) {
   lock_init(&frame_table_user.lock);
 
+  // 0 all the aux info
+  memset(frame_table_user.frame_aux_info,0,sizeof(frame_aux_info_t)*MAX_FRAMES);
+  
   // let this memory leak because idgaf
   frame_table_user.frames = palloc_get_multiple(PAL_ASSERT | PAL_ZERO | PAL_USER, MAX_FRAMES);
   ASSERT(frame_table_user.frames != NULL);
@@ -62,23 +68,31 @@ void frame_table_init(void) {
   frame_table_user.bitmap = bitmap_create_in_buf(bit_cnt,block,block_size);
 }
 
-static void* frame_alloc_multiple(int n) {
+static void* frame_alloc_multiple(int n, struct thread * owner) {
+  ASSERT(n==1); // only works with 1 for now
   lock_acquire(&frame_table_user.lock);
 
   size_t start = 0;
   size_t val = 0;
+  // I am almost entirely sure there is some bug in bitmap_scan_and_flip
   size_t idx = bitmap_scan_and_flip(frame_table_user.bitmap,start,n,val);
   void * res = NULL;
   if ( idx != BITMAP_ERROR ) {
     res = frame_get_frame_no_lock(idx);
+    // update aux info 
+    for ( size_t i = idx; i < idx+n; ++i ) {
+      frame_table_user.frame_aux_info[i].owner = owner;
+    }
   }
   ASSERT (res != NULL);
   lock_release(&frame_table_user.lock);
+  // doesn't keep track of how many pages have been allocated yet
   return res;
 }
 
-void* frame_alloc(void) {
-  return frame_alloc_multiple(1);
+void* frame_alloc(struct thread * owner) {
+  ASSERT (owner != NULL); //owner can't be null
+  return frame_alloc_multiple(1,owner);
 }
 
 void frame_dealloc(void * p) {
@@ -86,6 +100,7 @@ void frame_dealloc(void * p) {
   lock_acquire(&frame_table_user.lock);
   int idx = frame_get_index_no_lock(p);
   bitmap_flip(frame_table_user.bitmap,idx);
+  frame_table_user.frame_aux_info[idx].owner = NULL;
   lock_release(&frame_table_user.lock);
 }
 
