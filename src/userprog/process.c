@@ -20,6 +20,7 @@
 #include "threads/vaddr.h"
 #include "threads/synch.h"
 #include "vm/frame.h"
+#include "vm/page.h"
 
 #define INPUT_ARGS_MAX_ARGS 60
 #define INPUT_ARGS_MAX_ARG_LENGTH 64
@@ -298,8 +299,14 @@ start_process (void *input_args_)
   success = load (ia, &if_.eip, &if_.esp);
   
   /* If load failed, quit. */
-  if (!success) 
+  if (!success) {
+    // maybe I can just call process_terminate, but I'm not sure.
+    struct thread * t = thread_current();
+    if (t && t->exec_file) {
+      file_close (t->exec_file);
+    }
     thread_exit ();
+  }
   
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -361,6 +368,7 @@ void process_terminate (int current_execution_status, int exit_code) {
   printf("%s: exit(%d)\n",thread_current()->process_name,exit_code);
   struct thread * cur = thread_current();
   set_child_process_status(cur->parent_pid,thread_pid(),current_execution_status,exit_code);
+  
   // destroy the file descriptors I own that aren't closed
   // will also destroy the executable file descriptor
   //
@@ -368,6 +376,7 @@ void process_terminate (int current_execution_status, int exit_code) {
   // this process's executable before process_exit is called but whatever
   /* printf("process terminate 1\n"); */
   destroy_fd(thread_pid());
+  cur->exec_file = NULL; // closed by destroy_fd
   /* printf("process terminate 2\n"); */
   thread_exit ();  
 }
@@ -502,7 +511,10 @@ load (struct input_args * ia, void (**eip) (void), void **esp)
 
   // copy process name into thread
   strlcpy(t->process_name,file_name,PROCESS_NAME_MAX_LENGTH);
+  // allocate and activate the supplemental page table
   
+  init_supplemental_page_table(&t->s_page_table);
+    
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
   if (t->pagedir == NULL) 
@@ -510,7 +522,8 @@ load (struct input_args * ia, void (**eip) (void), void **esp)
   process_activate ();
 
   /* Open executable file. */
-  file = filesys_open (file_name);
+  file = filesys_open (file_name); // closed when process exits
+  t->exec_file = file;
   if (file == NULL) 
     {
       printf ("load: %s: open failed\n", file_name);
@@ -614,7 +627,6 @@ load (struct input_args * ia, void (**eip) (void), void **esp)
   lock_release(&ia->lk);
 
   /* We arrive here whether the load is successful or not. */
-  file_close (file);
   return success;
 }
 
@@ -689,6 +701,10 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   ASSERT (pg_ofs (upage) == 0);
   ASSERT (ofs % PGSIZE == 0);
 
+  struct thread * t = thread_current();
+
+  ASSERT(t != NULL);
+
   file_seek (file, ofs);
   while (read_bytes > 0 || zero_bytes > 0) 
     {
@@ -703,20 +719,34 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       if (kpage == NULL)
         return false;
 
+      /* Add the page to the process's address space. */
+      if (!install_page (upage, kpage, writable))
+        {
+          frame_dealloc(kpage);
+          return false;
+        }
+
       /* Load this page. */
       if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
         {
           frame_dealloc(kpage);
-          return false; 
+          return false;
         }
       memset (kpage + page_read_bytes, 0, page_zero_bytes);
 
-      /* Add the page to the process's address space. */
-      if (!install_page (upage, kpage, writable)) 
-        {
-          frame_dealloc(kpage);
-          return false; 
-        }
+      ///////// test silly file changes first
+      /* virtual_page_info_t info; */
+      /* info.valid = 1; */
+      /* info. */
+      /* info.home = PAGE_SOURCE_OF_DATA_ELF_????; */
+      /* update_vaddr_info(t->s_page_table,&info); */
+
+      /* /\* Load this page. *\/ */
+      /* if (file_read (file, upage, page_read_bytes) != (int) page_read_bytes) { */
+      /*   return false;  */
+      /* } */
+      /* memset (upage + page_read_bytes, 0, page_zero_bytes); */
+      /////////////
 
       /* Advance. */
       read_bytes -= page_read_bytes;
@@ -726,6 +756,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   return true;
 }
 
+// looks like n has be less than of equal to sizeof void *
 void* push_stack(void * data, size_t n, void * esp_) {
   char * esp = (char *)esp_; // cast to char* to avoid pointer arithematic outside of 1 byte types
   

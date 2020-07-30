@@ -4,10 +4,20 @@
 #include "threads/synch.h"
 #include "lib/kernel/hash.h"
 
+typedef enum page_source_of_data {
+  PAGE_SOURCE_OF_DATA_UNDEFINED,
+  PAGE_SOURCE_OF_DATA_ELF_READ,
+  PAGE_SOURCE_OF_DATA_ELF_READ_WRITE,
+  PAGE_SOURCE_OF_DATA_STACK,
+  PAGE_SOURCE_OF_DATA_MMAP,
+  PAGE_SOURCE_OF_DATA_COUNT
+} page_source_of_data_e;
+
  // info about where page lives, etc
 typedef struct virtual_page_info {
+  
   int valid;
-  int aux;
+  page_source_of_data_e home; 
   
 } virtual_page_info_t;
 

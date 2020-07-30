@@ -5,6 +5,10 @@
 #include <list.h>
 #include <stdint.h>
 
+#include "vm/page.h"
+
+struct file;
+
 /* States in a thread's life cycle. */
 enum thread_status
   {
@@ -100,8 +104,10 @@ struct thread
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
+    s_page_table_t s_page_table; // supplemental page table
     int parent_pid;
     int exec_fd;
+    struct file * exec_file;
     char process_name[PROCESS_NAME_MAX_LENGTH];
 #endif
 
