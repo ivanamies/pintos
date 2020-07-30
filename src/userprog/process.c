@@ -302,6 +302,7 @@ start_process (void *input_args_)
   if (!success) {
     // maybe I can just call process_terminate, but I'm not sure.
     struct thread * t = thread_current();
+    // also close the file if we failed
     if (t && t->exec_file) {
       file_close (t->exec_file);
     }
@@ -619,7 +620,10 @@ load (struct input_args * ia, void (**eip) (void), void **esp)
     ASSERT (t->exec_fd >= 2);
     deny_write_fd(t->exec_fd);
   }
- done:  
+ done:
+  // this signaling can be moved out of load
+  // it's not relevant to load, but the routinue that calls load
+  //
   // signal to the creating thread that process start up finished
   lock_acquire(&ia->lk);
   ia->signal = success;
@@ -631,8 +635,6 @@ load (struct input_args * ia, void (**eip) (void), void **esp)
 }
 
 /* load() helpers. */
-
-static bool install_page (void *upage, void *kpage, bool writable);
 
 /* Checks whether PHDR describes a valid, loadable segment in
    FILE and returns true if so, false otherwise. */
@@ -714,39 +716,42 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
-      /* Get a page of memory. */
-      uint8_t *kpage = frame_alloc(thread_current());
-      if (kpage == NULL)
-        return false;
+      /* /\* Get a page of memory. *\/ */
+      /* uint8_t *kpage = frame_alloc(thread_current()); */
+      /* if (kpage == NULL) */
+      /*   return false; */
 
-      /* Add the page to the process's address space. */
-      if (!install_page (upage, kpage, writable))
-        {
-          frame_dealloc(kpage);
-          return false;
-        }
-
-      /* Load this page. */
-      if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
-        {
-          frame_dealloc(kpage);
-          return false;
-        }
-      memset (kpage + page_read_bytes, 0, page_zero_bytes);
-
-      ///////// test silly file changes first
-      /* virtual_page_info_t info; */
-      /* info.valid = 1; */
-      /* info. */
-      /* info.home = PAGE_SOURCE_OF_DATA_ELF_????; */
-      /* update_vaddr_info(t->s_page_table,&info); */
+      /* /\* Add the page to the process's address space. *\/ */
+      /* if (!install_page (upage, kpage, writable)) */
+      /*   { */
+      /*     frame_dealloc(kpage); */
+      /*     return false; */
+      /*   } */
 
       /* /\* Load this page. *\/ */
-      /* if (file_read (file, upage, page_read_bytes) != (int) page_read_bytes) { */
-      /*   return false;  */
-      /* } */
-      /* memset (upage + page_read_bytes, 0, page_zero_bytes); */
-      /////////////
+      /* if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes) */
+      /*   { */
+      /*     frame_dealloc(kpage); */
+      /*     return false; */
+      /*   } */
+      /* memset (kpage + page_read_bytes, 0, page_zero_bytes); */
+
+      virtual_page_info_t info;
+      info.valid = 1;
+      if ( writable ) {
+        info.home = PAGE_SOURCE_OF_DATA_ELF_READ_WRITE;
+      }
+      else {
+        info.home = PAGE_SOURCE_OF_DATA_ELF_READ;
+      }
+      info.owner = thread_current();
+      update_vaddr_info(&t->s_page_table,upage,&info);
+      
+      /* Load this page. */
+      if (file_read (file, upage, page_read_bytes) != (int) page_read_bytes) {
+        return false;
+      }
+      memset (upage + page_read_bytes, 0, page_zero_bytes);
 
       /* Advance. */
       read_bytes -= page_read_bytes;
@@ -820,24 +825,4 @@ setup_stack (struct input_args * ia, void **esp)
       }
     }
   return success;
-}
-
-/* Adds a mapping from user virtual address UPAGE to kernel
-   virtual address KPAGE to the page table.
-   If WRITABLE is true, the user process may modify the page;
-   otherwise, it is read-only.
-   UPAGE must not already be mapped.
-   KPAGE should probably be a page obtained from the user pool
-   with palloc_get_page().
-   Returns true on success, false if UPAGE is already mapped or
-   if memory allocation fails. */
-static bool
-install_page (void *upage, void *kpage, bool writable)
-{
-  struct thread *t = thread_current ();
-
-  /* Verify that there's not already a page at that virtual
-     address, then map our page there. */
-  return (pagedir_get_page (t->pagedir, upage) == NULL
-          && pagedir_set_page (t->pagedir, upage, kpage, writable));
 }

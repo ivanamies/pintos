@@ -1,13 +1,17 @@
 #ifndef VM_PAGE_H
 #define VM_PAGE_H
 
+// this header was included into thread.h because I am lazy
+
 #include "threads/synch.h"
 #include "lib/kernel/hash.h"
 
+struct thread;
+
 typedef enum page_source_of_data {
   PAGE_SOURCE_OF_DATA_UNDEFINED,
-  PAGE_SOURCE_OF_DATA_ELF_READ,
-  PAGE_SOURCE_OF_DATA_ELF_READ_WRITE,
+  PAGE_SOURCE_OF_DATA_ELF_READ, // .text/.rodata/.bss
+  PAGE_SOURCE_OF_DATA_ELF_READ_WRITE, // .data
   PAGE_SOURCE_OF_DATA_STACK,
   PAGE_SOURCE_OF_DATA_MMAP,
   PAGE_SOURCE_OF_DATA_COUNT
@@ -17,7 +21,8 @@ typedef enum page_source_of_data {
 typedef struct virtual_page_info {
   
   int valid;
-  page_source_of_data_e home; 
+  page_source_of_data_e home;
+  struct thread * owner;
   
 } virtual_page_info_t;
 
@@ -52,5 +57,7 @@ virtual_page_info_t get_vaddr_info(s_page_table_t * page_table, void * vaddr);
 // returns error code 1 if failed
 // virtual_page_info_t will be COPIED
 int update_vaddr_info(s_page_table_t * page_table, void * vaddr, virtual_page_info_t * info);
+
+bool install_page(void *, void *, bool);
 
 #endif /* vm/page.h */
