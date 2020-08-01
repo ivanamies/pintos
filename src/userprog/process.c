@@ -782,7 +782,6 @@ setup_stack (struct input_args * ia, void **esp)
   
   ASSERT (ia != NULL);
   ASSERT (ia->argc >= 1); // the first argument in ia->argv is the file name 
-  uint8_t *kpage;
   int i;
   bool success = false;
   const void * nothing = NULL;
@@ -790,39 +789,36 @@ setup_stack (struct input_args * ia, void **esp)
   int num_strings_pushed = 0;
   void * strings_on_stack[INPUT_ARGS_MAX_ARGS];
   memset(&strings_on_stack,0,INPUT_ARGS_MAX_ARGS*sizeof(void *));
+
+  //
+  // have to add information about the stack vaddr to supplemental
+  // page table
+  //
   
-  kpage = frame_alloc(thread_current());
-  if (kpage != NULL) 
-    {
-      success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
-      if (success) {
-        *esp = PHYS_BASE;
-        // set up process stack
-        //
-        // push on arguments
-        for ( i = ia->argc-1; i >= 0; --i ) {
-          (*esp) = push_stack(ia->argv[i],strlen(ia->argv[i])+1 /* include null */, *esp);
-          strings_on_stack[num_strings_pushed] = *esp;
-          ++num_strings_pushed;
-        }
-        // esp is always rounded to a word length
-        // push on nullptr for argv[argc]
-        (*esp) = push_stack(&nothing,sizeof(void *),*esp);
-        // push on the other string pointers in the order
-        // we pushed them on
-        for ( i = 0; i < num_strings_pushed; ++i ) {
-          (*esp) = push_stack(&strings_on_stack[i],sizeof(void *),*esp);
-        }
-        // push on the &argv[0] that lives on stack
-        (*esp) = push_stack(&(*esp),sizeof(void *),*esp);
-        // push on argc
-        (*esp) = push_stack(&ia->argc,sizeof(int),*esp);
-        // push on dummy return address
-        (*esp) = push_stack(&nothing,sizeof(void *),*esp);        
-      }
-      else {
-        frame_dealloc(kpage);
-      }
-    }
+  *esp = PHYS_BASE;
+  // set up process stack
+  //
+  // push on arguments
+  for ( i = ia->argc-1; i >= 0; --i ) {
+    (*esp) = push_stack(ia->argv[i],strlen(ia->argv[i])+1 /* include null */, *esp);
+    strings_on_stack[num_strings_pushed] = *esp;
+    ++num_strings_pushed;
+  }
+  // esp is always rounded to a word length
+  // push on nullptr for argv[argc]
+  (*esp) = push_stack(&nothing,sizeof(void *),*esp);
+  // push on the other string pointers in the order
+  // we pushed them on
+  for ( i = 0; i < num_strings_pushed; ++i ) {
+    (*esp) = push_stack(&strings_on_stack[i],sizeof(void *),*esp);
+  }
+  // push on the &argv[0] that lives on stack
+  (*esp) = push_stack(&(*esp),sizeof(void *),*esp);
+  // push on argc
+  (*esp) = push_stack(&ia->argc,sizeof(int),*esp);
+  // push on dummy return address
+  (*esp) = push_stack(&nothing,sizeof(void *),*esp);
+
+  success = true;
   return success;
 }

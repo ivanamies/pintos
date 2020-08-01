@@ -5,6 +5,7 @@
 #include "threads/interrupt.h"
 #include "userprog/process.h"
 #include "threads/thread.h"
+#include "threads/vaddr.h"
 #include "vm/page.h"
 #include "vm/frame.h"
 
@@ -174,7 +175,10 @@ page_fault (struct intr_frame *f)
     if ( !kpage ) {
       kill(f);
     }
-    if (!install_page (fault_addr, kpage, write)) {
+    int8_t * upage = pg_round_down(fault_addr);
+    bool writtable = true; // get from supplemental page table later
+    bool install_success = install_page (upage, kpage, writtable);
+    if (!install_success) {
       frame_dealloc(kpage);
       kill(f);
     }
