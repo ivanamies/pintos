@@ -118,11 +118,9 @@ bool install_page (void *upage, void *kpage, bool writable)
   /* Verify that there's not already a page at that virtual
      address, then map our page there. */
   bool p1 = pagedir_get_page (t->pagedir, upage) == NULL;
-  printf("pagedir_get_page p1: %d\n",p1);
   bool p2 = false;
   if ( p1 ) {
     p2 = pagedir_set_page (t->pagedir, upage, kpage, writable);
   }
-  printf("pagedir_set_page p2: %d\n",p2);
   return p1 && p2;
 }
