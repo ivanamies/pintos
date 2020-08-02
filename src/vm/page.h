@@ -7,11 +7,11 @@
 #include "lib/kernel/hash.h"
 
 struct thread;
+struct file;
 
 typedef enum page_source_of_data {
   PAGE_SOURCE_OF_DATA_UNDEFINED,
-  PAGE_SOURCE_OF_DATA_ELF_READ, // .text/.rodata/.bss
-  PAGE_SOURCE_OF_DATA_ELF_READ_WRITE, // .data
+  PAGE_SOURCE_OF_DATA_ELF, // .text/.rodata/.bss are R only, .data is R/W
   PAGE_SOURCE_OF_DATA_STACK,
   PAGE_SOURCE_OF_DATA_MMAP,
   PAGE_SOURCE_OF_DATA_COUNT
@@ -21,8 +21,19 @@ typedef enum page_source_of_data {
 typedef struct virtual_page_info {
   
   int valid;
-  page_source_of_data_e home;
   struct thread * owner;
+  
+  page_source_of_data_e home;
+  // for elf file reads
+  struct file * file;
+  uint32_t page_read_bytes;
+  uint32_t page_zero_bytes;
+  int elf_writable;
+  uint32_t elf_file_ofs;
+  
+  // for debug
+  uint8_t * debug_kpage;
+  //
   
 } virtual_page_info_t;
 
@@ -58,6 +69,7 @@ virtual_page_info_t get_vaddr_info(s_page_table_t * page_table, void * vaddr);
 // virtual_page_info_t will be COPIED
 int update_vaddr_info(s_page_table_t * page_table, void * vaddr, virtual_page_info_t * info);
 
+// installs upage(arg1) to kpage(arg2) and if its writable(arg3)
 bool install_page(void *, void *, bool);
 
 #endif /* vm/page.h */

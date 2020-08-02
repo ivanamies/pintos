@@ -379,7 +379,9 @@ void process_terminate (int current_execution_status, int exit_code) {
   destroy_fd(thread_pid());
   cur->exec_file = NULL; // closed by destroy_fd
   /* printf("process terminate 2\n"); */
-  thread_exit ();  
+  thread_exit ();
+
+  // ... why aren't I calling process_exit?
 }
 
 /* Free the current process's resources. */
@@ -417,7 +419,7 @@ process_activate (void)
 
   /* Activate thread's page tables. */
   pagedir_activate (t->pagedir);
-
+  
   /* Set thread's kernel stack for use in processing
      interrupts. */
   tss_update ();
@@ -629,7 +631,7 @@ load (struct input_args * ia, void (**eip) (void), void **esp)
   ia->signal = success;
   cond_signal(&ia->cv,&ia->lk);
   lock_release(&ia->lk);
-
+  
   /* We arrive here whether the load is successful or not. */
   return success;
 }
@@ -704,7 +706,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   ASSERT (ofs % PGSIZE == 0);
 
   struct thread * t = thread_current();
-
+  
   ASSERT(t != NULL);
 
   file_seek (file, ofs);
@@ -716,43 +718,57 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
-      /* /\* Get a page of memory. *\/ */
-      /* uint8_t *kpage = frame_alloc(thread_current()); */
-      /* if (kpage == NULL) */
-      /*   return false; */
-
-      /* /\* Add the page to the process's address space. *\/ */
-      /* if (!install_page (upage, kpage, writable)) */
-      /*   { */
-      /*     frame_dealloc(kpage); */
-      /*     return false; */
-      /*   } */
-
-      /* /\* Load this page. *\/ */
-      /* if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes) */
-      /*   { */
-      /*     frame_dealloc(kpage); */
-      /*     return false; */
-      /*   } */
-      /* memset (kpage + page_read_bytes, 0, page_zero_bytes); */
-
+      printf("load virtual page info 1\n");
+      // load virtual page information
       virtual_page_info_t info;
       info.valid = 1;
-      if ( writable ) {
-        info.home = PAGE_SOURCE_OF_DATA_ELF_READ_WRITE;
-      }
-      else {
-        info.home = PAGE_SOURCE_OF_DATA_ELF_READ;
-      }
+      printf("writable: %d\n",writable);
+      info.home = PAGE_SOURCE_OF_DATA_ELF;
       info.owner = thread_current();
-      update_vaddr_info(&t->s_page_table,upage,&info);
+      info.file = file;
+      info.elf_writable = writable;
+      info.page_read_bytes = page_read_bytes;
+      info.page_zero_bytes = page_zero_bytes;
+      info.elf_file_ofs = ofs;
+      /* update_vaddr_info(&t->s_page_table,upage,&info); */
+      //
+      // add back in debug elf segment code
+      //
+      /* Get a page of memory. */
+      uint8_t *kpage = palloc_get_page (PAL_USER);
+      if (kpage == NULL)
+        return false;
       
       /* Load this page. */
-      if (file_read (file, upage, page_read_bytes) != (int) page_read_bytes) {
-        return false;
-      }
-      memset (upage + page_read_bytes, 0, page_zero_bytes);
-
+      /* if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes) */
+      /*   { */
+      /*     palloc_free_page (kpage); */
+      /*     return false; */
+      /*   } */      
+      //
+      
+      // pretend to read file
+      ofs += page_read_bytes;
+      
+      /* hex_dump(0,kpage,128,false); */
+      /* memset (kpage + page_read_bytes, 0, page_zero_bytes); */
+      
+      /* /\* Add the page to the process's address space. *\/ */
+      /* if (!install_page (upage, kpage, writable))  */
+      /*   { */
+      /*     palloc_free_page (kpage); */
+      /*     return false;  */
+      /*   } */
+      /* // */
+      printf("kpage %p\n",kpage);
+      printf("upage %p home %d owner %p file %p elf_w %d\n",
+             upage,info.home,info.owner,info.file,info.elf_writable);
+      printf("page_read_bytes %u page_zero_bytes %u\n",info.page_read_bytes,info.page_zero_bytes);
+      
+      info.debug_kpage = kpage;
+      update_vaddr_info(&t->s_page_table,upage,&info);
+      //
+      
       /* Advance. */
       read_bytes -= page_read_bytes;
       zero_bytes -= page_zero_bytes;
@@ -790,10 +806,19 @@ setup_stack (struct input_args * ia, void **esp)
   void * strings_on_stack[INPUT_ARGS_MAX_ARGS];
   memset(&strings_on_stack,0,INPUT_ARGS_MAX_ARGS*sizeof(void *));
 
+  printf("load virtual page info 2\n");
+  
+  // load virtual page information
+  // we don't give the upage the frame yet, but we know it's going to happen
+  // so let's write where it came from
+  uint8_t * upage = ((uint8_t *)PHYS_BASE) - PGSIZE;
+  virtual_page_info_t info;
+  info.valid = 1;
+  info.home = PAGE_SOURCE_OF_DATA_STACK;
+  info.owner = thread_current();
+  update_vaddr_info(&thread_current()->s_page_table,upage,&info);
   //
-  // have to add information about the stack vaddr to supplemental
-  // page table
-  //
+  printf("finish load virtual page info 2\n");
   
   *esp = PHYS_BASE;
   // set up process stack

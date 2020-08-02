@@ -1,11 +1,15 @@
 #include "userprog/exception.h"
+
 #include <inttypes.h>
 #include <stdio.h>
+#include <string.h>
+
 #include "userprog/gdt.h"
 #include "threads/interrupt.h"
 #include "userprog/process.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "filesys/file.h"
 #include "vm/page.h"
 #include "vm/frame.h"
 
@@ -175,10 +179,42 @@ page_fault (struct intr_frame *f)
     if ( !kpage ) {
       kill(f);
     }
-    int8_t * upage = pg_round_down(fault_addr);
-    bool writtable = true; // get from supplemental page table later
-    bool install_success = install_page (upage, kpage, writtable);
-    if (!install_success) {
+    uint8_t * upage = pg_round_down(fault_addr);
+    printf("fault addr %p upage %p\n",fault_addr,upage);
+    // get if its writable from the supplemental page table
+    virtual_page_info_t info = get_vaddr_info(&thread_current()->s_page_table,upage);
+    ASSERT (info.valid ==1);
+    bool success = true;
+    bool writable = true;
+    if ( info.home == PAGE_SOURCE_OF_DATA_ELF ) {
+      
+      frame_dealloc(kpage);
+      kpage = info.debug_kpage;
+      
+      struct file * file = info.file;
+      uint32_t page_read_bytes = info.page_read_bytes;
+      uint32_t page_zero_bytes = info.page_zero_bytes;
+      uint32_t ofs = info.elf_file_ofs;
+      ASSERT(page_read_bytes + page_zero_bytes == PGSIZE);
+      writable = info.elf_writable;
+      printf("what 1\n");
+      printf("file %p kpage %p page_read_bytes %u\n",file,kpage,page_read_bytes);
+      // wait, why am I using file read anyways? isn't this kernel only code?
+      file_seek(file,ofs);
+      success = file_read (file, kpage, page_read_bytes) == (int) page_read_bytes;
+      /* hex_dump(0,kpage,128,false); */
+      printf("what 2\n");
+      if ( !success ) {
+        printf("page fault exception elf file read failed\n");
+        frame_dealloc(kpage);
+        kill(f);
+      }
+      memset (kpage + page_read_bytes, 0, page_zero_bytes);
+    }
+    
+    success = install_page (upage, kpage, writable);
+    if (!success) {
+      printf("page fault exception install_page failed\n");
       frame_dealloc(kpage);
       kill(f);
     }
@@ -194,5 +230,4 @@ page_fault (struct intr_frame *f)
             user ? "user" : "kernel");
     kill (f);    
   }
-  
 }
