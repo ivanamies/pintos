@@ -375,10 +375,8 @@ void process_terminate (int current_execution_status, int exit_code) {
   //
   // This technically races because now another file can modify
   // this process's executable before process_exit is called but whatever
-  /* printf("process terminate 1\n"); */
   destroy_fd(thread_pid());
   cur->exec_file = NULL; // closed by destroy_fd
-  /* printf("process terminate 2\n"); */
   thread_exit ();
 
   // ... why aren't I calling process_exit?

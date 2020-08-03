@@ -19,6 +19,8 @@ static long long page_fault_cnt;
 static void kill (struct intr_frame *);
 static void page_fault (struct intr_frame *);
 
+static size_t max_stack_pages = 32;
+
 /* Registers handlers for interrupts that can be caused by user
    programs.
 
@@ -131,6 +133,69 @@ kill (struct intr_frame *f)
     }
 }
 
+static bool check_user_ptr(struct intr_frame * f, void * fault_addr_, int write) { // like the one in syscall.c but doesn't check unmapped page
+  uint8_t * fault_addr = fault_addr_;
+  if ( fault_addr == NULL ) {
+    return false;
+  }
+  else {
+    // check if all word sizes are above kernel space
+    const int word_size = sizeof(void *);
+    for ( int i = 0; i < word_size; ++i ) {
+      bool p = is_kernel_vaddr(fault_addr+i);
+      if ( p ) {
+        return false;
+      }
+    }
+    
+    // check for writes below the stack pointer
+    // idk man, the spec tells me to do it
+    uint8_t * esp = f->esp;
+    if ( write && esp < fault_addr) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static bool is_stackish(void* fault_addr) {
+  // if its within 32 pages of PHYS_BASE, its stackish enough for me
+  //
+  // we check it's not a kernel vaddr previously
+  // we check we don't write below the stack pointer previously
+  off_t diff = PHYS_BASE - fault_addr;;
+  size_t pages_off = diff / PGSIZE;
+  return pages_off < max_stack_pages;
+}
+
+static int grow_stack(void * fault_addr) {
+  // allocate and map pages until fault_addr stops faulting
+  
+  uint8_t * upage = pg_round_down(fault_addr);
+  // get if its writable from the supplemental page table
+  virtual_page_info_t info = get_vaddr_info(&thread_current()->s_page_table,upage);
+  bool success;
+  if ( info.valid == 1 ) {
+    // we've seen it before
+    // load it in
+    //
+    // WIP
+    success = true;
+    return success;
+  }
+  else {
+    // we haven't seen it before
+    // give it a page and map it
+    uint8_t *kpage = frame_alloc(thread_current());
+    const bool writable = true;
+    success = install_page (upage, kpage, writable);
+    if ( !success ) {
+      frame_dealloc(kpage);
+    }
+    return success;
+  }    
+}
+
 /* Page fault handler.  This is a skeleton that must be filled in
    to implement virtual memory.  Some solutions to project 2 may
    also require modifying this code.
@@ -170,15 +235,32 @@ page_fault (struct intr_frame *f)
   not_present = (f->error_code & PF_P) == 0;
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
-
+  
   // validate memory
-  bool valid = true;
+  bool valid = check_user_ptr(f,fault_addr,write);
 
-  if ( valid ) {
-    uint8_t *kpage = frame_alloc(thread_current());
-    if ( !kpage ) {
+  if ( !valid ) {
+    printf ("Page fault at %p: %s error %s page in %s context.\n",
+            fault_addr,
+            not_present ? "not present" : "rights violation",
+            write ? "writing" : "reading",
+            user ? "user" : "kernel");
+    kill(f);
+  }
+
+  bool stack_like = is_stackish(fault_addr);
+
+  if ( stack_like ) {
+    int success = grow_stack(fault_addr);
+    if (!success) {
+      printf("page fault exception grow_stack install_page failed\n");
       kill(f);
     }
+  }
+  else {
+    // frame_alloc will always succeed
+    uint8_t *kpage = frame_alloc(thread_current());
+    
     uint8_t * upage = pg_round_down(fault_addr);
     // get if its writable from the supplemental page table
     virtual_page_info_t info = get_vaddr_info(&thread_current()->s_page_table,upage);
@@ -210,16 +292,5 @@ page_fault (struct intr_frame *f)
       frame_dealloc(kpage);
       kill(f);
     }
-  }
-  else {
-    /* To implement virtual memory, delete the rest of the function
-       body, and replace it with code that brings in the page to
-       which fault_addr refers. */
-    printf ("Page fault at %p: %s error %s page in %s context.\n",
-            fault_addr,
-            not_present ? "not present" : "rights violation",
-            write ? "writing" : "reading",
-            user ? "user" : "kernel");
-    kill (f);    
   }
 }
