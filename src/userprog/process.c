@@ -230,10 +230,13 @@ process_execute (const char *input)
   
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
-  input_copy = malloc(strlen(input)+1); // +1 for null terminator
-  memset(input_copy,0,strlen(input)+1);
-  ia = malloc(sizeof(struct input_args));
-  memset(ia,0,sizeof(struct input_args));
+  /* input_copy = malloc(strlen(input)+1); // +1 for null terminator */
+  /* memset(input_copy,0,strlen(input)+1); */
+  /* ia = malloc(sizeof(struct input_args)); */
+  /* memset(ia,0,sizeof(struct input_args)); */
+
+  input_copy = palloc_get_page (0);
+  ia = palloc_get_page(0);
   
   if (input_copy == NULL) {
     tid = TID_ERROR;
@@ -277,8 +280,10 @@ process_execute (const char *input)
 
  process_execute_done:
   // free allocated pages
-  free(ia);
-  free(input_copy);
+  /* free(ia); */
+  /* free(input_copy); */
+  palloc_free_page (ia);
+  palloc_free_page (input_copy); 
   
   return tid;
 }
