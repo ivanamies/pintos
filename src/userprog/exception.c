@@ -147,23 +147,29 @@ static bool check_user_ptr(struct intr_frame * f, void * fault_addr_, int write)
         return false;
       }
     }
-    
-    // check for writes below the stack pointer
-    // idk man, the spec tells me to do it
-    uint8_t * esp = f->esp;
-    if ( write && esp < fault_addr) {
-      return false;
-    }
+
+    // I don't understand this:
+    // "User programs are buggy if they write to the stack below the stack pointer, because
+    // typical real OSes may interrupt a process at any time to deliver a "signal," which pushes data on the stack."
+    // -- project 3 spec
+    //
+    /* // check for writes below the stack pointer */
+    /* // idk man, the spec tells me to do it */
+    /* uint8_t * esp = f->esp; */
+    /* if ( write && esp != NULL && fault_addr < esp) { */
+    /*   return false; */
+    /* } */
   }
   return true;
 }
 
 static bool is_stackish(void* fault_addr) {
-  // if its within 32 pages of PHYS_BASE, its stackish enough for me
+  // if its within max_stack_pages of PHYS_BASE, its stackish enough for me
   //
   // we check it's not a kernel vaddr previously
   // we check we don't write below the stack pointer previously
-  off_t diff = PHYS_BASE - fault_addr;;
+  
+  off_t diff = PHYS_BASE - fault_addr;
   size_t pages_off = diff / PGSIZE;
   return pages_off < max_stack_pages;
 }
@@ -174,26 +180,21 @@ static int grow_stack(void * fault_addr) {
   uint8_t * upage = pg_round_down(fault_addr);
   // get if its writable from the supplemental page table
   virtual_page_info_t info = get_vaddr_info(&thread_current()->s_page_table,upage);
-  bool success;
-  if ( info.valid == 1 ) {
-    // we've seen it before
-    // load it in
-    //
-    // WIP
-    success = true;
-    return success;
+  ASSERT (info.frame == NULL );
+  
+  // allocate frame
+  frame_aux_info_t frame_aux_info = { 0 };
+  frame_aux_info.owner = thread_current();
+  frame_aux_info.addr = upage;
+  uint8_t * kpage = frame_alloc(&frame_aux_info);
+  
+  const bool writable = true;
+  bool success = install_page(upage, kpage, writable);
+  if ( !success ) {
+    frame_dealloc(kpage);
   }
-  else {
-    // we haven't seen it before
-    // give it a page and map it
-    uint8_t *kpage = frame_alloc(thread_current());
-    const bool writable = true;
-    success = install_page (upage, kpage, writable);
-    if ( !success ) {
-      frame_dealloc(kpage);
-    }
-    return success;
-  }    
+  return success;
+  
 }
 
 /* Page fault handler.  This is a skeleton that must be filled in
@@ -238,7 +239,7 @@ page_fault (struct intr_frame *f)
   
   // validate memory
   bool valid = check_user_ptr(f,fault_addr,write);
-
+  
   if ( !valid ) {
     printf ("Page fault at %p: %s error %s page in %s context.\n",
             fault_addr,
@@ -258,10 +259,15 @@ page_fault (struct intr_frame *f)
     }
   }
   else {
-    // frame_alloc will always succeed
-    uint8_t *kpage = frame_alloc(thread_current());
-    
     uint8_t * upage = pg_round_down(fault_addr);
+    
+    // allocate frame
+    // frame_alloc will always succeed
+    frame_aux_info_t frame_aux_info = { 0 };
+    frame_aux_info.owner = thread_current();
+    frame_aux_info.addr = upage;
+    uint8_t *kpage = frame_alloc(&frame_aux_info);
+    
     // get if its writable from the supplemental page table
     virtual_page_info_t info = get_vaddr_info(&thread_current()->s_page_table,upage);
     ASSERT (info.valid ==1);

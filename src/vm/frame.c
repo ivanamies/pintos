@@ -17,11 +17,6 @@
 
 typedef struct lock lock_t;
 
-typedef struct frame_aux_info {
-  int aux;
-  struct thread * owner; // which process owns the frame, if frame is in use
-} frame_aux_info_t;
-
 typedef struct frame_table {
   lock_t lock;
   
@@ -68,7 +63,7 @@ void frame_table_init(void) {
   frame_table_user.bitmap = bitmap_create_in_buf(bit_cnt,block,block_size);
 }
 
-static void* frame_alloc_multiple(int n, struct thread * owner) {
+static void* frame_alloc_multiple(int n, frame_aux_info_t * info) {
   ASSERT(n==1); // only works with 1 for now
   lock_acquire(&frame_table_user.lock);
 
@@ -81,7 +76,7 @@ static void* frame_alloc_multiple(int n, struct thread * owner) {
     res = frame_get_frame_no_lock(idx);
     // update aux info 
     for ( size_t i = idx; i < idx+n; ++i ) {
-      frame_table_user.frame_aux_info[i].owner = owner;
+      frame_table_user.frame_aux_info[i] = *info;
     }
   }
   ASSERT (res != NULL);
@@ -90,9 +85,9 @@ static void* frame_alloc_multiple(int n, struct thread * owner) {
   return res;
 }
 
-void* frame_alloc(struct thread * owner) {
-  ASSERT (owner != NULL); //owner can't be null
-  return frame_alloc_multiple(1,owner);
+void* frame_alloc(frame_aux_info_t * info) {
+  ASSERT (info->owner != NULL); //owner can't be null
+  return frame_alloc_multiple(1,info);
 }
 
 void frame_dealloc(void * p) {
@@ -100,7 +95,8 @@ void frame_dealloc(void * p) {
   lock_acquire(&frame_table_user.lock);
   int idx = frame_get_index_no_lock(p);
   bitmap_flip(frame_table_user.bitmap,idx);
-  frame_table_user.frame_aux_info[idx].owner = NULL;
+  /* frame_table_user.frame_aux_info[idx] = { 0 }; */
+  memset(&frame_table_user.frame_aux_info[idx],0,sizeof(frame_aux_info_t));
   lock_release(&frame_table_user.lock);
 }
 

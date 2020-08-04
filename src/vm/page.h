@@ -22,19 +22,16 @@ typedef struct virtual_page_info {
   
   int valid;
   struct thread * owner;
-  
   page_source_of_data_e home;
+  void * frame; // frame that backs this virtual page. NULL if not backed
+  
   // for elf file reads
   struct file * file;
   uint32_t page_read_bytes;
   uint32_t page_zero_bytes;
   int elf_writable;
   uint32_t elf_file_ofs;
-  
-  // for debug
-  uint8_t * debug_kpage;
-  //
-  
+    
 } virtual_page_info_t;
 
 typedef struct virtual_page {

@@ -19,6 +19,7 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "threads/synch.h"
+#include "threads/malloc.h"
 #include "vm/frame.h"
 #include "vm/page.h"
 
@@ -229,8 +230,10 @@ process_execute (const char *input)
   
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
-  input_copy = frame_alloc(thread_current());
-  ia = frame_alloc(thread_current());
+  input_copy = malloc(strlen(input)+1); // +1 for null terminator
+  memset(input_copy,0,strlen(input)+1);
+  ia = malloc(sizeof(struct input_args));
+  memset(ia,0,sizeof(struct input_args));
   
   if (input_copy == NULL) {
     tid = TID_ERROR;
@@ -274,8 +277,8 @@ process_execute (const char *input)
 
  process_execute_done:
   // free allocated pages
-  frame_dealloc(ia);
-  frame_dealloc(input_copy);
+  free(ia);
+  free(input_copy);
   
   return tid;
 }
@@ -717,7 +720,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
       // load virtual page information
-      virtual_page_info_t info;
+      virtual_page_info_t info = { 0 };
       info.valid = 1;
       info.home = PAGE_SOURCE_OF_DATA_ELF;
       info.owner = thread_current();
@@ -773,7 +776,7 @@ setup_stack (struct input_args * ia, void **esp)
   // we don't give the upage the frame yet, but we know it's going to happen
   // so let's write where it came from
   uint8_t * upage = ((uint8_t *)PHYS_BASE) - PGSIZE;
-  virtual_page_info_t info;
+  virtual_page_info_t info = { 0 };
   info.valid = 1;
   info.home = PAGE_SOURCE_OF_DATA_STACK;
   info.owner = thread_current();
