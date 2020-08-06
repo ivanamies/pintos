@@ -6,6 +6,7 @@
 
 #include "threads/vaddr.h"
 #include "userprog/pagedir.h"
+#include "userprog/exception.h"
 #include "userprog/process.h"
 #include "devices/shutdown.h"
 #include "devices/input.h"
@@ -18,7 +19,7 @@
 #include <string.h>
 
 static void syscall_handler (struct intr_frame *);
-static int check_user_ptr (void * p);
+static int check_user_ptr (struct intr_frame * f, void * p, int write);
 
 #define MAX_PAGES_IN_FILE 8
 #define MAX_FILE_NAME_LEN 64
@@ -258,40 +259,63 @@ syscall_init (void)
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
-static int check_user_ptr (void * p_) {
-  const char * p = p_;
+static int check_user_ptr (struct intr_frame * f, void * p_, int write) {
+  uint8_t * p = p_;
   int i;
-  int success;
+  int err;
   const int word_size = sizeof(void *);
   if ( p == NULL ) {
     return 1;
   }
   else {
-    success = 0;
+    err = 0;
     
     for ( i = word_size-1; i; --i ) {
-      success = is_kernel_vaddr(p+i); // make sure every byte is also in user space
-      if ( success ) {
+      err = is_kernel_vaddr(p+i); // make sure every byte is also in user space
+      if ( err ) {
         break;
       }
     }
     
-    if ( success ) {
-      return success;
+    if ( err ) {
+      return err;
     }
-    
-    for ( i = word_size-1; i; --i ) {
-      success = (pagedir_get_page(thread_current ()->pagedir,p+i) == NULL);
-      if ( success ) {
-        break;
+
+    // check if this is a stackish access
+    // syscalls first check access then do pointer access
+    if ( is_stackish(p) ) {
+      if ( !is_valid_stack_access(f,p,write) ) {
+        err = 1;
       }
     }
-    return success;
+    else {
+      for ( i = word_size-1; i; --i ) {
+        void * upage = pg_round_down(p + i);
+        // get if its described from the supplemental page table
+        const virtual_page_info_t info = get_vaddr_info(&thread_current()->s_page_table,upage);
+        err = info.valid == 0;
+        // check if its writable if we're writing to it
+        if ( write ) {
+          err |= info.writable == 0;
+        }
+        // we used to check pagedir installation
+        // now we just check if it was described:
+        // 1. if it is a valid elf segment, we must have described it already
+        // 2. if it is mmap'd memory, we must have described it alreaady
+        // 3. otherwise, kill the user process
+        /* err = (pagedir_get_page(thread_current ()->pagedir,p+i) == NULL); */
+        if ( err ) {
+          break;
+        }
+      }
+    }
+        
+    return err;
   }
 }
 
-static int check_user_ptr_with_terminate(void * p) {
-  if (check_user_ptr(p)) {
+static int check_user_ptr_with_terminate(struct intr_frame * f, void * p, int write) {
+  if (check_user_ptr(f,p,write)) {
     process_terminate(PROCESS_KILLED,-1);
     return 1;
   }
@@ -366,7 +390,7 @@ syscall_handler (struct intr_frame *f UNUSED)
                        // cast to char * to have 1 byte type
   
   // verify that it's a good pointer
-  if ( check_user_ptr_with_terminate(esp) ) {
+  if ( check_user_ptr_with_terminate(f,esp,0) ) {
     return;
   }
   
@@ -379,7 +403,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 
   // only do this for syscall read and file size for now
   for ( int i = 0; i < num_args; ++i ) {
-    if ( check_user_ptr_with_terminate(esp) ) {
+    if ( check_user_ptr_with_terminate(f,esp,0) ) {
       return;
     }
     user_args[i] = *((void **)esp);
@@ -396,7 +420,7 @@ syscall_handler (struct intr_frame *f UNUSED)
   }
   else if ( syscall_no == SYS_EXEC ) {
     tmp_char_ptr = (char *)user_args[0];
-    if ( check_user_ptr_with_terminate(tmp_char_ptr) ) {
+    if ( check_user_ptr_with_terminate(f,tmp_char_ptr,0) ) {
       return;
     }
     tid_t p = process_execute(tmp_char_ptr);
@@ -409,7 +433,7 @@ syscall_handler (struct intr_frame *f UNUSED)
     tmp_char_ptr = (char *)user_args[0];
     tmp_int = (int)user_args[1];
 
-    if ( check_user_ptr_with_terminate((void *)tmp_char_ptr /*file_name*/) ) {
+    if ( check_user_ptr_with_terminate(f,(void *)tmp_char_ptr /*file_name*/,0) ) {
       return;
     }
     
@@ -420,7 +444,7 @@ syscall_handler (struct intr_frame *f UNUSED)
   }
   else if ( syscall_no == SYS_OPEN ) {
     tmp_char_ptr = (char *)user_args[0];    
-    if ( check_user_ptr_with_terminate((void *)tmp_char_ptr /*file_name*/) ) {
+    if ( check_user_ptr_with_terminate(f,(void *)tmp_char_ptr /*file_name*/, 0) ) {
       return;
     }
     else {
@@ -436,7 +460,7 @@ syscall_handler (struct intr_frame *f UNUSED)
     int fd = (int)user_args[0];
     void * p = user_args[1];
     unsigned sz = (unsigned)user_args[2];
-    if ( check_user_ptr_with_terminate(p) ) {
+    if ( check_user_ptr_with_terminate(f,p,1) ) {
       return;
     }
     if ( fd == 0 ) {
@@ -458,7 +482,7 @@ syscall_handler (struct intr_frame *f UNUSED)
     int fd = (int)user_args[0];
     void * p = user_args[1];
     unsigned size = (unsigned)user_args[2];
-    if ( check_user_ptr_with_terminate(p) ) {
+    if ( check_user_ptr_with_terminate(f,p,0 /*don't write to p*/) ) {
       return;
     }
     if ( fd == 1 ) {

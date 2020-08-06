@@ -52,7 +52,7 @@ void* alloc_virtual_address(s_page_table_t * page_table UNUSED, virtual_page_inf
 
 virtual_page_info_t get_vaddr_info(s_page_table_t * page_table,
                                    void * vaddr) {
-  virtual_page_info_t info;
+  virtual_page_info_t info = { 0 };
   virtual_page_t page;
   virtual_page_t * discovered;
   struct hash_elem * e;

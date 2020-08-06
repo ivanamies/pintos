@@ -730,7 +730,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       info.home = PAGE_SOURCE_OF_DATA_ELF;
       info.owner = thread_current();
       info.file = file;
-      info.elf_writable = writable;
+      info.writable = writable;
       info.page_read_bytes = page_read_bytes;
       info.page_zero_bytes = page_zero_bytes;
       info.elf_file_ofs = ofs;

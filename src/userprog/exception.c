@@ -109,7 +109,7 @@ kill (struct intr_frame *f)
       }
       break; // don't reach this...
       
-    case SEL_KCSEG:
+    case SEL_KCSEG:      
       /* Kernel's code segment, which indicates a kernel bug.
          Kernel code shouldn't throw exceptions.  (Page faults
          may cause kernel exceptions--but they shouldn't arrive
@@ -151,12 +151,12 @@ static bool check_user_ptr(void * fault_addr_) { // like the one in syscall.c bu
   return true;
 }
 
-static bool is_stackish(void* fault_addr) {
+int is_stackish(void* fault_addr) {
   // if its within max_stack_pages of PHYS_BASE, its stackish enough for me
   //
   // we check it's not a kernel vaddr previously
   // we check we don't write below the stack pointer previously
-
+  
   // check fault_addr is a reasonable distance from PHYS_BASE
   off_t diff = PHYS_BASE - fault_addr;
   size_t pages_off = diff / PGSIZE;
@@ -165,7 +165,7 @@ static bool is_stackish(void* fault_addr) {
   return p1;
 }
 
-static bool is_valid_stack_access(struct intr_frame * f, void * fault_addr_, int write UNUSED ) {
+int is_valid_stack_access(struct intr_frame * f, void * fault_addr_, int write UNUSED ) {
   uint8_t * fault_addr = fault_addr_;
   uint8_t * esp = f->esp;
   // PUSHA can push 4 bytes below, PUSH can do 32 bytes
@@ -178,7 +178,7 @@ static bool is_valid_stack_access(struct intr_frame * f, void * fault_addr_, int
   // the test cases imply you also cannot read below the stack pointer also
   /* if ( write ) { */
     // validate esp
-
+  
     // check esp is a user address
     bool p1 = esp && is_user_vaddr(esp);
     // check esp is a reasonable distance from PHYS_BASE
@@ -261,8 +261,8 @@ page_fault (struct intr_frame *f)
   // validate memory
   bool valid = check_user_ptr(fault_addr);
 
-  /* printf("valid %d fault_addr %p\n",valid,fault_addr); */
-  
+  /* printf("tagiamies valid %d fault_addr %p write %d\n",valid,fault_addr,write); */
+    
   if ( !valid ) {
     printf ("Page fault at %p: %s error %s page in %s context.\n",
             fault_addr,
@@ -273,7 +273,8 @@ page_fault (struct intr_frame *f)
   }
 
   bool stack_like = is_stackish(fault_addr);
-  /* printf("stack_like: %d fault_addr %p\n",stack_like,fault_addr); */
+  
+  /* printf("tagiamies stack_like: %d fault_addr %p\n",stack_like,fault_addr); */
   
   if ( stack_like ) {
     bool valid_stack_access = is_valid_stack_access(f,fault_addr,write);
@@ -288,12 +289,6 @@ page_fault (struct intr_frame *f)
   else {    
     uint8_t * upage = pg_round_down(fault_addr);
     
-    // allocate frame
-    // frame_alloc will always succeed
-    frame_aux_info_t frame_aux_info = { 0 };
-    frame_aux_info.owner = thread_current();
-    frame_aux_info.addr = upage;
-    
     // get if its writable from the supplemental page table
     virtual_page_info_t info = get_vaddr_info(&thread_current()->s_page_table,upage);
     if ( info.valid == 0 ) {
@@ -301,7 +296,13 @@ page_fault (struct intr_frame *f)
       kill(f);
     }
     
+    // allocate frame
+    // frame_alloc will always succeed
+    frame_aux_info_t frame_aux_info = { 0 };
+    frame_aux_info.owner = thread_current();
+    frame_aux_info.addr = upage;
     uint8_t *kpage = frame_alloc(&frame_aux_info);
+    
     bool success = true;
     bool writable = true;
     if ( info.home == PAGE_SOURCE_OF_DATA_ELF ) {
@@ -310,7 +311,7 @@ page_fault (struct intr_frame *f)
       uint32_t page_zero_bytes = info.page_zero_bytes;
       uint32_t ofs = info.elf_file_ofs;
       ASSERT(page_read_bytes + page_zero_bytes == PGSIZE);
-      writable = info.elf_writable;
+      writable = info.writable;
       // wait, why am I using file read anyways? isn't this kernel only code?
       file_seek(file,ofs);
       success = file_read (file, kpage, page_read_bytes) == (int) page_read_bytes;
@@ -327,6 +328,7 @@ page_fault (struct intr_frame *f)
     if (!success) {
       printf("page fault exception install_page failed\n");
       frame_dealloc(kpage);
+      printf("successfully dealloc kpage \n");
       kill(f);
     }
   }

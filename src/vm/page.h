@@ -29,7 +29,7 @@ typedef struct virtual_page_info {
   struct file * file;
   uint32_t page_read_bytes;
   uint32_t page_zero_bytes;
-  int elf_writable;
+  int writable;
   uint32_t elf_file_ofs;
     
 } virtual_page_info_t;
