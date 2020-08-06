@@ -133,7 +133,7 @@ kill (struct intr_frame *f)
     }
 }
 
-static bool check_user_ptr(struct intr_frame * f, void * fault_addr_, int write) { // like the one in syscall.c but doesn't check unmapped page
+static bool check_user_ptr(void * fault_addr_) { // like the one in syscall.c but doesn't check unmapped page
   uint8_t * fault_addr = fault_addr_;
   if ( fault_addr == NULL ) {
     return false;
@@ -146,19 +146,7 @@ static bool check_user_ptr(struct intr_frame * f, void * fault_addr_, int write)
       if ( p ) {
         return false;
       }
-    }
-
-    // I don't understand this:
-    // "User programs are buggy if they write to the stack below the stack pointer, because
-    // typical real OSes may interrupt a process at any time to deliver a "signal," which pushes data on the stack."
-    // -- project 3 spec
-    //
-    /* // check for writes below the stack pointer */
-    /* // idk man, the spec tells me to do it */
-    /* uint8_t * esp = f->esp; */
-    /* if ( write && esp != NULL && fault_addr < esp) { */
-    /*   return false; */
-    /* } */
+    }    
   }
   return true;
 }
@@ -168,10 +156,43 @@ static bool is_stackish(void* fault_addr) {
   //
   // we check it's not a kernel vaddr previously
   // we check we don't write below the stack pointer previously
-  
+
+  // check fault_addr is a reasonable distance from PHYS_BASE
   off_t diff = PHYS_BASE - fault_addr;
   size_t pages_off = diff / PGSIZE;
-  return pages_off < max_stack_pages;
+  bool p1 = pages_off < max_stack_pages;
+
+  return p1;
+}
+
+static bool is_valid_stack_access(struct intr_frame * f, void * fault_addr_, int write UNUSED ) {
+  uint8_t * fault_addr = fault_addr_;
+  uint8_t * esp = f->esp;
+  // PUSHA can push 4 bytes below, PUSH can do 32 bytes
+  // this frankly seems kind of bs but hey its in the spec
+  uint8_t * last_valid_addr = (uint8_t *)esp - 32; 
+  bool res = true;
+  /* printf("write %d esp %p fault_addr %p\n",write,esp,fault_addr); */
+
+  // the spec says you cannot write below the stack pointer
+  // the test cases imply you also cannot read below the stack pointer also
+  /* if ( write ) { */
+    // validate esp
+
+    // check esp is a user address
+    bool p1 = esp && is_user_vaddr(esp);
+    // check esp is a reasonable distance from PHYS_BASE
+    off_t esp_diff = ((uint8_t *)PHYS_BASE) - esp;
+    size_t esp_pages_off = esp_diff / PGSIZE;
+    bool p2 = esp_pages_off < max_stack_pages;
+    // if esp is reasonable, compare fault_addr to esp
+    if ( p1 && p2 ) {
+      if ( fault_addr < last_valid_addr ) {
+        res = false; // fault address must not be BELOW esp
+      }
+    }
+  /* } */
+  return res;
 }
 
 static int grow_stack(void * fault_addr) {
@@ -238,7 +259,9 @@ page_fault (struct intr_frame *f)
   user = (f->error_code & PF_U) != 0;
   
   // validate memory
-  bool valid = check_user_ptr(f,fault_addr,write);
+  bool valid = check_user_ptr(fault_addr);
+
+  /* printf("valid %d fault_addr %p\n",valid,fault_addr); */
   
   if ( !valid ) {
     printf ("Page fault at %p: %s error %s page in %s context.\n",
@@ -250,15 +273,19 @@ page_fault (struct intr_frame *f)
   }
 
   bool stack_like = is_stackish(fault_addr);
-
+  /* printf("stack_like: %d fault_addr %p\n",stack_like,fault_addr); */
+  
   if ( stack_like ) {
+    bool valid_stack_access = is_valid_stack_access(f,fault_addr,write);
+    if ( !valid_stack_access ) {
+      kill(f);
+    }
     int success = grow_stack(fault_addr);
     if (!success) {
-      printf("page fault exception grow_stack install_page failed\n");
       kill(f);
     }
   }
-  else {
+  else {    
     uint8_t * upage = pg_round_down(fault_addr);
     
     // allocate frame
@@ -266,11 +293,15 @@ page_fault (struct intr_frame *f)
     frame_aux_info_t frame_aux_info = { 0 };
     frame_aux_info.owner = thread_current();
     frame_aux_info.addr = upage;
-    uint8_t *kpage = frame_alloc(&frame_aux_info);
     
     // get if its writable from the supplemental page table
     virtual_page_info_t info = get_vaddr_info(&thread_current()->s_page_table,upage);
-    ASSERT (info.valid ==1);
+    if ( info.valid == 0 ) {
+      // it hasn't been mapped
+      kill(f);
+    }
+    
+    uint8_t *kpage = frame_alloc(&frame_aux_info);
     bool success = true;
     bool writable = true;
     if ( info.home == PAGE_SOURCE_OF_DATA_ELF ) {
