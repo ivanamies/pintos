@@ -15,8 +15,10 @@
 #include "filesys/inode.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
+#include "vm/mmap.h"
 
 #include <string.h>
+#include "lib/kernel/hash.h"
 
 static void syscall_handler (struct intr_frame *);
 static int check_user_ptr (struct intr_frame * f, void * p, int write);
@@ -26,6 +28,7 @@ static int check_user_ptr (struct intr_frame * f, void * p, int write);
 #define MAX_FILES 4096
 #define MAX_ARGS_ON_USER_STACK 4
 
+// terri-bad fd stuff that lives in bss segment and bloats the binary
 typedef struct fd_file {
   int fd;
   char file_name[MAX_FILE_NAME_LEN];
@@ -259,7 +262,29 @@ syscall_init (void)
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
-static int check_user_ptr (struct intr_frame * f, void * p_, int write) {
+static int check_user_ptr_mapping(struct intr_frame * f, void * p_, int write) {
+  for ( i = word_size-1; i; --i ) {
+    void * upage = pg_round_down(p + i);
+    // get if its described from the supplemental page table
+    const virtual_page_info_t info = get_vaddr_info(&thread_current()->s_page_table,upage);
+    err = info.valid == 0;
+    // check if its writable if we're writing to it
+    if ( write ) {
+      err |= info.writable == 0;
+    }
+    // we used to check pagedir installation
+    // now we just check if it was described:
+    // 1. if it is a valid elf segment, we must have described it already
+    // 2. if it is mmap'd memory, we must have described it alreaady
+    // 3. otherwise, kill the user process
+    /* err = (pagedir_get_page(thread_current ()->pagedir,p+i) == NULL); */
+    if ( err ) {
+      break;
+    }
+  }
+}
+
+static int check_user_ptr_no_mapping (struct intr_frame * f, void * p_, int write) {
   uint8_t * p = p_;
   int i;
   int err;
@@ -288,36 +313,18 @@ static int check_user_ptr (struct intr_frame * f, void * p_, int write) {
         err = 1;
       }
     }
-    else {
-      for ( i = word_size-1; i; --i ) {
-        void * upage = pg_round_down(p + i);
-        // get if its described from the supplemental page table
-        const virtual_page_info_t info = get_vaddr_info(&thread_current()->s_page_table,upage);
-        err = info.valid == 0;
-        // check if its writable if we're writing to it
-        if ( write ) {
-          err |= info.writable == 0;
-        }
-        // we used to check pagedir installation
-        // now we just check if it was described:
-        // 1. if it is a valid elf segment, we must have described it already
-        // 2. if it is mmap'd memory, we must have described it alreaady
-        // 3. otherwise, kill the user process
-        /* err = (pagedir_get_page(thread_current ()->pagedir,p+i) == NULL); */
-        if ( err ) {
-          break;
-        }
-      }
-    }
-        
+    
     return err;
   }
 }
 
 static int check_user_ptr_with_terminate(struct intr_frame * f, void * p, int write) {
-  if (check_user_ptr(f,p,write)) {
+  if (check_user_ptr_no_mapping(f,p,write)) {
     process_terminate(PROCESS_KILLED,-1);
     return 1;
+  }
+  else if ( check_user_ptr_mapping(f,p,write) ) {
+    process_terminate(PROCESS_KILLED, -1);
   }
   else {
     return 0;
@@ -363,6 +370,12 @@ static int get_num_args(int syscall_no) {
     num_args = 1;
   }
   else if ( syscall_no == SYS_CLOSE ) {
+    num_args = 1;
+  }
+  else if ( syscall_no == SYS_MMAP ) {
+    num_args = 2;
+  }
+  else if ( syscall_no == SYS_MUNMAP ) {
     num_args = 1;
   }
   else {
@@ -441,6 +454,8 @@ syscall_handler (struct intr_frame *f UNUSED)
     f->eax = success;
   }
   else if ( syscall_no == SYS_REMOVE ) {
+    // I forgot to implement this.
+    // wops.
   }
   else if ( syscall_no == SYS_OPEN ) {
     tmp_char_ptr = (char *)user_args[0];    
@@ -504,6 +519,19 @@ syscall_handler (struct intr_frame *f UNUSED)
   else if ( syscall_no == SYS_CLOSE ) {
     int fd = (int)user_args[0];
     close_fd(fd);
+  }
+  else if ( syscall_no == SYS_MMAP ) {
+    int fd = (int)user_args[0];
+    void * p = user_args[1];
+    // kill process if p is NULL, a kernal address, or bad stack
+    if ( check_user_ptr_no_mapping(f,p,0) ) {
+      process_terminate(PROCESS_KILLED,-1);      
+    }
+    // process if p is not page aligned
+    else if ( p != pg_round_down(p) ) {
+      process_terminate(PROCESS_KILLED,-1);
+    }
+    f->eax = memory_map(fd,p);
   }
   else {
     printf("didn't get a project 2 sys call\n");

@@ -69,4 +69,6 @@ int update_vaddr_info(s_page_table_t * page_table, void * vaddr, virtual_page_in
 // installs upage(arg1) to kpage(arg2) and if its writable(arg3)
 bool install_page(void *, void *, bool);
 
+void uninstall_page(void *);
+
 #endif /* vm/page.h */

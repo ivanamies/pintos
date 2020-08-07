@@ -8,8 +8,9 @@
 int
 main (int argc, char *argv[]) 
 {
+  
   int i;
-
+  
   test_name = "args";
 
   msg ("begin");
