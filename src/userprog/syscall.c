@@ -261,10 +261,18 @@ syscall_init (void)
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
-static int check_user_ptr_mapping(struct intr_frame * f UNUSED, void * p_, int write) {
+static int check_user_ptr_mapping(struct intr_frame * f, void * p_, int write) {
   uint8_t * p = p_;
-  int err;
+  int err = 0;
   const int word_size = sizeof(void *);
+
+  if ( is_stackish(p) ) {
+    if ( !is_valid_stack_access(f,p,write) ) {
+      err = 1;
+    }
+    return err;
+  }
+  
   for ( int i = word_size-1; i; --i ) {
     void * upage = pg_round_down(p + i);
     // get if its described from the supplemental page table
@@ -287,7 +295,7 @@ static int check_user_ptr_mapping(struct intr_frame * f UNUSED, void * p_, int w
   return err;
 }
 
-static int check_user_ptr_no_mapping (struct intr_frame * f, void * p_, int write) {
+static int check_user_ptr_no_mapping (void * p_) {
   uint8_t * p = p_;
   int i;
   int err;
@@ -304,25 +312,13 @@ static int check_user_ptr_no_mapping (struct intr_frame * f, void * p_, int writ
         break;
       }
     }
-    
-    if ( err ) {
-      return err;
-    }
-
-    // check if this is a stackish access
-    // syscalls first check access then do pointer access
-    if ( is_stackish(p) ) {
-      if ( !is_valid_stack_access(f,p,write) ) {
-        err = 1;
-      }
-    }
-    
+        
     return err;
   }
 }
 
 static int check_user_ptr_with_terminate(struct intr_frame * f, void * p, int write) {
-  if (check_user_ptr_no_mapping(f,p,write)) {
+  if (check_user_ptr_no_mapping(p)) {
     process_terminate(PROCESS_KILLED,-1);
     return 1;
   }
@@ -531,14 +527,14 @@ syscall_handler (struct intr_frame *f UNUSED)
     }
     void * p = user_args[1];
     // kill process if p is NULL, a kernal address, or bad stack
-    if ( check_user_ptr_no_mapping(f,p,0) ) {
+    if ( check_user_ptr_no_mapping(p) ) {
       process_terminate(PROCESS_KILLED,-1);      
     }
     // process if p is not page aligned
     else if ( p != pg_round_down(p) ) {
       process_terminate(PROCESS_KILLED,-1);
     }
-    size_t sz = tell_fd(fd);
+    int sz = tell_fd(fd);
     if ( sz == -1 ) {
       process_terminate(PROCESS_KILLED,-1);
     }
