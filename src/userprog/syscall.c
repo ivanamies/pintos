@@ -21,7 +21,6 @@
 #include "lib/kernel/hash.h"
 
 static void syscall_handler (struct intr_frame *);
-static int check_user_ptr (struct intr_frame * f, void * p, int write);
 
 #define MAX_PAGES_IN_FILE 8
 #define MAX_FILE_NAME_LEN 64
@@ -262,8 +261,11 @@ syscall_init (void)
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
-static int check_user_ptr_mapping(struct intr_frame * f, void * p_, int write) {
-  for ( i = word_size-1; i; --i ) {
+static int check_user_ptr_mapping(struct intr_frame * f UNUSED, void * p_, int write) {
+  uint8_t * p = p_;
+  int err;
+  const int word_size = sizeof(void *);
+  for ( int i = word_size-1; i; --i ) {
     void * upage = pg_round_down(p + i);
     // get if its described from the supplemental page table
     const virtual_page_info_t info = get_vaddr_info(&thread_current()->s_page_table,upage);
@@ -282,6 +284,7 @@ static int check_user_ptr_mapping(struct intr_frame * f, void * p_, int write) {
       break;
     }
   }
+  return err;
 }
 
 static int check_user_ptr_no_mapping (struct intr_frame * f, void * p_, int write) {
@@ -325,6 +328,7 @@ static int check_user_ptr_with_terminate(struct intr_frame * f, void * p, int wr
   }
   else if ( check_user_ptr_mapping(f,p,write) ) {
     process_terminate(PROCESS_KILLED, -1);
+    return 1;
   }
   else {
     return 0;
@@ -522,6 +526,9 @@ syscall_handler (struct intr_frame *f UNUSED)
   }
   else if ( syscall_no == SYS_MMAP ) {
     int fd = (int)user_args[0];
+    if (fd == 0 || fd == 1 || fd == 2 ) {
+      process_terminate(PROCESS_KILLED,-1);      
+    }
     void * p = user_args[1];
     // kill process if p is NULL, a kernal address, or bad stack
     if ( check_user_ptr_no_mapping(f,p,0) ) {
@@ -531,7 +538,11 @@ syscall_handler (struct intr_frame *f UNUSED)
     else if ( p != pg_round_down(p) ) {
       process_terminate(PROCESS_KILLED,-1);
     }
-    f->eax = memory_map(fd,p);
+    size_t sz = tell_fd(fd);
+    if ( sz == -1 ) {
+      process_terminate(PROCESS_KILLED,-1);
+    }
+    /* f->eax = mmap(fd,sz,p); */
   }
   else {
     printf("didn't get a project 2 sys call\n");
