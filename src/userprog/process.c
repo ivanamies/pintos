@@ -492,7 +492,7 @@ struct Elf32_Phdr
 static void* push_stack(void * data, size_t n, void * esp_);
 static bool setup_stack (struct input_args * ia, void **esp);
 static bool validate_segment (const struct Elf32_Phdr *, struct file *);
-static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
+static bool load_segment (int fd, off_t ofs, uint8_t *upage,
                           uint32_t read_bytes, uint32_t zero_bytes,
                           bool writable);
 
@@ -516,7 +516,6 @@ load (struct input_args * ia, void (**eip) (void), void **esp)
   // copy process name into thread
   strlcpy(t->process_name,file_name,PROCESS_NAME_MAX_LENGTH);
   // allocate and activate the supplemental page table
-  
   init_supplemental_page_table(&t->s_page_table);
   init_mapid_table(&t->mapid_table);
     
@@ -524,6 +523,14 @@ load (struct input_args * ia, void (**eip) (void), void **esp)
   t->pagedir = pagedir_create ();
   if (t->pagedir == NULL) 
     goto done;
+
+  // open the file descriptor
+  // yes I am aware this is a second file open
+  t->exec_fd = fd_open(file_name);
+  if ( t->exec_fd < 2 ) {
+      printf("load: %s: open failed\n", file_name);    
+  }
+  
   process_activate ();
 
   /* Open executable file. */
@@ -596,7 +603,9 @@ load (struct input_args * ia, void (**eip) (void), void **esp)
                   read_bytes = 0;
                   zero_bytes = ROUND_UP (page_offset + phdr.p_memsz, PGSIZE);
                 }
-              if (!load_segment (file, file_page, (void *) mem_page,
+              // use the file descriptor representing thread's executable program
+              int fd = thread_current()->exec_fd;
+              if (!load_segment (fd, file_page, (void *) mem_page,
                                  read_bytes, zero_bytes, writable))
                 goto done;
             }
@@ -619,8 +628,6 @@ load (struct input_args * ia, void (**eip) (void), void **esp)
     t->parent_pid = ia->parent_pid;
     add_parent_process(thread_pid());
     add_child_process(ia->parent_pid,thread_pid());
-    t->exec_fd = fd_open(file_name);
-    ASSERT (t->exec_fd >= 2);
     fd_deny_write(t->exec_fd);
   }
  done:
@@ -699,7 +706,7 @@ validate_segment (const struct Elf32_Phdr *phdr, struct file *file)
    Return true if successful, false if a memory allocation error
    or disk read error occurs. */
 static bool
-load_segment (struct file *file, off_t ofs, uint8_t *upage,
+load_segment (int fd, off_t ofs, uint8_t *upage,
               uint32_t read_bytes, uint32_t zero_bytes, bool writable) 
 {
   ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
@@ -710,7 +717,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   
   ASSERT(t != NULL);
 
-  file_seek (file, ofs);
+  fd_seek(fd,ofs);
   while (read_bytes > 0 || zero_bytes > 0) 
     {
       /* Calculate how to fill this page.
@@ -724,11 +731,11 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       info.valid = 1;
       info.home = PAGE_SOURCE_OF_DATA_ELF;
       info.owner = thread_current();
-      info.file = file; // why are you using naked files? this should be done with struct thread::exec_fd.
+      info.fd = fd; // why are you using naked files? this should be done with struct thread::exec_fd.
       info.writable = writable;
       info.page_read_bytes = page_read_bytes;
       info.page_zero_bytes = page_zero_bytes;
-      info.elf_file_ofs = ofs;
+      info.fd_ofs = ofs;
       set_vaddr_info(&t->s_page_table,upage,&info);
       //
       
