@@ -309,11 +309,7 @@ start_process (void *input_args_)
   /* If load failed, quit. */
   if (!success) {
     // maybe I can just call process_terminate, but I'm not sure.
-    struct thread * t = thread_current();
     // also close the file if we failed
-    if (t && t->exec_file) {
-      file_close (t->exec_file);
-    }
     thread_exit ();
   }
   
@@ -383,8 +379,7 @@ void process_terminate (int current_execution_status, int exit_code) {
   //
   // This technically races because now another file can modify
   // this process's executable before process_exit is called but whatever
-  destroy_fd(thread_pid());
-  cur->exec_file = NULL; // closed by destroy_fd
+  fd_destroy(thread_pid());
   thread_exit ();
 
   // ... why aren't I calling process_exit?
@@ -533,7 +528,6 @@ load (struct input_args * ia, void (**eip) (void), void **esp)
 
   /* Open executable file. */
   file = filesys_open (file_name); // closed when process exits
-  t->exec_file = file;
   if (file == NULL) 
     {
       printf ("load: %s: open failed\n", file_name);
@@ -625,9 +619,9 @@ load (struct input_args * ia, void (**eip) (void), void **esp)
     t->parent_pid = ia->parent_pid;
     add_parent_process(thread_pid());
     add_child_process(ia->parent_pid,thread_pid());
-    t->exec_fd = open_fd(file_name);
+    t->exec_fd = fd_open(file_name);
     ASSERT (t->exec_fd >= 2);
-    deny_write_fd(t->exec_fd);
+    fd_deny_write(t->exec_fd);
   }
  done:
   // this signaling can be moved out of load

@@ -109,7 +109,6 @@ struct thread
     mapid_table_t mapid_table;   // mapid table for memory mapped files
     int parent_pid;
     int exec_fd;
-    struct file * exec_file;
     char process_name[PROCESS_NAME_MAX_LENGTH];
 #endif
 

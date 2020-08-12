@@ -90,7 +90,7 @@ static void clear_fd(struct fd_file * fd_file) {
   fd_file->pid = -1;
 }
 
-void destroy_fd(int pid) {
+void fd_destroy(int pid) {
   lock_acquire(&fd_table_lock);
 
   int i;
@@ -127,7 +127,7 @@ static int create_fd(const char * file_name, struct file * file) {
   fd_table[fd_idx].fd = fd;
   strlcpy(fd_table[fd_idx].file_name,file_name,MAX_FILE_NAME_LEN);
   fd_table[fd_idx].file = file;
-  fd_table[fd_idx].is_open = 1; // ONLY call from open_fd
+  fd_table[fd_idx].is_open = 1; // ONLY call from fd_open
   fd_table[fd_idx].pid = thread_pid();
   
   lock_release(&fd_table_lock);
@@ -135,7 +135,7 @@ static int create_fd(const char * file_name, struct file * file) {
   return fd;
 }
 
-int open_fd(const char * const file_name) {
+int fd_open(const char * const file_name) {
   int fd;
   struct file * file = filesys_open(file_name); // I assume this is thread safe?
   if ( file == NULL ) {
@@ -164,7 +164,7 @@ static int is_valid_fd_entry_no_lock(int fd_idx) {
   return 1;
 }
 
-static void close_fd(int fd) {
+static void fd_close(int fd) {
   lock_acquire(&fd_table_lock);
 
   int fd_idx = fd_to_fd_idx_no_lock(fd);
@@ -179,7 +179,7 @@ static void close_fd(int fd) {
   lock_release(&fd_table_lock);
 }
 
-static int read_fd(int fd, void * p, unsigned sz) {
+int fd_read(int fd, void * p, unsigned sz) {
   lock_acquire(&fd_table_lock);
   int fd_idx = fd_to_fd_idx_no_lock(fd);
   int ret = is_valid_fd_entry_no_lock(fd_idx);
@@ -192,7 +192,7 @@ static int read_fd(int fd, void * p, unsigned sz) {
   return ret;
 }
 
-static int filesize_fd(int fd) {
+int fd_filesize(int fd) {
   lock_acquire(&fd_table_lock);
   int fd_idx = fd_to_fd_idx_no_lock(fd);
   int ret = is_valid_fd_entry_no_lock(fd_idx);
@@ -205,7 +205,7 @@ static int filesize_fd(int fd) {
   return ret;  
 }
 
-static int write_fd(int fd, void * p, unsigned sz) {
+int fd_write(int fd, void * p, unsigned sz) {
   lock_acquire(&fd_table_lock);
   int fd_idx = fd_to_fd_idx_no_lock(fd);
   int ret = is_valid_fd_entry_no_lock(fd_idx);
@@ -218,7 +218,7 @@ static int write_fd(int fd, void * p, unsigned sz) {
   return ret;
 }
 
-static void seek_fd(int fd, unsigned pos) {
+void fd_seek(int fd, unsigned pos) {
   lock_acquire(&fd_table_lock);
   int fd_idx = fd_to_fd_idx_no_lock(fd);
   int ret = is_valid_fd_entry_no_lock(fd_idx);
@@ -230,7 +230,7 @@ static void seek_fd(int fd, unsigned pos) {
   lock_release(&fd_table_lock);
 }
 
-static int tell_fd(int fd) {
+int fd_tell(int fd) {
   lock_acquire(&fd_table_lock);
   int fd_idx = fd_to_fd_idx_no_lock(fd);
   int ret = is_valid_fd_entry_no_lock(fd_idx);
@@ -243,7 +243,7 @@ static int tell_fd(int fd) {
   return ret;
 }
 
-void deny_write_fd(int fd) {
+void fd_deny_write(int fd) {
   lock_acquire(&fd_table_lock);
   int fd_idx = fd_to_fd_idx_no_lock(fd);
   int ret = is_valid_fd_entry_no_lock(fd_idx);
@@ -463,13 +463,13 @@ syscall_handler (struct intr_frame *f UNUSED)
       return;
     }
     else {
-      fd = open_fd(tmp_char_ptr);
+      fd = fd_open(tmp_char_ptr);
     }
     f->eax = fd;
   }
   else if ( syscall_no == SYS_FILESIZE ) {
     int fd = (int)user_args[0];
-    f->eax = filesize_fd(fd);
+    f->eax = fd_filesize(fd);
   }
   else if ( syscall_no == SYS_READ ) {
     int fd = (int)user_args[0];
@@ -490,7 +490,7 @@ syscall_handler (struct intr_frame *f UNUSED)
       f->eax = sz;
     }
     else {
-      f->eax = read_fd(fd,p,sz);
+      f->eax = fd_read(fd,p,sz);
     }
   }
   else if ( syscall_no == SYS_WRITE ) {
@@ -504,21 +504,21 @@ syscall_handler (struct intr_frame *f UNUSED)
       putbuf(p,size);
     }
     else {
-      f->eax = write_fd(fd,p,size);
+      f->eax = fd_write(fd,p,size);
     }
   }
   else if ( syscall_no == SYS_SEEK ) {
     int fd = (int)user_args[0];
     unsigned pos = (unsigned)user_args[1];
-    seek_fd(fd,pos);
+    fd_seek(fd,pos);
   }
   else if ( syscall_no == SYS_TELL ) {
     int fd = (int)user_args[0];
-    f->eax = tell_fd(fd);
+    f->eax = fd_tell(fd);
   }
   else if ( syscall_no == SYS_CLOSE ) {
     int fd = (int)user_args[0];
-    close_fd(fd);
+    fd_close(fd);
   }
   else if ( syscall_no == SYS_MMAP ) {
     int fd = (int)user_args[0];
@@ -534,7 +534,7 @@ syscall_handler (struct intr_frame *f UNUSED)
     else if ( p != pg_round_down(p) ) {
       process_terminate(PROCESS_KILLED,-1);
     }
-    int sz = tell_fd(fd);
+    int sz = fd_tell(fd);
     if ( sz == -1 ) {
       process_terminate(PROCESS_KILLED,-1);
     }

@@ -4,9 +4,17 @@
 void syscall_init (void);
 
 void init_fd_table (void);
-int open_fd(const char * const);
-void deny_write_fd(int fd);
-void destroy_fd(int pid);
+
+int fd_open(const char * const);
+void fd_destroy(int pid);
+
+int fd_read(int fd, void * p, unsigned sz);
+int fd_filesize(int fd);
+int fd_write(int fd, void * p, unsigned sz);
+void fd_seek(int fd, unsigned pos);
+int fd_tell(int fd);
+
+void fd_deny_write(int fd);
 
 void debug_fd_table(int aux);
 
