@@ -1,10 +1,17 @@
 #ifndef VM_MMAP_H
 #define VM_MMAP_H
 
+#include <kernel/hash.h>
 
-int mmap(int, int, void *);
+typedef struct mapid_table {
+  struct hash mapids;
+} mapid_table_t;
 
-void init_mapid_table(void);
+int mmap(int, int, int, void *);
+void munmap(int);
+
+void destroy_mapid_table(mapid_table_t *);
+void init_mapid_table(mapid_table_t *);
 
 #endif /* vm/mmap.h */
 

@@ -523,6 +523,7 @@ load (struct input_args * ia, void (**eip) (void), void **esp)
   // allocate and activate the supplemental page table
   
   init_supplemental_page_table(&t->s_page_table);
+  init_mapid_table(&t->mapid_table);
     
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
@@ -723,20 +724,20 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
          and zero the final PAGE_ZERO_BYTES bytes. */
       size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
-
+      
       // load virtual page information
       virtual_page_info_t info = { 0 };
       info.valid = 1;
       info.home = PAGE_SOURCE_OF_DATA_ELF;
       info.owner = thread_current();
-      info.file = file;
+      info.file = file; // why are you using naked files? this should be done with struct thread::exec_fd.
       info.writable = writable;
       info.page_read_bytes = page_read_bytes;
       info.page_zero_bytes = page_zero_bytes;
       info.elf_file_ofs = ofs;
-      update_vaddr_info(&t->s_page_table,upage,&info);
+      set_vaddr_info(&t->s_page_table,upage,&info);
       //
-            
+      
       /* Advance. */
       read_bytes -= page_read_bytes;
       zero_bytes -= page_zero_bytes;
@@ -785,7 +786,7 @@ setup_stack (struct input_args * ia, void **esp)
   info.valid = 1;
   info.home = PAGE_SOURCE_OF_DATA_STACK;
   info.owner = thread_current();
-  update_vaddr_info(&thread_current()->s_page_table,upage,&info);
+  set_vaddr_info(&thread_current()->s_page_table,upage,&info);
   //
   
   *esp = PHYS_BASE;

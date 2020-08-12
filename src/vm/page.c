@@ -74,7 +74,8 @@ virtual_page_info_t get_vaddr_info(s_page_table_t * page_table,
   return info;
 }
 
-int update_vaddr_info(s_page_table_t * page_table,
+// this should be called "set_vaddr_info..."
+int set_vaddr_info(s_page_table_t * page_table,
                       void * vaddr,
                       virtual_page_info_t * info) {
   virtual_page_t * page = (virtual_page_t *)malloc(sizeof(virtual_page_t));

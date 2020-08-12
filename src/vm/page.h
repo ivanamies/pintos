@@ -64,7 +64,7 @@ virtual_page_info_t get_vaddr_info(s_page_table_t * page_table, void * vaddr);
 
 // returns error code 1 if failed
 // virtual_page_info_t will be COPIED
-int update_vaddr_info(s_page_table_t * page_table, void * vaddr, virtual_page_info_t * info);
+int set_vaddr_info(s_page_table_t * page_table, void * vaddr, virtual_page_info_t * info);
 
 // installs upage(arg1) to kpage(arg2) and if its writable(arg3)
 bool install_page(void *, void *, bool);
