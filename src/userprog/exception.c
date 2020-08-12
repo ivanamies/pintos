@@ -7,7 +7,6 @@
 #include "userprog/gdt.h"
 #include "threads/interrupt.h"
 #include "userprog/process.h"
-#include "userprog/syscall.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "filesys/file.h"
@@ -307,19 +306,15 @@ page_fault (struct intr_frame *f)
     bool success = true;
     bool writable = true;
     if ( info.home == PAGE_SOURCE_OF_DATA_ELF ) {
-      int fd = info.fd;
+      struct file * file = info.file;
       uint32_t page_read_bytes = info.page_read_bytes;
       uint32_t page_zero_bytes = info.page_zero_bytes;
-      uint32_t ofs = info.fd_ofs;
-      uint32_t old_ofs = fd_tell(fd);
+      uint32_t ofs = info.elf_file_ofs;
       ASSERT(page_read_bytes + page_zero_bytes == PGSIZE);
       writable = info.writable;
       // wait, why am I using file read anyways? isn't this kernel only code?
-      fd_seek(fd,ofs);
-      int read = fd_read(fd, kpage, page_read_bytes);
-      ASSERT ( read != -1 );
-      success = (uint32_t)read == page_read_bytes;
-      fd_seek(fd,old_ofs);
+      file_seek(file,ofs);
+      success = file_read (file, kpage, page_read_bytes) == (int) page_read_bytes;
       /* hex_dump(0,kpage,128,false); */
       if ( !success ) {
         printf("page fault exception elf file read failed\n");
