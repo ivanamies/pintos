@@ -130,3 +130,62 @@ void uninstall_page(void* upage) {
   struct thread * t = thread_current();
   pagedir_clear_page(t->pagedir, upage);
 }
+
+/* Loads a segment starting at offset OFS in FILE at address
+   UPAGE.  In total, READ_BYTES + ZERO_BYTES bytes of virtual
+   memory are initialized, as follows:
+
+        - READ_BYTES bytes at UPAGE must be read from FILE
+          starting at offset OFS.
+
+        - ZERO_BYTES bytes at UPAGE + READ_BYTES must be zeroed.
+
+   The pages initialized by this function must be writable by the
+   user process if WRITABLE is true, read-only otherwise.
+
+   Return true if successful, false if a memory allocation error
+   or disk read error occurs. */
+bool
+load_segment (struct file *file, uint32_t ofs, uint8_t *upage,
+              uint32_t read_bytes, uint32_t zero_bytes, bool writable, page_source_of_data_e home) 
+{
+  ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
+  ASSERT (pg_ofs (upage) == 0);
+  ASSERT (ofs % PGSIZE == 0);
+
+  struct thread * t = thread_current();
+  
+  ASSERT(t != NULL);
+  
+  file_seek (file, ofs);
+  while (read_bytes > 0 || zero_bytes > 0) 
+    {
+      /* Calculate how to fill this page.
+         We will read PAGE_READ_BYTES bytes from FILE
+         and zero the final PAGE_ZERO_BYTES bytes. */
+      size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
+      size_t page_zero_bytes = PGSIZE - page_read_bytes;
+      
+      // load virtual page information
+      virtual_page_info_t info = { 0 };
+      info.valid = 1;
+      info.home = home;
+      info.owner = thread_current();
+      info.file = file; // why are you using naked files? this should be done with struct thread::exec_fd.
+      info.writable = writable;
+      info.page_read_bytes = page_read_bytes;
+      info.page_zero_bytes = page_zero_bytes;
+      info.elf_file_ofs = ofs;
+      set_vaddr_info(&t->s_page_table,upage,&info);
+      //
+      
+      /* Advance. */
+      read_bytes -= page_read_bytes;
+      zero_bytes -= page_zero_bytes;
+      upage += PGSIZE;
+
+      // pretend to read file
+      ofs += page_read_bytes;
+    }
+  return true;
+}

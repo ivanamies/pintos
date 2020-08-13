@@ -7,7 +7,7 @@ typedef struct mapid_table {
   struct hash mapids;
 } mapid_table_t;
 
-int mmap(int, int, int, void *);
+int mmap(int, void *);
 void munmap(int);
 
 void destroy_mapid_table(mapid_table_t *);

@@ -1,6 +1,8 @@
 #ifndef USERPROG_SYSCALL_H
 #define USERPROG_SYSCALL_H
 
+struct file;
+
 void syscall_init (void);
 
 void init_fd_table (void);
@@ -16,6 +18,10 @@ int fd_tell(int fd);
 
 void fd_deny_write(int fd);
 
+
+// functions that basically shouldn't exist
+// and are hacks
+struct file * fd_get_file(int fd);
 void debug_fd_table(int aux);
 
 #endif /* userprog/syscall.h */

@@ -255,6 +255,19 @@ void fd_deny_write(int fd) {
   lock_release(&fd_table_lock);
 }
 
+struct file * fd_get_file(int fd) {
+  lock_acquire(&fd_table_lock);
+  int fd_idx = fd_to_fd_idx_no_lock(fd);
+  int ret = is_valid_fd_entry_no_lock(fd_idx);
+  struct file * res;
+  if ( ret == 1 ) {
+    res = fd_table[fd_idx].file;
+    ASSERT ( res != NULL );
+  }
+  lock_release(&fd_table_lock);
+  return res;
+}
+
 void
 syscall_init (void) 
 {

@@ -6,9 +6,12 @@
 #include "threads/thread.h"
 
 #include "userprog/exception.h"
+#include "userprog/syscall.h"
 
 #include "vm/page.h"
 #include "vm/frame.h"
+
+#include "filesys/file.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -85,99 +88,78 @@ static int alloc_mapid(int fd, size_t sz, void * p) {
 // ofs is the current offset of the file descriptor
 // note that there is no inter-process race condition, fd are unique to the process
 // doesn't guard against intra-process race conditions but those don't exist here.
-int mmap(int fd, int sz, int ofs, void * addr_) {
- /*  ASSERT(sz != -1); */
- /*  ASSERT(fd != 0 && fd != 1 && fd != 2); */
- /*  uint8_t * addr = addr_; */
- /*  ASSERT( addr == (uint8_t *)pg_round_down(addr)); // addr must be page aligned previously */
- /*  int err = 0; */
- /*  int res = -1; */
- /*  uint8_t * upage = NULL; */
- /*  uint8_t * kpage = NULL; */
- /*  void ** kpages = NULL; */
- /*  int i; */
- /*  int read_bytes = sz; */
- /*  int page_read_bytes; */
- /*  int page_zero_bytes; */
+int mmap(int fd, void * addr_) {
+  ASSERT(fd != 0 && fd != 1 && fd != 2);
+  uint8_t * addr = addr_;
+  ASSERT( addr == (uint8_t *)pg_round_down(addr)); // addr must be page aligned previously
+  int err = 0;
+  int res = -1;
+  bool writable = true;
+  uint8_t * upage = NULL;
+  int i;
+  int page_read_bytes;
+  int page_zero_bytes;
   
- /*  virtual_page_info_t info; */
- /*  frame_aux_info_t frame_aux_info; */
+  virtual_page_info_t info;
   
- /*  int num_pages = sz / PGSIZE; */
+  struct file * file = fd_get_file(fd);
+  ASSERT(file != NULL);
 
- /*  // reset file descriptor to zero */
- /*  seek_fd(fd,0); */
+  size_t old_ofs = file_tell(file); // get the old file ofs
   
- /*  if ( sz % PGSIZE != 0 ) { */
- /*    ++num_pages; */
- /*  } */
+  int sz = file_length(file);
+  int num_pages = sz / PGSIZE;
+  size_t ofs = 0;
   
- /*  // check every page needed is valid */
- /*  for ( i = 0; i < num_pages; ++i ) { */
- /*    upage = addr + i*PGSIZE; */
- /*    info = get_vaddr_info(&thread_current()->s_page_table,upage); */
- /*    if ( info.valid == 1 ) { */
- /*      err = 1; */
- /*      goto memory_map_done; */
- /*    } */
- /*  } */
-
- /*  // if we are not writing to the stack pointer */
- /*  // allocate memory to save kpages in */
- /*  // */
- /*  // fault in stack pages later if we are stackish */
- /*  if ( !is_stackish(addr) ) { */
- /*    kpages = (void **)malloc(num_pages * sizeof(void *)); */
- /*    memset(kpages,0,num_pages*sizeof(void *)); */
-
- /*    for ( i = 0; i < num_pages; ++i ) { */
- /*      upage = addr + i*PGSIZE; */
+  // reset file to 0
+  file_seek(file,0);
+  
+  if ( sz % PGSIZE != 0 ) {
+    ++num_pages;
+  }
+  
+  // check every page needed is unmapped
+  for ( i = 0; i < num_pages; ++i ) {
+    upage = addr + i*PGSIZE;
+    info = get_vaddr_info(&thread_current()->s_page_table,upage);
+    if ( info.valid == 1 ) {
+      err = 1;
+      goto memory_map_done;
+    }
+  }
+  
+  // if we are not writing to the stack pointer
+  // allocate memory to save kpages in
+  //
+  // fault in stack pages later if we are stackish
+  if ( !is_stackish(addr) ) {
+    for ( i = 0; i < num_pages; ++i ) {
+      if ( i < num_pages-1 ) {
+        page_read_bytes = PGSIZE;
+        page_zero_bytes = 0;
+      }
+      else {
+        page_read_bytes = sz % PGSIZE;
+        page_zero_bytes = PGSIZE - sz;
+      }
       
- /*      // why are you installing pages directly? */
- /*      // recycle the code inside the page fault handler */
- /*      // */
- /*      // this code doesn't even work, you can install here, evict the pages */
- /*      // access the pages you evicted, then the page fault handler will assert saying */
- /*      // that you never mapped these pages */
- /*      // because you didn't */
- /*      // you installed the pages directly instead of going through the page fault handler */
- /*      memset(&frame_aux_info,0,sizeof(frame_aux_info)); */
- /*      frame_aux_info.owner = thread_current(); */
- /*      frame_aux_info.addr = upage; */
- /*      kpage = frame_alloc(&frame_aux_info); */
- /*      err = !install_page(upage,kpage,1 /\*writable==true*\/); */
- /*      if ( err == 1) { */
- /*        goto memory_map_done; */
- /*      } */
- /*      page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE; */
- /*      page_zero_bytes = PGSIZE - page_read_bytes; */
- /*      read_fd(fd,upage,sz); */
- /*      memset(upage + page_read_bytes, 0, page_zero_bytes); */
- /*      // */
- /*      kpages[i] = kpages; */
- /*    } */
- /*  } */
+      // this can actually load every page but leave it at one page for now
+      err = !load_segment(file,ofs,upage,page_read_bytes,page_zero_bytes,writable,PAGE_SOURCE_OF_DATA_MMAP);
+      
+      ofs += page_read_bytes;
+    }
+  }
   
- /*  if ( err == 0 ) { */
- /*    res = alloc_mapid(fd,sz,addr); */
- /*  } */
- /* memory_map_done: */
- /*  if ( res == -1 ) { */
- /*    for ( int i = 0; i < num_pages; ++i ) { */
- /*      if ( kpages[i] ) { // if kpages is not null, uninstall the page */
- /*        // it must have been the ith page we installed... */
- /*        upage = addr + i*PGSIZE; */
- /*        uninstall_page(upage); */
- /*        frame_dealloc(kpages[i]); */
- /*      } */
- /*    } */
- /*  } */
- /*  free(kpages); */
- /*  // unseek the fd to what it was */
- /*  seek_fd(fd,ofs); */
- /*  return res; */
-  printf("%d %d %d %p\n",fd,sz,ofs,addr_);
-  return 1;
+  ASSERT( err == 0);
+  
+  if ( err == 0 ) {
+    res = alloc_mapid(fd,sz,addr);
+  }
+ memory_map_done:
+  
+  // unseek the fd to what it was
+  file_seek(file,old_ofs);
+  return res;
 }
 
 void munmap(int mapid) {

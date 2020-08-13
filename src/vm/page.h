@@ -71,4 +71,7 @@ bool install_page(void *, void *, bool);
 
 void uninstall_page(void *);
 
+bool load_segment (struct file *file, uint32_t ofs, uint8_t *upage,
+                   uint32_t read_bytes, uint32_t zero_bytes, bool writable, page_source_of_data_e home);
+
 #endif /* vm/page.h */
