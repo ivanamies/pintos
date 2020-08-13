@@ -19,11 +19,13 @@
 // mapid for memory mapped files
 // look its just an std::unordered_set man
 typedef struct mapid_with_hook {
+  struct hash_elem hash_elem;
+  
   int mapid;
   int fd;
-  int sz;
+  struct file * file;
   void * addr;
-  struct hash_elem hash_elem;
+  
 } mapid_w_hook_t;
 
 static unsigned mapid_hash(const struct hash_elem * p_, void * aux UNUSED) {
@@ -54,7 +56,7 @@ void destroy_mapid_table(mapid_table_t * mapid_table) {
   hash_destroy(&mapid_table->mapids, mapid_destroy);
 }
 
-static int alloc_mapid(int fd, size_t sz, void * p) {
+static int alloc_mapid(int fd, struct file * file, void * p) {
   mapid_table_t * mapid_table = &thread_current()->mapid_table; // mapid's need only be unique to the process
   
   int res = -1;
@@ -74,7 +76,7 @@ static int alloc_mapid(int fd, size_t sz, void * p) {
   
   mapid_w_hook->mapid = res;
   mapid_w_hook->fd = fd;
-  mapid_w_hook->sz = sz;
+  mapid_w_hook->file = file;
   mapid_w_hook->addr = p;
   
   struct hash_elem * hash_elem = hash_insert(&mapid_table->mapids,&mapid_w_hook->hash_elem);
@@ -153,26 +155,41 @@ int mmap(int fd, void * addr_) {
   ASSERT( err == 0);
   
   if ( err == 0 ) {
-    res = alloc_mapid(fd,sz,addr);
+    res = alloc_mapid(fd,file,addr);
   }
  memory_map_done:
-  
   // unseek the fd to what it was
   file_seek(file,old_ofs);
   return res;
 }
 
 void munmap(int mapid) {
-  /* mapid_table_t * mapid_table = &thread_current()->mapid_table; // mapid's need only be unique to the process */
+  mapid_table_t * mapid_table = &thread_current()->mapid_table; // mapid's need only be unique to the process
   
-  /* mapid_w_hook_t mapid_w_hook = { 0 };   */
-  /* mapid_w_hook.mapid = mapid; */
+  mapid_w_hook_t mapid_w_hook = { 0 };
+  mapid_w_hook.mapid = mapid;
   
-  /* struct hash_elem * hash_elem = hash_find(&mapid_table->mapids,&mapid_w_hook.hash_elem); */
-  /* if ( hash_elem ) { */
-  /*   return -1; // no element find */
-  /* } */
+  struct hash_elem * hash_elem = hash_find(&mapid_table->mapids,&mapid_w_hook.hash_elem);
+  if ( hash_elem == NULL ) {
+    return; // no element found
+  }
+  
+  // write pages back to file
+  mapid_w_hook_t * entry = hash_entry(hash_elem, mapid_w_hook_t, hash_elem);
+  struct file * file = entry->file;
+  size_t sz = file_length(file);
+  void * addr = entry->addr;
+  file_write(file,addr,sz);
 
-  /* // write pages back to file */
+  int num_pages = sz / PGSIZE;
+  if ( sz % PG_SIZE != 0 ) {
+    ++num_pages;
+  }
+  // unmap the pages in the supplemental page table
+  for ( int i = 0; i < num_pages; ++i ) {
+    uint8_t * upage = addr + i*PGSIZE;
+    virtual_page_info_t info = { 0 };
+    set_vaddr_info(&thread_current()->s_page_table,upage,&info);
+  }
   
 }
