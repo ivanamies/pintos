@@ -182,7 +182,7 @@ void munmap(int mapid) {
   file_write(file,addr,sz);
 
   int num_pages = sz / PGSIZE;
-  if ( sz % PG_SIZE != 0 ) {
+  if ( sz % PGSIZE != 0 ) {
     ++num_pages;
   }
   // unmap the pages in the supplemental page table
