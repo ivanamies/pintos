@@ -24,10 +24,43 @@ typedef struct frame_table {
   frame_aux_info_t frame_aux_info[MAX_FRAMES];
   struct bitmap *bitmap;
   uint8_t bitmap_data[MAX_FRAMES];
+  int clock_hand;
   
 } frame_table_t;
 
 frame_table_t frame_table_user;
+
+/* static int evict_frame() { */
+/*   // keep global lock for now on frame table for now */
+/*   // really you should global lock to get frame info */
+/*   // lock the lock inside frame info then do the eviction */
+/* } */
+
+static int get_frame_slot_with_eviction(void) {
+  /* ASSERT(false); */
+  /* ASSERT(lock_held_by_current_thread(&frame_table_user.lock)); */
+  /* // go through table in a loop and return a frame table entry */
+  /* // that is either empty or is not accessed or has had its access */
+  /* // set to not accessed */
+  /* uint8_t * upage; */
+  /* struct thread * owner; */
+  
+  /* // consider a more granular lock around just clock_hand */
+  /* int clock_hand = frame_table_user.clock_hand; */
+  
+  /* while ( true ) { */
+  /*   // consider more granular locks around just the frame slots */
+  /*   // this isn't an std::vector */
+  /*   owner = frame_table_user.frame_aux_info[clock_hand].owner; */
+  /*   upage = frame_tabler_user.frame_aux_info[clock_hand].addr; */
+    
+  /*   // you need a lock around all struct thread page table accesses */
+  /*   // because a thread is examining another thread's page table... */
+    
+  /* } */
+
+  return 0;
+}
 
 static int frame_get_index_no_lock(void * p_in) {
   // do operations on char *
@@ -55,6 +88,8 @@ void frame_table_init(void) {
   // let this memory leak because idgaf
   frame_table_user.frames = palloc_get_multiple(PAL_ASSERT | PAL_ZERO | PAL_USER, MAX_FRAMES);
   ASSERT(frame_table_user.frames != NULL);
+
+  frame_table_user.clock_hand = 0;
   
   // let bitmap memory leak too
   size_t bit_cnt = MAX_FRAMES;
@@ -70,14 +105,18 @@ static void* frame_alloc_multiple(int n, frame_aux_info_t * info) {
   size_t start = 0;
   size_t val = 0;
   // I am almost entirely sure there is some bug in bitmap_scan_and_flip
+  //
+  // it should scan and flip left to right
   size_t idx = bitmap_scan_and_flip(frame_table_user.bitmap,start,n,val);
   void * res = NULL;
-  if ( idx != BITMAP_ERROR ) {
-    res = frame_get_frame_no_lock(idx);
-    // update aux info 
-    for ( size_t i = idx; i < idx+n; ++i ) {
-      frame_table_user.frame_aux_info[i] = *info;
-    }
+  if ( idx == BITMAP_ERROR ) {
+    // evict a frame to use if bitmap is full
+    idx = get_frame_slot_with_eviction();
+  }
+  res = frame_get_frame_no_lock(idx);
+  // update aux info 
+  for ( size_t i = idx; i < idx+n; ++i ) {
+    frame_table_user.frame_aux_info[i] = *info;
   }
   ASSERT (res != NULL);
   lock_release(&frame_table_user.lock);
