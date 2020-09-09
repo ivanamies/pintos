@@ -79,12 +79,14 @@ static int get_frame_slot_with_eviction(void) {
   while ( true ) {
     upage = frame_table_user.frame_aux_info[clock_hand].addr;
     owner = frame_table_user.frame_aux_info[clock_hand].owner;
+    lock_acquire(&owner->page_table.pd_lock);
     pagedir = owner->page_table.pagedir;
     if ( check_clock_finish(owner,pagedir,upage) ) {
       break;
     }
     
     increment_clock_hand(pagedir,upage,&clock_hand);
+    lock_acquire(&owner->page_table.pd_lock);
   }
   
   evict_frame(clock_hand);

@@ -117,6 +117,7 @@ bool install_page (void *upage, void *kpage, bool writable)
   struct thread *t = thread_current ();
   uint32_t * pd = t->page_table.pagedir;
 
+  lock_acquire(&t->page_table.pd_lock);
   /* Verify that there's not already a page at that virtual
      address, then map our page there. */
   bool p1 = pagedir_get_page (pd, upage) == NULL;
@@ -124,13 +125,16 @@ bool install_page (void *upage, void *kpage, bool writable)
   if ( p1 ) {
     p2 = pagedir_set_page (pd, upage, kpage, writable);
   }
+  lock_release(&t->page_table.pd_lock);
   return p1 && p2;
 }
 
 void uninstall_page(void* upage) {
   struct thread * t = thread_current();
   uint32_t * pd = t->page_table.pagedir;
+  lock_acquire(&t->page_table.pd_lock);
   pagedir_clear_page(pd, upage);
+  lock_release(&t->page_table.pd_lock);
 }
 
 /* Loads a segment starting at offset OFS in FILE at address

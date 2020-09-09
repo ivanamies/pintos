@@ -391,7 +391,8 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
-  
+
+  lock_acquire(&cur->page_table.pd_lock);
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->page_table.pagedir;
@@ -408,11 +409,13 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
+  lock_release(&cur->page_table.pd_lock);
 }
 
 /* Sets up the CPU for running user code in the current
    thread.
    This function is called on every context switch. */
+// interrupts are off
 void
 process_activate (void)
 {
@@ -516,9 +519,10 @@ load (struct input_args * ia, void (**eip) (void), void **esp)
   
   init_supplemental_page_table(&t->page_table);
   init_mapid_table(&t->mapid_table);
-    
+  
   /* Allocate and activate page directory. */
   t->page_table.pagedir = pagedir_create ();
+  lock_init(&t->page_table.pd_lock);
   if (t->page_table.pagedir == NULL) 
     goto done;
   process_activate ();
