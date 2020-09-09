@@ -6,6 +6,9 @@
 #include "threads/synch.h"
 #include "threads/thread.h"
 
+#include "userprog/pagedir.h"
+
+
 // I don't really trust bitmap since the palloc_get_multiple snafu
 // but let's use it and see what it gives me
 #include "lib/kernel/bitmap.h"
@@ -30,39 +33,66 @@ typedef struct frame_table {
 
 frame_table_t frame_table_user;
 
-/* static int evict_frame() { */
-/*   // keep global lock for now on frame table for now */
-/*   // really you should global lock to get frame info */
-/*   // lock the lock inside frame info then do the eviction */
-/* } */
+static int frame_get_index_no_lock(void *);
+static void * frame_get_frame_no_lock(int);
 
-static int get_frame_slot_with_eviction(void) {
-  /* ASSERT(false); */
-  /* ASSERT(lock_held_by_current_thread(&frame_table_user.lock)); */
-  /* // go through table in a loop and return a frame table entry */
-  /* // that is either empty or is not accessed or has had its access */
-  /* // set to not accessed */
-  /* uint8_t * upage; */
-  /* struct thread * owner; */
+static void evict_frame(int idx) {
+  ASSERT(lock_held_by_current_thread(&frame_table_user.lock));
+  ASSERT(idx != -1);
   
-  /* // consider a more granular lock around just clock_hand */
-  /* int clock_hand = frame_table_user.clock_hand; */
+  // keep global lock for now on frame table for now
+  // really you should global lock to get frame info
+  // lock the lock inside frame info then do the eviction
   
-  /* while ( true ) { */
-  /*   // consider more granular locks around just the frame slots */
-  /*   // this isn't an std::vector */
-  /*   owner = frame_table_user.frame_aux_info[clock_hand].owner; */
-  /*   upage = frame_tabler_user.frame_aux_info[clock_hand].addr; */
-    
-  /*   // you need a lock around all struct thread page table accesses */
-  /*   // because a thread is examining another thread's page table... */
-    
-  /* } */
-
-  return 0;
 }
 
-static int frame_get_index_no_lock(void * p_in) {
+static bool check_clock_finish(void * owner,
+                               uint32_t * pd,
+                               uint8_t * upage) {
+  // the bitmap scan and flip should have found you if owner is null
+  ASSERT(owner != NULL);
+  bool a = pagedir_is_accessed(pd,upage);
+  return a == 0;
+}
+
+static void increment_clock_hand(uint32_t * pd,
+                                 uint8_t * upage,
+                                 int * clock_hand) {
+  // maybe also do silly second clock hand thing
+  pagedir_set_accessed(pd,upage,false/*not accessed*/);
+  ++(*clock_hand);
+  (*clock_hand) %= MAX_FRAMES;
+}
+
+static int get_frame_slot_with_eviction(void) {
+  ASSERT(false);
+  ASSERT(lock_held_by_current_thread(&frame_table_user.lock));
+  
+  uint8_t * upage;
+  struct thread * owner;
+  uint32_t * pagedir;
+  
+  // consider a more granular lock around just clock_hand
+  int clock_hand = frame_table_user.clock_hand;
+
+  // implement clock algorithm
+  while ( true ) {
+    upage = frame_table_user.frame_aux_info[clock_hand].addr;
+    owner = frame_table_user.frame_aux_info[clock_hand].owner;
+    pagedir = owner->pagedir;
+    if ( check_clock_finish(owner,pagedir,upage) ) {
+      break;
+    }
+    
+    increment_clock_hand(pagedir,upage,&clock_hand);
+  }
+  
+  evict_frame(clock_hand);
+  
+  return clock_hand;
+}
+
+int frame_get_index_no_lock(void * p_in) {
   // do operations on char *
   char * first_frame = (char *)frame_table_user.frames;
   char * p = p_in;
@@ -72,7 +102,7 @@ static int frame_get_index_no_lock(void * p_in) {
   return idx;
 }
 
-static void * frame_get_frame_no_lock(int idx) {
+void * frame_get_frame_no_lock(int idx) {
   char * first_frame = frame_table_user.frames;
   size_t diff = idx * PGSIZE;
   void * p = first_frame + diff;
