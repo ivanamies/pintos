@@ -200,7 +200,7 @@ static int grow_stack(void * fault_addr) {
   
   uint8_t * upage = pg_round_down(fault_addr);
   // get if its writable from the supplemental page table
-  virtual_page_info_t info = get_vaddr_info(&thread_current()->s_page_table,upage);
+  virtual_page_info_t info = get_vaddr_info(&thread_current()->page_table,upage);
   ASSERT (info.frame == NULL );
   
   // allocate frame
@@ -290,7 +290,7 @@ page_fault (struct intr_frame *f)
     uint8_t * upage = pg_round_down(fault_addr);
     
     // get if its writable from the supplemental page table
-    virtual_page_info_t info = get_vaddr_info(&thread_current()->s_page_table,upage);
+    virtual_page_info_t info = get_vaddr_info(&thread_current()->page_table,upage);
     if ( info.valid == 0 ) {
       // it hasn't been mapped
       kill(f);

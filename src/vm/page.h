@@ -42,8 +42,20 @@ typedef struct virtual_page {
   
 } virtual_page_t;
 
-typedef struct supplemental_page_table {
+typedef struct page_table {
 
+  uint32_t * pagedir; // userprog/pagedir's pagedir
+  // pagedir's lock
+  // assume that user program memory access without faults
+  // is atomic or non-interruptable and there is no need
+  // for user programs to acquire this lock
+  //
+  // at the same time, assume that altering user program access with faults
+  // and also kernel maintenance tasks must acquire this lock
+  //
+  // if this assumption is wrong, the errors will be weird
+  struct lock pd_lock; // pagedir's lock
+  
   struct hash pages; // hash table of virtual_page_t
   struct lock lock; // intra-process lock on pages and last virtual address
   //
@@ -51,20 +63,20 @@ typedef struct supplemental_page_table {
   // if the list is empty get one from last_virtual address?
   // do if oom is a problem
   
-} s_page_table_t;
+} page_table_t;
 
 
-void init_supplemental_page_table(s_page_table_t * page_table);
+void init_supplemental_page_table(page_table_t * page_table);
 
 // virtual_page_info_t will be COPIED
-void* alloc_virtual_address(s_page_table_t * page_table, virtual_page_info_t * info);
+void* alloc_virtual_address(page_table_t * page_table, virtual_page_info_t * info);
 
 // virtual_page_info_t has valid == 0 if failed
-virtual_page_info_t get_vaddr_info(s_page_table_t * page_table, void * vaddr);
+virtual_page_info_t get_vaddr_info(page_table_t * page_table, void * vaddr);
 
 // returns error code 1 if failed
 // virtual_page_info_t will be COPIED
-int set_vaddr_info(s_page_table_t * page_table, void * vaddr, virtual_page_info_t * info);
+int set_vaddr_info(page_table_t * page_table, void * vaddr, virtual_page_info_t * info);
 
 // installs upage(arg1) to kpage(arg2) and if its writable(arg3)
 bool install_page(void *, void *, bool);

@@ -394,7 +394,7 @@ process_exit (void)
   
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
-  pd = cur->pagedir;
+  pd = cur->page_table.pagedir;
   if (pd != NULL) 
     {
       /* Correct ordering here is crucial.  We must set
@@ -404,7 +404,7 @@ process_exit (void)
          directory before destroying the process's page
          directory, or our active page directory will be one
          that's been freed (and cleared). */
-      cur->pagedir = NULL;
+      cur->page_table.pagedir = NULL;
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
@@ -419,7 +419,7 @@ process_activate (void)
   struct thread *t = thread_current ();
 
   /* Activate thread's page tables. */
-  pagedir_activate (t->pagedir);
+  pagedir_activate (t->page_table.pagedir);
   
   /* Set thread's kernel stack for use in processing
      interrupts. */
@@ -514,12 +514,12 @@ load (struct input_args * ia, void (**eip) (void), void **esp)
   strlcpy(t->process_name,file_name,PROCESS_NAME_MAX_LENGTH);
   // allocate and activate the supplemental page table
   
-  init_supplemental_page_table(&t->s_page_table);
+  init_supplemental_page_table(&t->page_table);
   init_mapid_table(&t->mapid_table);
     
   /* Allocate and activate page directory. */
-  t->pagedir = pagedir_create ();
-  if (t->pagedir == NULL) 
+  t->page_table.pagedir = pagedir_create ();
+  if (t->page_table.pagedir == NULL) 
     goto done;
   process_activate ();
 
@@ -718,7 +718,7 @@ setup_stack (struct input_args * ia, void **esp)
   info.valid = 1;
   info.home = PAGE_SOURCE_OF_DATA_STACK;
   info.owner = thread_current();
-  set_vaddr_info(&thread_current()->s_page_table,upage,&info);
+  set_vaddr_info(&thread_current()->page_table,upage,&info);
   //
   
   *esp = PHYS_BASE;

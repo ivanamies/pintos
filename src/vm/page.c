@@ -25,14 +25,14 @@ static bool page_less(const struct hash_elem * a_,
   return res;
 }
 
-void init_supplemental_page_table(s_page_table_t * page_table) {
+void init_supplemental_page_table(page_table_t * page_table) {
 
   hash_init(&page_table->pages, page_hash, page_less, NULL);
   lock_init(&page_table->lock);
   
 }
 
-void* alloc_virtual_address(s_page_table_t * page_table UNUSED, virtual_page_info_t * info UNUSED) {
+void* alloc_virtual_address(page_table_t * page_table UNUSED, virtual_page_info_t * info UNUSED) {
   ASSERT(false); // probably not needed
   /* ASSERT(info->valid == 1); // you must provide a valid page info... */
   /* struct hash_elem * e; */
@@ -50,7 +50,7 @@ void* alloc_virtual_address(s_page_table_t * page_table UNUSED, virtual_page_inf
   /* return page->addr; */
 }
 
-virtual_page_info_t get_vaddr_info(s_page_table_t * page_table,
+virtual_page_info_t get_vaddr_info(page_table_t * page_table,
                                    void * vaddr) {
   virtual_page_info_t info = { 0 };
   virtual_page_t page;
@@ -75,7 +75,7 @@ virtual_page_info_t get_vaddr_info(s_page_table_t * page_table,
 }
 
 // this should be called "set_vaddr_info..."
-int set_vaddr_info(s_page_table_t * page_table,
+int set_vaddr_info(page_table_t * page_table,
                       void * vaddr,
                       virtual_page_info_t * info) {
   virtual_page_t * page = (virtual_page_t *)malloc(sizeof(virtual_page_t));
@@ -115,20 +115,22 @@ int set_vaddr_info(s_page_table_t * page_table,
 bool install_page (void *upage, void *kpage, bool writable)
 {
   struct thread *t = thread_current ();
+  uint32_t * pd = t->page_table.pagedir;
 
   /* Verify that there's not already a page at that virtual
      address, then map our page there. */
-  bool p1 = pagedir_get_page (t->pagedir, upage) == NULL;
+  bool p1 = pagedir_get_page (pd, upage) == NULL;
   bool p2 = false;
   if ( p1 ) {
-    p2 = pagedir_set_page (t->pagedir, upage, kpage, writable);
+    p2 = pagedir_set_page (pd, upage, kpage, writable);
   }
   return p1 && p2;
 }
 
 void uninstall_page(void* upage) {
   struct thread * t = thread_current();
-  pagedir_clear_page(t->pagedir, upage);
+  uint32_t * pd = t->page_table.pagedir;
+  pagedir_clear_page(pd, upage);
 }
 
 /* Loads a segment starting at offset OFS in FILE at address
@@ -176,7 +178,7 @@ load_segment (struct file *file, uint32_t ofs, uint8_t *upage,
       info.page_read_bytes = page_read_bytes;
       info.page_zero_bytes = page_zero_bytes;
       info.elf_file_ofs = ofs;
-      set_vaddr_info(&t->s_page_table,upage,&info);
+      set_vaddr_info(&t->page_table,upage,&info);
       //
       
       /* Advance. */

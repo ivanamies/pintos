@@ -123,7 +123,7 @@ int mmap(int fd, void * addr_) {
   // check every page needed is unmapped
   for ( i = 0; i < num_pages; ++i ) {
     upage = addr + i*PGSIZE;
-    info = get_vaddr_info(&thread_current()->s_page_table,upage);
+    info = get_vaddr_info(&thread_current()->page_table,upage);
     if ( info.valid == 1 ) {
       err = 1;
       goto memory_map_done;
@@ -189,7 +189,7 @@ void munmap(int mapid) {
   for ( int i = 0; i < num_pages; ++i ) {
     uint8_t * upage = addr + i*PGSIZE;
     virtual_page_info_t info = { 0 };
-    set_vaddr_info(&thread_current()->s_page_table,upage,&info);
+    set_vaddr_info(&thread_current()->page_table,upage,&info);
   }
   
 }

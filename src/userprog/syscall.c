@@ -289,7 +289,7 @@ static int check_user_ptr_mapping(struct intr_frame * f, void * p_, int write) {
   for ( int i = word_size-1; i; --i ) {
     void * upage = pg_round_down(p + i);
     // get if its described from the supplemental page table
-    const virtual_page_info_t info = get_vaddr_info(&thread_current()->s_page_table,upage);
+    const virtual_page_info_t info = get_vaddr_info(&thread_current()->page_table,upage);
     err = info.valid == 0;
     // check if its writable if we're writing to it
     if ( write ) {

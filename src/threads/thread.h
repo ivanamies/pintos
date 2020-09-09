@@ -104,8 +104,7 @@ struct thread
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
-    uint32_t *pagedir;                  /* Page directory. */
-    s_page_table_t s_page_table; // supplemental page table
+    page_table_t page_table; // supplemental page table
     mapid_table_t mapid_table;   // mapid table for memory mapped files
     int parent_pid;
     int exec_fd;
