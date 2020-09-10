@@ -6,6 +6,7 @@
 #include "threads/vaddr.h"
 
 #include <kernel/hash.h>
+#include <stdio.h>
 
 typedef struct swap_page {
   struct hash_elem hash_elem;
@@ -44,20 +45,24 @@ static bool swap_page_less(const struct hash_elem * a_,
 void swap_init(void) {
   swap_page_t * page;
   struct hash_elem * hash_out UNUSED;
-  size_t block_sz; // size of block in sectors
+  size_t num_blocks; // number of blocks in swap
   size_t i;
-  const size_t num_sectors_per_page = PGSIZE / BLOCK_SECTOR_SIZE;
-
+  size_t num_pages;
+  
   lock_init(&swap_table.lock);
   hash_init(&swap_table.available_block_pages,swap_page_hash,swap_page_less,NULL);
   hash_init(&swap_table.unavailable_block_pages,swap_page_hash,swap_page_less,NULL);
 
   swap_table.block = block_get_role(BLOCK_SWAP);
-  block_sz = block_size(swap_table.block); 
-  // we can also do this lazily
-  for ( i = 0; i < block_sz; i += num_sectors_per_page ) {
+  num_blocks = block_size(swap_table.block);
+
+  num_pages = num_blocks * BLOCK_SECTOR_SIZE / PGSIZE;
+  
+  // this SHOULD be done lazily
+  // but I am too lazy to do this
+  for ( i = 0; i < num_pages; ++i ) {
     page = (swap_page_t *)malloc(sizeof(swap_page_t));
-    page->sector = i;
+    page->sector = (PGSIZE / BLOCK_SECTOR_SIZE)*i; // each page is 8 blocks in length
     hash_out = hash_insert(&swap_table.available_block_pages,&page->hash_elem);
   }
 }
@@ -68,12 +73,13 @@ void swap_deinit() {
   // we never call destroy on statics
 }
 
-block_sector_t swap_write_page(void * p, size_t sz) {
+block_sector_t swap_write_page(void * p_, size_t sz) {
+  uint8_t * p;
   swap_page_t * out;
   struct hash_elem * hash_out;
   block_sector_t sector;
   size_t sectors_read;
-  const size_t max_sectors_read = PGSIZE / BLOCK_SECTOR_SIZE;
+  const size_t max_sectors_read = PGSIZE / BLOCK_SECTOR_SIZE; // == 8
   struct hash_iterator i;
 
   ASSERT(sz == PGSIZE);
@@ -95,6 +101,7 @@ block_sector_t swap_write_page(void * p, size_t sz) {
   // write sz bytes of p to swap
   // this is synchronized for you
   for ( sectors_read = 0; sectors_read < max_sectors_read; ++sectors_read ) {
+    p = p_ + sectors_read * BLOCK_SECTOR_SIZE;
     block_write(swap_table.block,sector+sectors_read,p);
   }
 
@@ -113,9 +120,10 @@ block_sector_t swap_write_page(void * p, size_t sz) {
   return sector;
 }
 
-void swap_get_page(void * p, size_t sz, block_sector_t sector) {
+void swap_get_page(void * p_, size_t sz, block_sector_t sector) {
   ASSERT(sz == PGSIZE);
-  
+
+  uint8_t * p;
   struct hash_elem * hash_out;
   swap_page_t key;
   /* swap_page_t * out; */
@@ -125,6 +133,7 @@ void swap_get_page(void * p, size_t sz, block_sector_t sector) {
   key.sector = sector;  
   
   for ( sectors_read = 0; sectors_read < max_sectors_read; ++sectors_read ) {
+    p = p_ + sectors_read * BLOCK_SECTOR_SIZE;
     block_write(swap_table.block, sector + sectors_read, p);
   }
   
