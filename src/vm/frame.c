@@ -8,6 +8,8 @@
 
 #include "userprog/pagedir.h"
 
+#include "vm/swap.h"
+
 
 // I don't really trust bitmap since the palloc_get_multiple snafu
 // but let's use it and see what it gives me
@@ -19,6 +21,17 @@
 #define MAX_FRAMES 128
 
 typedef struct lock lock_t;
+
+typedef struct frame_aux_info {
+  int aux;
+  struct thread * owner; // which process owns the frame, if frame is in use
+  void * addr; // virtual address mapped to this frame, NULL if not mapped
+               // its upage.
+
+  // lock that pins frame data to index for I/O operations
+  lock_t pinning_lock;
+    
+} frame_aux_info_t;
 
 typedef struct frame_table {
   lock_t lock;
@@ -37,22 +50,86 @@ static int frame_get_index_no_lock(void *);
 static void * frame_get_frame_no_lock(int);
 
 static void evict_frame(int idx) {
+  ASSERT(0 <= idx && idx < MAX_FRAMES );
+  // keep global lock on frame table for now for safety
   ASSERT(lock_held_by_current_thread(&frame_table_user.lock));
-  ASSERT(idx != -1);
+  // we already locked the frame, no one can reload into this frame
+  //
+  // prevents the pathological case:
+  // 1. thread 1 evicts frame in evict_frame
+  // 2. interrupt to thread 2 and reloads frame
+  // 3. thread 1 thinks frame was successfully evicted and continues
+  struct lock * pinning_lock = &frame_table_user.frame_aux_info[idx].pinning_lock;
+  ASSERT(lock_held_by_current_thread(pinning_lock));
+
+  struct thread * owner = frame_table_user.frame_aux_info[idx].owner;
+  uint8_t * upage = frame_table_user.frame_aux_info[idx].addr;
+  void * frame = frame_get_frame_no_lock(idx);
   
-  // keep global lock for now on frame table for now
-  // really you should global lock to get frame info
-  // lock the lock inside frame info then do the eviction
+  // uninstall the page
+  // assume it can't somehow interrupt a fault-less memory access by owner
+  // It's a big assumption
+  uninstall_page(owner,upage);
+
+  // figure out where it goes
+  virtual_page_info_t info = get_vaddr_info(&owner->page_table,upage);
+
+  if ( info.home == PAGE_SOURCE_OF_DATA_MMAP ) {
+    // call mmap things
+    // worry about it later
+    ASSERT(false);
+
+    // don't update the data source, we wrote it back to its file
+    // we'll reload it from its file if we fault on it
+  }
+  else if ( info.writable == 1 ) {
+    // must be one of ELF writable (bss) or stack
+    ASSERT(info.home == PAGE_SOURCE_OF_DATA_ELF ||
+           info.home == PAGE_SOURCE_OF_DATA_STACK);
+    
+    // write frame to swap space
+    info.swap_loc = swap_write_page(frame,PGSIZE);
+    // update the other process's MMU
+    info.home = PAGE_SOURCE_OF_DATA_SWAP;
+    info.frame = NULL;
+  }
+  else {
+    // assert its .text or .rodata elf segments
+    ASSERT(info.writable == 0);
+    ASSERT(info.home == PAGE_SOURCE_OF_DATA_ELF);
+    // don't do anything else, just discard it
+    
+    // also don't update the data source
+  }
   
+  lock_release(pinning_lock);
 }
 
 static bool check_clock_finish(void * owner,
                                uint32_t * pd,
-                               uint8_t * upage) {
+                               uint8_t * upage,
+                               int frame_table_idx) {
   // the bitmap scan and flip should have found you if owner is null
   ASSERT(owner != NULL);
   bool a = pagedir_is_accessed(pd,upage);
-  return a == 0;
+  struct lock * lk = &frame_table_user.frame_aux_info[frame_table_idx].pinning_lock;
+  bool success = lock_try_acquire(lk);
+  // four cases here, explicitly laid out instead of being clever
+  if ( a == 0 && success == 0 ) {
+    return false;
+  }
+  else if ( a == 0 && success == 1 ) {
+    return true;
+  }
+  else if ( a == 1 && success == 0 ) {
+    return false;
+  }
+  else {
+    ASSERT(a == 1);
+    ASSERT(success == 1);
+    lock_release(lk);
+    return false;
+  }
 }
 
 static void increment_clock_hand(uint32_t * pd,
@@ -79,16 +156,21 @@ static int get_frame_slot_with_eviction(void) {
   while ( true ) {
     upage = frame_table_user.frame_aux_info[clock_hand].addr;
     owner = frame_table_user.frame_aux_info[clock_hand].owner;
-    lock_acquire(&owner->page_table.pd_lock);
+    
+    // I don't think this lock can do anything
+    // hardware is ignoring the mutex and setting the access bits
+    // ... I don't even care about access bits accuracy
+    // lock_acquire(&owner->page_table.pd_lock);
     pagedir = owner->page_table.pagedir;
-    if ( check_clock_finish(owner,pagedir,upage) ) {
+    if ( check_clock_finish(owner,pagedir,upage,clock_hand) ) {
       break;
     }
-    
     increment_clock_hand(pagedir,upage,&clock_hand);
-    lock_acquire(&owner->page_table.pd_lock);
+    // lock_acquire(&owner->page_table.pd_lock);
   }
   
+  // you acquired the lock to the frame table idx at clock_hand
+  // in check_clock_finish
   evict_frame(clock_hand);
   
   return clock_hand;
@@ -116,6 +198,10 @@ void frame_table_init(void) {
 
   // 0 all the aux info
   memset(frame_table_user.frame_aux_info,0,sizeof(frame_aux_info_t)*MAX_FRAMES);
+
+  for ( size_t i = 0; i < MAX_FRAMES; ++i ) {
+    lock_init(&frame_table_user.frame_aux_info[i].pinning_lock);
+  }
   
   // let this memory leak because idgaf
   frame_table_user.frames = palloc_get_multiple(PAL_ASSERT | PAL_ZERO | PAL_USER, MAX_FRAMES);
@@ -130,7 +216,7 @@ void frame_table_init(void) {
   frame_table_user.bitmap = bitmap_create_in_buf(bit_cnt,block,block_size);
 }
 
-static void* frame_alloc_multiple(int n, frame_aux_info_t * info) {
+static void* frame_alloc_multiple(int n, struct thread * owner, void * addr) {
   ASSERT(n==1); // only works with 1 for now
   lock_acquire(&frame_table_user.lock);
 
@@ -148,7 +234,8 @@ static void* frame_alloc_multiple(int n, frame_aux_info_t * info) {
   res = frame_get_frame_no_lock(idx);
   // update aux info 
   for ( size_t i = idx; i < idx+n; ++i ) {
-    frame_table_user.frame_aux_info[i] = *info;
+    frame_table_user.frame_aux_info[i].owner = owner;
+    frame_table_user.frame_aux_info[i].addr = addr;
   }
   ASSERT (res != NULL);
   lock_release(&frame_table_user.lock);
@@ -156,9 +243,9 @@ static void* frame_alloc_multiple(int n, frame_aux_info_t * info) {
   return res;
 }
 
-void* frame_alloc(frame_aux_info_t * info) {
-  ASSERT (info->owner != NULL); //owner can't be null
-  return frame_alloc_multiple(1,info);
+void* frame_alloc(struct thread * owner, void * addr) {
+  ASSERT (owner != NULL); //owner can't be null
+  return frame_alloc_multiple(1,owner,addr);
 }
 
 void frame_dealloc(void * p) {

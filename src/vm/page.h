@@ -14,6 +14,7 @@ typedef enum page_source_of_data {
   PAGE_SOURCE_OF_DATA_ELF, // .text/.rodata/.bss are R only, .data is R/W
   PAGE_SOURCE_OF_DATA_STACK,
   PAGE_SOURCE_OF_DATA_MMAP,
+  PAGE_SOURCE_OF_DATA_SWAP,
   PAGE_SOURCE_OF_DATA_COUNT
 } page_source_of_data_e;
 
@@ -31,7 +32,10 @@ typedef struct virtual_page_info {
   uint32_t page_zero_bytes;
   int writable;
   uint32_t elf_file_ofs;
-    
+
+  // block_sector_t for reading back from swap, if in swap
+  size_t swap_loc;
+  
 } virtual_page_info_t;
 
 typedef struct virtual_page {
@@ -57,11 +61,7 @@ typedef struct page_table {
   struct lock pd_lock; // pagedir's lock
   
   struct hash pages; // hash table of virtual_page_t
-  struct lock lock; // intra-process lock on pages and last virtual address
-  //
-  // some linked list of freed virtual addresses?
-  // if the list is empty get one from last_virtual address?
-  // do if oom is a problem
+  struct lock lock; // lock for pages, not for pagedir
   
 } page_table_t;
 
@@ -81,7 +81,7 @@ int set_vaddr_info(page_table_t * page_table, void * vaddr, virtual_page_info_t 
 // installs upage(arg1) to kpage(arg2) and if its writable(arg3)
 bool install_page(void *, void *, bool);
 
-void uninstall_page(void *);
+void uninstall_page(struct thread *, void *);
 
 bool load_segment (struct file *file, uint32_t ofs, uint8_t *upage,
                    uint32_t read_bytes, uint32_t zero_bytes, bool writable, page_source_of_data_e home);

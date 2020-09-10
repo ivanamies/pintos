@@ -4,14 +4,18 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "userprog/gdt.h"
 #include "threads/interrupt.h"
-#include "userprog/process.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
-#include "filesys/file.h"
-#include "vm/page.h"
+
+#include "userprog/gdt.h"
+#include "userprog/process.h"
+
 #include "vm/frame.h"
+#include "vm/page.h"
+#include "vm/swap.h"
+
+#include "filesys/file.h"
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -203,11 +207,7 @@ static int grow_stack(void * fault_addr) {
   virtual_page_info_t info = get_vaddr_info(&thread_current()->page_table,upage);
   ASSERT (info.frame == NULL );
   
-  // allocate frame
-  frame_aux_info_t frame_aux_info = { 0 };
-  frame_aux_info.owner = thread_current();
-  frame_aux_info.addr = upage;
-  uint8_t * kpage = frame_alloc(&frame_aux_info);
+  uint8_t * kpage = frame_alloc(thread_current(),upage);
   
   const bool writable = true;
   bool success = install_page(upage, kpage, writable);
@@ -296,12 +296,8 @@ page_fault (struct intr_frame *f)
       kill(f);
     }
     
-    // allocate frame
     // frame_alloc will always succeed
-    frame_aux_info_t frame_aux_info = { 0 };
-    frame_aux_info.owner = thread_current();
-    frame_aux_info.addr = upage;
-    uint8_t *kpage = frame_alloc(&frame_aux_info);
+    uint8_t *kpage = frame_alloc(thread_current(),upage);
     
     bool success = true;
     bool writable = true;
@@ -322,6 +318,11 @@ page_fault (struct intr_frame *f)
         kill(f);
       }
       memset (kpage + page_read_bytes, 0, page_zero_bytes);
+    }
+    else if ( info.home == PAGE_SOURCE_OF_DATA_SWAP ) {
+      swap_get_page(kpage,PGSIZE,info.swap_loc);
+      // also update info
+      // also, you forgot loading from swap into stack
     }
     
     success = install_page (upage, kpage, writable);

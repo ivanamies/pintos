@@ -41,7 +41,7 @@ static bool swap_page_less(const struct hash_elem * a_,
   return res;
 }
 
-void init_swap_table(void) {
+void swap_init(void) {
   swap_page_t * page;
   struct hash_elem * hash_out UNUSED;
   size_t block_sz; // size of block in sectors
@@ -62,13 +62,13 @@ void init_swap_table(void) {
   }
 }
 
-void deinit_swap_table() {
+void swap_deinit() {
   // do nothing
   // this is a static
   // we never call destroy on statics
 }
 
-block_sector_t block_write_frame(void * p, size_t sz) {
+block_sector_t swap_write_page(void * p, size_t sz) {
   swap_page_t * out;
   struct hash_elem * hash_out;
   block_sector_t sector;
@@ -113,7 +113,7 @@ block_sector_t block_write_frame(void * p, size_t sz) {
   return sector;
 }
 
-void block_fetch_frame(void * p, size_t sz, block_sector_t sector) {
+void swap_get_page(void * p, size_t sz, block_sector_t sector) {
   ASSERT(sz == PGSIZE);
   
   struct hash_elem * hash_out;

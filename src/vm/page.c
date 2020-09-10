@@ -129,8 +129,8 @@ bool install_page (void *upage, void *kpage, bool writable)
   return p1 && p2;
 }
 
-void uninstall_page(void* upage) {
-  struct thread * t = thread_current();
+void uninstall_page(struct thread * t, void* upage) {
+  ASSERT(t != NULL);
   uint32_t * pd = t->page_table.pagedir;
   lock_acquire(&t->page_table.pd_lock);
   pagedir_clear_page(pd, upage);

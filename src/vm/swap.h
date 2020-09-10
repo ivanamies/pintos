@@ -4,10 +4,10 @@
 #include <stddef.h>
 #include "devices/block.h"
 
-void init_swap_table(void);
-void deinit_swap_table(void);
+void swap_init(void);
+void swap_deinit(void);
 
-block_sector_t block_write_frame(void * p, size_t sz);
-void block_fetch_frame(void * p, size_t sz, block_sector_t sector);
+block_sector_t swap_write_page(void * p, size_t sz);
+void swap_get_page(void * p, size_t sz, block_sector_t sector);
 
 #endif // VM_SWAP_H
