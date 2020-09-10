@@ -137,7 +137,8 @@ kill (struct intr_frame *f)
     }
 }
 
-static bool check_user_ptr(void * fault_addr_) { // like the one in syscall.c but doesn't check unmapped page
+// like the one in syscall.c but doesn't check unmapped page
+static bool check_user_ptr(void * fault_addr_) {
   uint8_t * fault_addr = fault_addr_;
   if ( fault_addr == NULL ) {
     return false;
@@ -176,7 +177,6 @@ int is_valid_stack_access(struct intr_frame * f, void * fault_addr_, int write U
   // this frankly seems kind of bs but hey its in the spec
   uint8_t * last_valid_addr = (uint8_t *)esp - 32; 
   bool res = true;
-  /* printf("write %d esp %p fault_addr %p\n",write,esp,fault_addr); */
 
   // the spec says you cannot write below the stack pointer
   // the test cases imply you also cannot read below the stack pointer also
@@ -211,7 +211,15 @@ static int grow_stack(void * fault_addr) {
   
   const bool writable = true;
   bool success = install_page(upage, kpage, writable);
-  if ( !success ) {
+  if ( success ) {
+    // update supplemental page table if everything worked
+    info.valid = 1;
+    info.owner = thread_current();
+    info.home = PAGE_SOURCE_OF_DATA_STACK;
+    info.frame = kpage;
+    set_vaddr_info(&thread_current()->page_table,upage,&info);
+  }
+  else {
     frame_dealloc(kpage);
   }
   return success;
@@ -272,29 +280,11 @@ page_fault (struct intr_frame *f)
     kill(f);
   }
 
-  bool stack_like = is_stackish(fault_addr);
+  uint8_t * upage = pg_round_down(fault_addr);  
+  // get if its writable from the supplemental page table
+  virtual_page_info_t info = get_vaddr_info(&thread_current()->page_table,upage);
   
-  /* printf("tagiamies stack_like: %d fault_addr %p\n",stack_like,fault_addr); */
-  
-  if ( stack_like ) {
-    bool valid_stack_access = is_valid_stack_access(f,fault_addr,write);
-    if ( !valid_stack_access ) {
-      kill(f);
-    }
-    int success = grow_stack(fault_addr);
-    if (!success) {
-      kill(f);
-    }
-  }
-  else {    
-    uint8_t * upage = pg_round_down(fault_addr);
-    
-    // get if its writable from the supplemental page table
-    virtual_page_info_t info = get_vaddr_info(&thread_current()->page_table,upage);
-    if ( info.valid == 0 ) {
-      // it hasn't been mapped
-      kill(f);
-    }
+  if ( info.valid == 1 ) {
     
     // frame_alloc will always succeed
     uint8_t *kpage = frame_alloc(thread_current(),upage);
@@ -321,8 +311,6 @@ page_fault (struct intr_frame *f)
     }
     else if ( info.home == PAGE_SOURCE_OF_DATA_SWAP ) {
       swap_get_page(kpage,PGSIZE,info.swap_loc);
-      // also update info
-      // also, you forgot loading from swap into stack
     }
     
     success = install_page (upage, kpage, writable);
@@ -333,4 +321,20 @@ page_fault (struct intr_frame *f)
       kill(f);
     }
   }
+  else if (is_stackish(fault_addr)) {
+    bool valid_stack_access = is_valid_stack_access(f,fault_addr,write);
+    if ( !valid_stack_access ) {
+      kill(f);
+    }
+    int success = grow_stack(fault_addr);
+    if (!success) {
+      kill(f);
+    }    
+  }
+  else {
+    // info was not valid && address not stackish
+    kill(f);
+    
+  }
+
 }
