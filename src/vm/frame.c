@@ -96,19 +96,21 @@ static void evict_frame(int idx) {
   else if ( info.writable == 1 ) {
     // must be one of ELF writable (bss) or stack
     ASSERT(info.home == PAGE_SOURCE_OF_DATA_ELF ||
-           info.home == PAGE_SOURCE_OF_DATA_STACK);
+           info.home == PAGE_SOURCE_OF_DATA_STACK ||
+           info.home == PAGE_SOURCE_OF_DATA_SWAP);
     
-    printf("tagiamies 7\n");
+    // printf("tagiamies 7\n");
     // write frame to swap space
     info.swap_loc = swap_write_page(frame,PGSIZE);
     // update the other process's MMU
     info.home = PAGE_SOURCE_OF_DATA_SWAP;
     info.frame = NULL;
-    printf("tagiamies 8\n");
+    // printf("tagiamies 8\n");
     set_vaddr_info(&owner->page_table,upage,&info);
     // printf("tagiamies 9\n");
   }
   else {
+    // printf("tagiamies 10\n");
     // assert its .text or .rodata elf segments
     ASSERT(info.writable == 0);
     ASSERT(info.home == PAGE_SOURCE_OF_DATA_ELF);

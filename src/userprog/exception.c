@@ -208,6 +208,7 @@ static int grow_stack(void * fault_addr) {
   ASSERT (info.frame == NULL );
   
   uint8_t * kpage = frame_alloc(thread_current(),upage);
+  memset(kpage,0,PGSIZE); // 0 the stack
   
   const bool writable = true;
   bool success = install_page(upage, kpage, writable);
@@ -286,7 +287,7 @@ page_fault (struct intr_frame *f)
   // get if its writable from the supplemental page table
   virtual_page_info_t info = get_vaddr_info(&thread_current()->page_table,upage);
 
-  // printf("info.valid %d upage %p home %d\n",info.valid,upage,info.home);
+  // printf("info.valid %d thread %p upage %p home %d writable %d\n",info.valid,thread_current(),upage,info.home,info.writable);
   
   if ( info.valid == 1 ) {
     
@@ -314,9 +315,7 @@ page_fault (struct intr_frame *f)
       memset (kpage + page_read_bytes, 0, page_zero_bytes);
     }
     else if ( info.home == PAGE_SOURCE_OF_DATA_SWAP ) {
-      printf("tagiamies 1\n");
       swap_get_page(kpage,PGSIZE,info.swap_loc);
-      printf("tagiamies 2\n");
     }
     
     success = install_page (upage, kpage, writable);
@@ -340,7 +339,13 @@ page_fault (struct intr_frame *f)
   else {
     // info was not valid && address not stackish
     kill(f);
-    
   }
+
+  /* size_t sum = 0; */
+  /* for ( int i = 0; i < PGSIZE; ++i ) { */
+  /*   sum += upage[i]; */
+  /* } */
+  /* printf("upage %p sum %zu\n",upage,sum); */
+  
 
 }
