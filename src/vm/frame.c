@@ -34,6 +34,8 @@ typedef struct frame_aux_info {
 } frame_aux_info_t;
 
 typedef struct frame_table {
+  // this lock is for frames and bitmap
+  // frame aux info has its own locks, pinning lock
   lock_t lock;
   
   void* frames; // MAX_FRAME total, continguous in memory, allocated from palloc_get_multiple
@@ -65,20 +67,29 @@ static void evict_frame(int idx) {
   struct thread * owner = frame_table_user.frame_aux_info[idx].owner;
   uint8_t * upage = frame_table_user.frame_aux_info[idx].addr;
   void * frame = frame_get_frame_no_lock(idx);
+
+  // printf("tagiamies 4\n");
   
   // uninstall the page
   // assume it can't somehow interrupt a fault-less memory access by owner
   // It's a big assumption
   uninstall_page(owner,upage);
 
+  // printf("tagiamies 5\n");
+  
   // figure out where it goes
   virtual_page_info_t info = get_vaddr_info(&owner->page_table,upage);
+  ASSERT(info.valid == 1 && "don't try to evict invalid pages");
 
+  // printf("tagiamies 6\n");
+
+  // printf("upage %p info.home %d info.writable %d\n",upage,info.home,info.writable);
+  
   if ( info.home == PAGE_SOURCE_OF_DATA_MMAP ) {
     // call mmap things
     // worry about it later
-    ASSERT(false);
-
+    ASSERT(false && "don't call mmap things");
+    
     // don't update the data source, we wrote it back to its file
     // we'll reload it from its file if we fault on it
   }
@@ -87,11 +98,15 @@ static void evict_frame(int idx) {
     ASSERT(info.home == PAGE_SOURCE_OF_DATA_ELF ||
            info.home == PAGE_SOURCE_OF_DATA_STACK);
     
+    printf("tagiamies 7\n");
     // write frame to swap space
     info.swap_loc = swap_write_page(frame,PGSIZE);
     // update the other process's MMU
     info.home = PAGE_SOURCE_OF_DATA_SWAP;
     info.frame = NULL;
+    printf("tagiamies 8\n");
+    set_vaddr_info(&owner->page_table,upage,&info);
+    // printf("tagiamies 9\n");
   }
   else {
     // assert its .text or .rodata elf segments
@@ -142,7 +157,7 @@ static void increment_clock_hand(uint32_t * pd,
 }
 
 static int get_frame_slot_with_eviction(void) {
-  ASSERT(false);
+  // printf("tagiamies get frame slot with eviction\n");
   ASSERT(lock_held_by_current_thread(&frame_table_user.lock));
   
   uint8_t * upage;
@@ -154,6 +169,11 @@ static int get_frame_slot_with_eviction(void) {
 
   // implement clock algorithm
   while ( true ) {
+
+    //////////////
+    // you can't examine addr and owner without first acquiring the lock...
+    //////////////
+    
     upage = frame_table_user.frame_aux_info[clock_hand].addr;
     owner = frame_table_user.frame_aux_info[clock_hand].owner;
     
@@ -162,17 +182,21 @@ static int get_frame_slot_with_eviction(void) {
     // ... I don't even care about access bits accuracy
     // lock_acquire(&owner->page_table.pd_lock);
     pagedir = owner->page_table.pagedir;
+    // printf("tagiamies 1\n");
     if ( check_clock_finish(owner,pagedir,upage,clock_hand) ) {
       break;
     }
+    // printf("tagiamies 2\n");
     increment_clock_hand(pagedir,upage,&clock_hand);
-    // lock_acquire(&owner->page_table.pd_lock);
+    // lock_release(&owner->page_table.pd_lock);
   }
-  
+
+  // printf("tagiamies 3\n");
   // you acquired the lock to the frame table idx at clock_hand
   // in check_clock_finish
   evict_frame(clock_hand);
   
+  // printf("tagiamies get frame slot with eviction exit\n");
   return clock_hand;
 }
 
@@ -218,6 +242,7 @@ void frame_table_init(void) {
 
 static void* frame_alloc_multiple(int n, struct thread * owner, void * addr) {
   ASSERT(n==1); // only works with 1 for now
+  // printf("tagiamies frame alloc multiple addr %p\n",addr);
   lock_acquire(&frame_table_user.lock);
 
   size_t start = 0;
@@ -232,14 +257,17 @@ static void* frame_alloc_multiple(int n, struct thread * owner, void * addr) {
     idx = get_frame_slot_with_eviction();
   }
   res = frame_get_frame_no_lock(idx);
-  // update aux info 
+  // update aux info
   for ( size_t i = idx; i < idx+n; ++i ) {
+    lock_acquire(&frame_table_user.frame_aux_info[i].pinning_lock);
     frame_table_user.frame_aux_info[i].owner = owner;
     frame_table_user.frame_aux_info[i].addr = addr;
+    lock_release(&frame_table_user.frame_aux_info[i].pinning_lock);
   }
   ASSERT (res != NULL);
   lock_release(&frame_table_user.lock);
   // doesn't keep track of how many pages have been allocated yet
+  // printf("tagiamies frame alloc multiple exit\n");
   return res;
 }
 

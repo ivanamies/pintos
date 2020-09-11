@@ -217,6 +217,8 @@ static int grow_stack(void * fault_addr) {
     info.owner = thread_current();
     info.home = PAGE_SOURCE_OF_DATA_STACK;
     info.frame = kpage;
+    info.writable = writable;
+    // printf("upage %p writable %d\n",upage,writable);
     set_vaddr_info(&thread_current()->page_table,upage,&info);
   }
   else {
@@ -283,6 +285,8 @@ page_fault (struct intr_frame *f)
   uint8_t * upage = pg_round_down(fault_addr);  
   // get if its writable from the supplemental page table
   virtual_page_info_t info = get_vaddr_info(&thread_current()->page_table,upage);
+
+  // printf("info.valid %d upage %p home %d\n",info.valid,upage,info.home);
   
   if ( info.valid == 1 ) {
     
@@ -310,7 +314,9 @@ page_fault (struct intr_frame *f)
       memset (kpage + page_read_bytes, 0, page_zero_bytes);
     }
     else if ( info.home == PAGE_SOURCE_OF_DATA_SWAP ) {
+      printf("tagiamies 1\n");
       swap_get_page(kpage,PGSIZE,info.swap_loc);
+      printf("tagiamies 2\n");
     }
     
     success = install_page (upage, kpage, writable);

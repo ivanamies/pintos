@@ -722,6 +722,7 @@ setup_stack (struct input_args * ia, void **esp)
   info.valid = 1;
   info.home = PAGE_SOURCE_OF_DATA_STACK;
   info.owner = thread_current();
+  info.writable = true; // it is writable
   set_vaddr_info(&thread_current()->page_table,upage,&info);
   //
   

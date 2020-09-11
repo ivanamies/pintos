@@ -73,6 +73,7 @@ void swap_deinit() {
   // we never call destroy on statics
 }
 
+// writes your page to swap
 block_sector_t swap_write_page(void * p_, size_t sz) {
   uint8_t * p;
   swap_page_t * out;
@@ -102,6 +103,7 @@ block_sector_t swap_write_page(void * p_, size_t sz) {
   // this is synchronized for you
   for ( sectors_read = 0; sectors_read < max_sectors_read; ++sectors_read ) {
     p = p_ + sectors_read * BLOCK_SECTOR_SIZE;
+    printf("sector %zu sectors_read %zu\n",sector,sectors_read);
     block_write(swap_table.block,sector+sectors_read,p);
   }
 
@@ -120,6 +122,7 @@ block_sector_t swap_write_page(void * p_, size_t sz) {
   return sector;
 }
 
+// gets your page from swap
 void swap_get_page(void * p_, size_t sz, block_sector_t sector) {
   ASSERT(sz == PGSIZE);
 
@@ -134,7 +137,7 @@ void swap_get_page(void * p_, size_t sz, block_sector_t sector) {
   
   for ( sectors_read = 0; sectors_read < max_sectors_read; ++sectors_read ) {
     p = p_ + sectors_read * BLOCK_SECTOR_SIZE;
-    block_write(swap_table.block, sector + sectors_read, p);
+    block_read(swap_table.block, sector + sectors_read, p);
   }
   
   lock_acquire(&swap_table.lock);
@@ -143,6 +146,7 @@ void swap_get_page(void * p_, size_t sz, block_sector_t sector) {
   ASSERT(hash_out != NULL);
   hash_out = hash_insert(&swap_table.available_block_pages,&key.hash_elem);
   ASSERT(hash_out == NULL);
+  lock_release(&swap_table.lock);
   
 }
 
