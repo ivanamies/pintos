@@ -96,6 +96,19 @@ block_sector_t swap_write_page(void * p_, size_t sz) {
   out = hash_entry(hash_cur(&i), swap_page_t, hash_elem);
   sector = out->sector;
 
+  //debugging code
+  /* if ( sector > 9000 ) { */
+  /*   printf("=============\n"); */
+  /*   // */
+  /*   hash_first(&i,&swap_table.available_block_pages); */
+  /*   while (hash_next (&i)) { */
+  /*     swap_page_t *f = hash_entry (hash_cur (&i), swap_page_t, hash_elem); */
+  /*     printf("sector %d\n",f->sector); */
+  /*   } */
+  /*   ASSERT(false); */
+  /* } */
+  /////////////////////
+
   lock_release(&swap_table.lock);
   ////
 
@@ -103,7 +116,6 @@ block_sector_t swap_write_page(void * p_, size_t sz) {
   // this is synchronized for you
   for ( sectors_read = 0; sectors_read < max_sectors_read; ++sectors_read ) {
     p = p_ + sectors_read * BLOCK_SECTOR_SIZE;
-    printf("sector %zu sectors_read %zu\n",sector,sectors_read);
     block_write(swap_table.block,sector+sectors_read,p);
   }
 
@@ -144,7 +156,7 @@ void swap_get_page(void * p_, size_t sz, block_sector_t sector) {
   // remove from unavailable pages, add back to available pages
   hash_out = hash_delete(&swap_table.unavailable_block_pages,&key.hash_elem);
   ASSERT(hash_out != NULL);
-  hash_out = hash_insert(&swap_table.available_block_pages,&key.hash_elem);
+  hash_out = hash_insert(&swap_table.available_block_pages,hash_out);
   ASSERT(hash_out == NULL);
   lock_release(&swap_table.lock);
   
