@@ -86,6 +86,7 @@ block_sector_t swap_write_page(void * p_, size_t sz) {
   ASSERT(sz == PGSIZE);
   
   ////
+  /* printf("t %p tagiamies 8\n",thread_current()); */
   lock_acquire(&swap_table.lock);
   
   ASSERT (!hash_empty(&swap_table.available_block_pages));
@@ -111,15 +112,18 @@ block_sector_t swap_write_page(void * p_, size_t sz) {
 
   lock_release(&swap_table.lock);
   ////
-
+  
   // write sz bytes of p to swap
   // this is synchronized for you
   for ( sectors_read = 0; sectors_read < max_sectors_read; ++sectors_read ) {
     p = p_ + sectors_read * BLOCK_SECTOR_SIZE;
+    /* printf("t %p tagiamies 9 sector %zu\n",thread_current(),sector); */
     block_write(swap_table.block,sector+sectors_read,p);
+    /* printf("t %p tagiamies 10\n",thread_current()); */
   }
 
   ////
+  /* printf("t %p tagiamies 11\n",thread_current()); */
   lock_acquire(&swap_table.lock);
   
   // remove out from available_block_pages and send to unavailable_block_pages
@@ -127,7 +131,8 @@ block_sector_t swap_write_page(void * p_, size_t sz) {
   ASSERT(hash_out != NULL);
   hash_out = hash_insert(&swap_table.unavailable_block_pages,&out->hash_elem);
   ASSERT(hash_out == NULL);
-  
+
+  /* printf("t %p tagiamies 12\n",thread_current()); */
   lock_release(&swap_table.lock);
   ////
   
@@ -152,12 +157,14 @@ void swap_get_page(void * p_, size_t sz, block_sector_t sector) {
     block_read(swap_table.block, sector + sectors_read, p);
   }
   
+  /* printf("t %p swap get page acquire lock\n",thread_current()); */
   lock_acquire(&swap_table.lock);
   // remove from unavailable pages, add back to available pages
   hash_out = hash_delete(&swap_table.unavailable_block_pages,&key.hash_elem);
   ASSERT(hash_out != NULL);
   hash_out = hash_insert(&swap_table.available_block_pages,hash_out);
   ASSERT(hash_out == NULL);
+  /* printf("t %p swap get page release lock\n",thread_current()); */
   lock_release(&swap_table.lock);
   
 }

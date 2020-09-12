@@ -68,20 +68,20 @@ static void evict_frame(int idx) {
   uint8_t * upage = frame_table_user.frame_aux_info[idx].addr;
   void * frame = frame_get_frame_no_lock(idx);
 
-  // printf("tagiamies 4\n");
+  /* printf("tagiamies 4\n"); */
   
   // uninstall the page
   // assume it can't somehow interrupt a fault-less memory access by owner
   // It's a big assumption
   uninstall_page(owner,upage);
 
-  // printf("tagiamies 5\n");
+  /* printf("tagiamies 5\n"); */
   
   // figure out where it goes
   virtual_page_info_t info = get_vaddr_info(&owner->page_table,upage);
   ASSERT(info.valid == 1 && "don't try to evict invalid pages");
 
-  // printf("tagiamies 6\n");
+  /* printf("tagiamies 6\n"); */
 
   // printf("upage %p info.home %d info.writable %d\n",upage,info.home,info.writable);
   
@@ -99,18 +99,18 @@ static void evict_frame(int idx) {
            info.home == PAGE_SOURCE_OF_DATA_STACK ||
            info.home == PAGE_SOURCE_OF_DATA_SWAP);
     
-    // printf("tagiamies 7\n");
+    /* printf("tagiamies 7\n"); */
     // write frame to swap space
     info.swap_loc = swap_write_page(frame,PGSIZE);
     // update the other process's MMU
     info.home = PAGE_SOURCE_OF_DATA_SWAP;
     info.frame = NULL;
-    // printf("tagiamies 8\n");
+    /* printf("tagiamies 13\n"); */
     set_vaddr_info(&owner->page_table,upage,&info);
-    // printf("tagiamies 9\n");
+    /* printf("tagiamies 14\n"); */
   }
   else {
-    // printf("tagiamies 10\n");
+    /* printf("tagiamies 15\n"); */
     // assert its .text or .rodata elf segments
     ASSERT(info.writable == 0);
     ASSERT(info.home == PAGE_SOURCE_OF_DATA_ELF);
@@ -184,20 +184,21 @@ static int get_frame_slot_with_eviction(void) {
     // ... I don't even care about access bits accuracy
     // lock_acquire(&owner->page_table.pd_lock);
     pagedir = owner->page_table.pagedir;
-    // printf("tagiamies 1\n");
+    /* printf("tagiamies 1\n"); */
     if ( check_clock_finish(owner,pagedir,upage,clock_hand) ) {
       break;
     }
-    // printf("tagiamies 2\n");
+    /* printf("tagiamies 2\n"); */
     increment_clock_hand(pagedir,upage,&clock_hand);
     // lock_release(&owner->page_table.pd_lock);
   }
 
-  // printf("tagiamies 3\n");
+  /* printf("tagiamies 3\n"); */
   // you acquired the lock to the frame table idx at clock_hand
   // in check_clock_finish
   evict_frame(clock_hand);
   
+  /* printf("tagiamies 15\n"); */
   // printf("tagiamies get frame slot with eviction exit\n");
   return clock_hand;
 }
