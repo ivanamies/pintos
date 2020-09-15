@@ -8,6 +8,7 @@
 
 struct thread;
 struct file;
+struct uninstall_request;
 
 typedef enum page_source_of_data {
   PAGE_SOURCE_OF_DATA_UNDEFINED,
@@ -49,16 +50,9 @@ typedef struct virtual_page {
 typedef struct page_table {
 
   uint32_t * pagedir; // userprog/pagedir's pagedir
-  // pagedir's lock
-  // assume that user program memory access without faults
-  // is atomic or non-interruptable and there is no need
-  // for user programs to acquire this lock
-  //
-  // at the same time, assume that altering user program access with faults
-  // and also kernel maintenance tasks must acquire this lock
-  //
-  // if this assumption is wrong, the errors will be weird
-  struct lock pd_lock; // pagedir's lock
+  struct list uninstall_requests;
+  // pagedir's and uninstall_requests's locks
+  struct lock pd_lock; 
   
   struct hash pages; // hash table of virtual_page_t
   struct lock lock; // lock for pages, not for pagedir
@@ -82,6 +76,10 @@ int set_vaddr_info(page_table_t * page_table, void * vaddr, virtual_page_info_t 
 bool install_page(void *, void *, bool);
 
 void uninstall_page(struct thread *, void *);
+
+void uninstall_request_pull(struct thread *, void *);
+
+void uninstall_request_push(void);
 
 bool load_segment (struct file *file, uint32_t ofs, uint8_t *upage,
                    uint32_t read_bytes, uint32_t zero_bytes, bool writable, page_source_of_data_e home);

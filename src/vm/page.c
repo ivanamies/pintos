@@ -8,6 +8,16 @@
 #include "userprog/pagedir.h"
 #include "lib/stdio.h"
 
+typedef struct uninstall_request {
+  struct list_elem lel;
+  void * upage;
+  
+  struct lock cv_lk;
+  struct condition cv;
+  int signal;
+
+} uninstall_request_t;
+
 // hash value for virtual_page_t page
 static unsigned page_hash(const struct hash_elem * p_, void * aux UNUSED) {
   const virtual_page_t * p = hash_entry(p_, virtual_page_t, hash_elem);
@@ -29,7 +39,10 @@ void init_supplemental_page_table(page_table_t * page_table) {
 
   hash_init(&page_table->pages, page_hash, page_less, NULL);
   lock_init(&page_table->lock);
-  
+
+  list_init(&page_table->uninstall_requests);
+  lock_init(&page_table->pd_lock);
+  // just like ignore the pde entry for now
 }
 
 void* alloc_virtual_address(page_table_t * page_table UNUSED, virtual_page_info_t * info UNUSED) {
@@ -135,6 +148,70 @@ void uninstall_page(struct thread * t, void* upage) {
   lock_acquire(&t->page_table.pd_lock);
   pagedir_clear_page(pd, upage);
   lock_release(&t->page_table.pd_lock);
+}
+
+// calling thread blocks untill OWNER calls uninstall_request_push on U_REQ
+// not so sure on the naming...
+void uninstall_request_pull(struct thread * owner, void * upage) {
+  ASSERT(owner != NULL);
+  ASSERT(upage != NULL);
+
+  if ( owner == thread_current() ) {
+    // just uninstall it
+    uninstall_page(owner,upage);
+    return;
+  }
+  
+  uninstall_request_t u_req;
+  lock_init(&u_req.cv_lk);
+  cond_init(&u_req.cv);
+  u_req.upage = upage;
+  u_req.signal = -1;
+  
+  lock_acquire(&owner->page_table.pd_lock);
+  list_push_back(&owner->page_table.uninstall_requests,&u_req.lel);  
+  lock_release(&owner->page_table.pd_lock);
+
+  lock_acquire(&u_req.cv_lk);
+  while ( u_req.signal == -1 ) {
+    cond_wait(&u_req.cv,&u_req.cv_lk);
+  }
+  lock_release(&u_req.cv_lk);
+  
+  ASSERT(u_req.signal == 1); // success
+}
+
+// calling thread fulfills all uninstall requests that are pending
+void uninstall_request_push(void) {
+  struct thread * cur = thread_current();
+  ASSERT(cur != NULL);
+  struct list * reqs;
+  struct list_elem * lel;
+  uninstall_request_t * u_req;
+  void * upage;
+
+  printf("thread %p uinstall request push tagiamies 100\n",cur);
+  
+  lock_acquire(&cur->page_table.pd_lock);
+  printf("thread %p uinstall request push tagiamies 101\n",cur);
+  reqs = &cur->page_table.uninstall_requests;
+  for ( lel = list_begin(reqs); lel != list_end(reqs); lel = list_next(lel) ) {
+    printf("thread %p uinstall request push tagiamies 102\n",cur);
+    u_req = list_entry(lel, uninstall_request_t, lel);
+
+    // begin signalling
+    lock_acquire(&u_req->cv_lk);
+    upage = u_req->upage;
+    printf("thread %p uinstall request push tagiamies 103\n",cur);
+    uninstall_page(cur,upage);
+    printf("thread %p uinstall request push tagiamies 104\n",cur);
+    // signal that the other thread can proceed
+    u_req->signal = 1;
+    cond_signal(&u_req->cv,&u_req->cv_lk);
+    lock_release(&u_req->cv_lk);
+  }
+  printf("thread %p uinstall request push tagiamies 105\n",cur);
+  lock_release(&cur->page_table.pd_lock);
 }
 
 /* Loads a segment starting at offset OFS in FILE at address

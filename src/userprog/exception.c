@@ -268,7 +268,10 @@ page_fault (struct intr_frame *f)
   not_present = (f->error_code & PF_P) == 0;
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
-  
+
+  /* // handle page uninstall requests */
+  /* uninstall_request_push(); */
+
   // validate memory
   bool valid = check_user_ptr(fault_addr);
 
@@ -287,7 +290,7 @@ page_fault (struct intr_frame *f)
   // get if its writable from the supplemental page table
   virtual_page_info_t info = get_vaddr_info(&thread_current()->page_table,upage);
 
-  printf("info.valid %d thread %p upage %p home %d writable %d\n",info.valid,thread_current(),upage,info.home,info.writable);
+  // printf("info.valid %d thread %p upage %p home %d writable %d\n",info.valid,thread_current(),upage,info.home,info.writable);
   
   if ( info.valid == 1 ) {
     
@@ -341,12 +344,12 @@ page_fault (struct intr_frame *f)
     kill(f);
   }
 
-  // 0x8048000
-  size_t sum = 0;
-  for ( int i = 0; i < PGSIZE; ++i ) {
-    sum += upage[i];
-  }
-  printf("upage %p sum %zu\n",upage,sum);
+  /* // 0x8048000 */
+  /* size_t sum = 0; */
+  /* for ( int i = 0; i < PGSIZE; ++i ) { */
+  /*   sum += upage[i]; */
+  /* } */
+  /* printf("upage %p sum %zu\n",upage,sum); */
   
 
 }

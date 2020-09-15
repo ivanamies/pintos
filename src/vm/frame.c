@@ -53,8 +53,7 @@ static void * frame_get_frame_no_lock(int);
 
 static void evict_frame(int idx) {
   ASSERT(0 <= idx && idx < MAX_FRAMES );
-  // keep global lock on frame table for now for safety
-  ASSERT(lock_held_by_current_thread(&frame_table_user.lock));
+  
   // we already locked the frame, no one can reload into this frame
   //
   // prevents the pathological case:
@@ -70,14 +69,20 @@ static void evict_frame(int idx) {
 
   /* printf("tagiamies 4\n"); */
   
-  // uninstall the page
-  // assume it can't somehow interrupt a fault-less memory access by owner
-  // It's a big assumption
-  uninstall_page(owner,upage);
+  /* // uninstall the page */
+  /* // assume it can't somehow interrupt a fault-less memory access by owner */
+  /* // It's a big assumption */
+  /* uninstall_page(owner,upage); */
 
-  /* printf("tagiamies 5\n"); */
+  // printf("threaad %p tagiamies 5\n",thread_current());
   
-  // figure out where it goes
+  // printf("thread %p owner requested %p\n",thread_current(),owner);
+
+  uninstall_request_pull(owner,upage);
+  
+  // printf("thread %p tagiamies 6\n",thread_current());
+  
+  /* // figure out where it goes */
   virtual_page_info_t info = get_vaddr_info(&owner->page_table,upage);
   ASSERT(info.valid == 1 && "don't try to evict invalid pages");
 
@@ -102,12 +107,12 @@ static void evict_frame(int idx) {
     /* printf("tagiamies 7\n"); */
     // write frame to swap space
     info.swap_loc = swap_write_page(frame,PGSIZE);
-    // update the other process's MMU
+    /* // update the other process's MMU */
     info.home = PAGE_SOURCE_OF_DATA_SWAP;
     info.frame = NULL;
-    /* printf("tagiamies 13\n"); */
+    /* /\* printf("tagiamies 13\n"); *\/ */
     set_vaddr_info(&owner->page_table,upage,&info);
-    /* printf("tagiamies 14\n"); */
+    /* /\* printf("tagiamies 14\n"); *\/ */
   }
   else {
     /* printf("tagiamies 15\n"); */
@@ -118,79 +123,54 @@ static void evict_frame(int idx) {
     
     // also don't update the data source
   }
-  
+
+  // release the lock we acquired
   lock_release(pinning_lock);
 }
 
-static bool check_clock_finish(void * owner,
-                               uint32_t * pd,
-                               uint8_t * upage,
-                               int frame_table_idx) {
-  // the bitmap scan and flip should have found you if owner is null
-  ASSERT(owner != NULL);
-  bool a = pagedir_is_accessed(pd,upage);
-  struct lock * lk = &frame_table_user.frame_aux_info[frame_table_idx].pinning_lock;
-  bool success = lock_try_acquire(lk);
-  // four cases here, explicitly laid out instead of being clever
-  if ( a == 0 && success == 0 ) {
-    return false;
-  }
-  else if ( a == 0 && success == 1 ) {
-    return true;
-  }
-  else if ( a == 1 && success == 0 ) {
-    return false;
-  }
-  else {
-    ASSERT(a == 1);
-    ASSERT(success == 1);
-    lock_release(lk);
-    return false;
-  }
-}
-
-static void increment_clock_hand(uint32_t * pd,
-                                 uint8_t * upage,
-                                 int * clock_hand) {
-  // maybe also do silly second clock hand thing
-  pagedir_set_accessed(pd,upage,false/*not accessed*/);
-  ++(*clock_hand);
-  (*clock_hand) %= MAX_FRAMES;
-}
-
 static int get_frame_slot_with_eviction(void) {
-  // printf("tagiamies get frame slot with eviction\n");
-  ASSERT(lock_held_by_current_thread(&frame_table_user.lock));
-  
+  // printf("tagiamies thread %p get frame slot with eviction\n",thread_current());
+
+  uint32_t * pd;
   uint8_t * upage;
   struct thread * owner;
-  uint32_t * pagedir;
   
-  // consider a more granular lock around just clock_hand
-  int clock_hand = frame_table_user.clock_hand;
-
+  int clock_hand;
+  
   // implement clock algorithm
   while ( true ) {
 
-    //////////////
-    // you can't examine addr and owner without first acquiring the lock...
-    //////////////
-    
-    upage = frame_table_user.frame_aux_info[clock_hand].addr;
-    owner = frame_table_user.frame_aux_info[clock_hand].owner;
-    
-    // I don't think this lock can do anything
-    // hardware is ignoring the mutex and setting the access bits
-    // ... I don't even care about access bits accuracy
-    // lock_acquire(&owner->page_table.pd_lock);
-    pagedir = owner->page_table.pagedir;
-    /* printf("tagiamies 1\n"); */
-    if ( check_clock_finish(owner,pagedir,upage,clock_hand) ) {
-      break;
+    // consider a more granular lock around just clock_hand
+    lock_acquire(&frame_table_user.lock);
+    clock_hand = frame_table_user.clock_hand;
+    lock_release(&frame_table_user.lock);
+
+    struct lock * lk = &frame_table_user.frame_aux_info[clock_hand].pinning_lock;
+    bool success = lock_try_acquire(lk);
+    if ( success == 1 ) {
+      owner = frame_table_user.frame_aux_info[clock_hand].owner;
+      upage = frame_table_user.frame_aux_info[clock_hand].addr;
+
+      lock_acquire(&owner->page_table.pd_lock);
+      pd = owner->page_table.pagedir;
+      bool a = pagedir_is_accessed(pd,upage); // save copy of accessed bit
+      // set it to false, fuck you
+      pagedir_set_accessed(pd,upage,false/*not accessed*/);
+      lock_release(&owner->page_table.pd_lock);
+      
+      if ( a == 0 ) {
+        break;
+      }
+      else {        
+        lock_release(lk); // release the frame lock we acquired
+      }
     }
-    /* printf("tagiamies 2\n"); */
-    increment_clock_hand(pagedir,upage,&clock_hand);
-    // lock_release(&owner->page_table.pd_lock);
+    
+    // increment clock hand
+    lock_acquire(&frame_table_user.lock);
+    ++(frame_table_user.clock_hand);
+    (frame_table_user.clock_hand) %= MAX_FRAMES;
+    lock_release(&frame_table_user.lock);        
   }
 
   /* printf("tagiamies 3\n"); */
@@ -245,22 +225,31 @@ void frame_table_init(void) {
 
 static void* frame_alloc_multiple(int n, struct thread * owner, void * addr) {
   ASSERT(n==1); // only works with 1 for now
-  // printf("tagiamies frame alloc multiple addr %p\n",addr);
-  lock_acquire(&frame_table_user.lock);
+  // printf("tagiamies thread %p frame alloc multiple addr %p\n",thread_current(),addr);
 
   size_t start = 0;
   size_t val = 0;
   // I am almost entirely sure there is some bug in bitmap_scan_and_flip
   //
   // it should scan and flip left to right
+  lock_acquire(&frame_table_user.lock);
   size_t idx = bitmap_scan_and_flip(frame_table_user.bitmap,start,n,val);
+  lock_release(&frame_table_user.lock);
   void * res = NULL;
   if ( idx == BITMAP_ERROR ) {
     // evict a frame to use if bitmap is full
     idx = get_frame_slot_with_eviction();
   }
+  lock_acquire(&frame_table_user.lock);
   res = frame_get_frame_no_lock(idx);
+  lock_release(&frame_table_user.lock);
   // update aux info
+  // NOTE THAT YOUR TRANSACTIONS ARE NOT ATOMIC
+  // YOU MUST HOLD THE FRAME SLOT PINNING LOCK WHILE YOU
+  // - EVICT THE OLD FRAME
+  // - UPDATE THE NEW FRAME
+  // - INSTALL THE FRAME FRAME
+  // only after you're completely done with the kpage can you let the lock go...
   for ( size_t i = idx; i < idx+n; ++i ) {
     lock_acquire(&frame_table_user.frame_aux_info[i].pinning_lock);
     frame_table_user.frame_aux_info[i].owner = owner;
@@ -268,7 +257,6 @@ static void* frame_alloc_multiple(int n, struct thread * owner, void * addr) {
     lock_release(&frame_table_user.frame_aux_info[i].pinning_lock);
   }
   ASSERT (res != NULL);
-  lock_release(&frame_table_user.lock);
   // doesn't keep track of how many pages have been allocated yet
   // printf("tagiamies frame alloc multiple exit\n");
   return res;
