@@ -182,6 +182,7 @@ void uninstall_request_pull(struct thread * owner, void * upage) {
 }
 
 // calling thread fulfills all uninstall requests that are pending
+// maybe I have to get the thread scheduler to call this with interrupts off...
 void uninstall_request_push(void) {
   struct thread * cur = thread_current();
   ASSERT(cur != NULL);
@@ -190,27 +191,27 @@ void uninstall_request_push(void) {
   uninstall_request_t * u_req;
   void * upage;
 
-  printf("thread %p uinstall request push tagiamies 100\n",cur);
+  // printf("thread %p uinstall request push tagiamies 100\n",cur);
   
   lock_acquire(&cur->page_table.pd_lock);
-  printf("thread %p uinstall request push tagiamies 101\n",cur);
+  // printf("thread %p uinstall request push tagiamies 101\n",cur);
   reqs = &cur->page_table.uninstall_requests;
   for ( lel = list_begin(reqs); lel != list_end(reqs); lel = list_next(lel) ) {
-    printf("thread %p uinstall request push tagiamies 102\n",cur);
+    // printf("thread %p uinstall request push tagiamies 102\n",cur);
     u_req = list_entry(lel, uninstall_request_t, lel);
 
     // begin signalling
     lock_acquire(&u_req->cv_lk);
     upage = u_req->upage;
-    printf("thread %p uinstall request push tagiamies 103\n",cur);
+    // printf("thread %p uinstall request push tagiamies 103\n",cur);
     uninstall_page(cur,upage);
-    printf("thread %p uinstall request push tagiamies 104\n",cur);
+    // printf("thread %p uinstall request push tagiamies 104\n",cur);
     // signal that the other thread can proceed
     u_req->signal = 1;
     cond_signal(&u_req->cv,&u_req->cv_lk);
     lock_release(&u_req->cv_lk);
   }
-  printf("thread %p uinstall request push tagiamies 105\n",cur);
+  // printf("thread %p uinstall request push tagiamies 105\n",cur);
   lock_release(&cur->page_table.pd_lock);
 }
 

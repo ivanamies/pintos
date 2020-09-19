@@ -74,13 +74,13 @@ static void evict_frame(int idx) {
   /* // It's a big assumption */
   /* uninstall_page(owner,upage); */
 
-  // printf("threaad %p tagiamies 5\n",thread_current());
+  printf("threaad %p tagiamies 5\n",thread_current());
   
-  // printf("thread %p owner requested %p\n",thread_current(),owner);
+  printf("thread %p owner requested %p\n",thread_current(),owner);
 
   uninstall_request_pull(owner,upage);
   
-  // printf("thread %p tagiamies 6\n",thread_current());
+  printf("thread %p tagiamies 6\n",thread_current());
   
   /* // figure out where it goes */
   virtual_page_info_t info = get_vaddr_info(&owner->page_table,upage);
@@ -225,7 +225,7 @@ void frame_table_init(void) {
 
 static void* frame_alloc_multiple(int n, struct thread * owner, void * addr) {
   ASSERT(n==1); // only works with 1 for now
-  // printf("tagiamies thread %p frame alloc multiple addr %p\n",thread_current(),addr);
+  printf("tagiamies thread %p frame alloc multiple addr %p\n",thread_current(),addr);
 
   size_t start = 0;
   size_t val = 0;

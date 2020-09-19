@@ -423,6 +423,10 @@ process_activate (void)
 
   /* Activate thread's page tables. */
   pagedir_activate (t->page_table.pagedir);
+
+  if ( t->page_table.pagedir ) {
+    uninstall_request_push();
+  }
   
   /* Set thread's kernel stack for use in processing
      interrupts. */
