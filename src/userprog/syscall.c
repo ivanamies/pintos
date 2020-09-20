@@ -445,12 +445,14 @@ syscall_handler (struct intr_frame *f UNUSED)
     return;
   }
   else if ( syscall_no == SYS_EXEC ) {
+    printf("thread %p sys exec\n",thread_current());
     tmp_char_ptr = (char *)user_args[0];
     if ( check_user_ptr_with_terminate(f,tmp_char_ptr,0) ) {
       return;
     }
     tid_t p = process_execute(tmp_char_ptr);
     f->eax = p;
+    printf("thread %p sys exec exit\n",thread_current());
   }
   else if ( syscall_no == SYS_WAIT ) {
     f->eax = process_wait((int)user_args[0]);

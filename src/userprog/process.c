@@ -235,7 +235,7 @@ process_execute (const char *input)
   /* ia = malloc(sizeof(struct input_args)); */
   /* memset(ia,0,sizeof(struct input_args)); */
 
-  input_copy = palloc_get_page (0);
+  input_copy = palloc_get_page(0);
   ia = palloc_get_page(0);
   
   if (input_copy == NULL) {
@@ -269,6 +269,7 @@ process_execute (const char *input)
   // wait until the process was created successfully or not
   lock_acquire(&ia->lk);
   while ( ia->signal == -1 ) {
+    printf("thread %p waiting on ia->signal\n",thread_current());
     cond_wait(&ia->cv,&ia->lk);
   }
   lock_release(&ia->lk);
@@ -293,6 +294,8 @@ process_execute (const char *input)
 static void
 start_process (void *input_args_)
 {
+  printf("stack set up thread %p\n",thread_current());
+
   struct input_args *ia = input_args_;
   ASSERT(ia != NULL);
   ASSERT(ia->argc != 0);
@@ -707,6 +710,7 @@ void* push_stack(void * data, size_t n, void * esp_) {
 static bool
 setup_stack (struct input_args * ia, void **esp) 
 {
+  printf("thread %p set up stack\n",thread_current());
   
   ASSERT (ia != NULL);
   ASSERT (ia->argc >= 1); // the first argument in ia->argv is the file name 
@@ -728,17 +732,20 @@ setup_stack (struct input_args * ia, void **esp)
   info.owner = thread_current();
   info.writable = true; // it is writable
   set_vaddr_info(&thread_current()->page_table,upage,&info);
-  //
   
+  //
   *esp = PHYS_BASE;
   // set up process stack
   //
   // push on arguments
   for ( i = ia->argc-1; i >= 0; --i ) {
+    printf("thread %p set up stack 1\n",thread_current());
     (*esp) = push_stack(ia->argv[i],strlen(ia->argv[i])+1 /* include null */, *esp);
     strings_on_stack[num_strings_pushed] = *esp;
     ++num_strings_pushed;
+    printf("thread %p set up stack 2\n",thread_current());
   }
+
   // esp is always rounded to a word length
   // push on nullptr for argv[argc]
   (*esp) = push_stack(&nothing,sizeof(void *),*esp);
@@ -753,6 +760,8 @@ setup_stack (struct input_args * ia, void **esp)
   (*esp) = push_stack(&ia->argc,sizeof(int),*esp);
   // push on dummy return address
   (*esp) = push_stack(&nothing,sizeof(void *),*esp);
+
+  printf("thread %p exit set up stack\n",thread_current());
 
   success = true;
   return success;

@@ -258,7 +258,7 @@ static void* frame_alloc_multiple(int n, struct thread * owner, void * addr) {
   }
   ASSERT (res != NULL);
   // doesn't keep track of how many pages have been allocated yet
-  // printf("tagiamies frame alloc multiple exit\n");
+  printf("tagiamies thread %p frame alloc multiple exit\n",thread_current());
   return res;
 }
 

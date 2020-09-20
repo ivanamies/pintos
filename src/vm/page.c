@@ -156,7 +156,11 @@ void uninstall_request_pull(struct thread * owner, void * upage) {
   ASSERT(owner != NULL);
   ASSERT(upage != NULL);
 
-  if ( owner == thread_current() ) {
+  // if a thread cannot be scheduled, assume it is blocked and uninstall for the
+  // thread.
+  // we can't race on anything the other thread is doing including with its
+  // page directory
+  if ( owner == thread_current() || thread_can_schedule(owner) == 0 ) {
     // just uninstall it
     uninstall_page(owner,upage);
     return;
@@ -240,7 +244,7 @@ load_segment (struct file *file, uint32_t ofs, uint8_t *upage,
   struct thread * t = thread_current();
   
   ASSERT(t != NULL);
-  
+
   file_seek (file, ofs);
   while (read_bytes > 0 || zero_bytes > 0) 
     {
@@ -271,5 +275,6 @@ load_segment (struct file *file, uint32_t ofs, uint8_t *upage,
       // pretend to read file
       ofs += page_read_bytes;
     }
+
   return true;
 }
