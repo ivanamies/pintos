@@ -95,6 +95,11 @@ block_sector_t swap_write_page(void * p_, size_t sz) {
   hash_first(&i,&swap_table.available_block_pages);
   hash_next(&i);
   out = hash_entry(hash_cur(&i), swap_page_t, hash_elem);
+  // remove the hash iterator
+  // has to be done with the same granularity as acquiring the element
+  hash_out = hash_delete(&swap_table.available_block_pages,&out->hash_elem);
+  ASSERT(hash_out != NULL);
+
   sector = out->sector;
 
   //debugging code
@@ -127,8 +132,6 @@ block_sector_t swap_write_page(void * p_, size_t sz) {
   lock_acquire(&swap_table.lock);
   
   // remove out from available_block_pages and send to unavailable_block_pages
-  hash_out = hash_delete(&swap_table.available_block_pages,&out->hash_elem);
-  ASSERT(hash_out != NULL);
   hash_out = hash_insert(&swap_table.unavailable_block_pages,&out->hash_elem);
   ASSERT(hash_out == NULL);
 
