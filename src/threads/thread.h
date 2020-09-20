@@ -153,6 +153,6 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
-int thread_can_schedule(struct thread *);
+int thread_uninstall_page_if_unschedulable(struct thread *, uint8_t*);
 
 #endif /* threads/thread.h */

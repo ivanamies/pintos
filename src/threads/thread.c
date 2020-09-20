@@ -589,11 +589,11 @@ allocate_tid (void)
   return tid;
 }
 
-int thread_can_schedule(struct thread * query) {
+int thread_uninstall_page_if_unschedulable(struct thread * query, uint8_t * upage) {
   enum intr_level old_level;  
   struct list_elem *e;
   struct thread * t;
-  int success = 0;
+  int found = 0;
   
   ASSERT (!intr_context ());
 
@@ -601,14 +601,18 @@ int thread_can_schedule(struct thread * query) {
   old_level = intr_disable ();
 
   // ready list is only accessed when interrupts are turned off
-  for (e = list_begin (&ready_list); e != list_end (&ready_list) && success == 0;
+  for (e = list_begin (&ready_list); e != list_end (&ready_list) && found == 0;
        e = list_next (e)) {
     t = list_entry (e, struct thread, elem);
-    success = query == t;
+    found = query == t;
+  }
+
+  if ( found == 0 ) {
+    uninstall_page(query,upage);
   }
   
   intr_set_level (old_level);
-  return success;
+  return found == 0; // success
 }
 
 

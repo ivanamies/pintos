@@ -145,9 +145,9 @@ bool install_page (void *upage, void *kpage, bool writable)
 void uninstall_page(struct thread * t, void* upage) {
   ASSERT(t != NULL);
   uint32_t * pd = t->page_table.pagedir;
-  lock_acquire(&t->page_table.pd_lock);
+  // lock_acquire(&t->page_table.pd_lock);
   pagedir_clear_page(pd, upage);
-  lock_release(&t->page_table.pd_lock);
+  // lock_release(&t->page_table.pd_lock);
 }
 
 // calling thread blocks untill OWNER calls uninstall_request_push on U_REQ
@@ -156,13 +156,22 @@ void uninstall_request_pull(struct thread * owner, void * upage) {
   ASSERT(owner != NULL);
   ASSERT(upage != NULL);
 
+  if ( owner == thread_current() ) {
+    // just uninstall it
+    uninstall_page(owner,upage);
+    return;
+  }
   // if a thread cannot be scheduled, assume it is blocked and uninstall for the
   // thread.
   // we can't race on anything the other thread is doing including with its
   // page directory
-  if ( owner == thread_current() || thread_can_schedule(owner) == 0 ) {
-    // just uninstall it
-    uninstall_page(owner,upage);
+  // this turns off interrupts
+  // the ENTIRE transaction must be done with interrupts off
+  // don't do something obnoxious like
+  // 1. turn off interrupts, check a thread is blocked, turn on interrupts
+  // 2. the thread unblocks itself, interrupts you, reads using its pde
+  // 3. you interrupt it mid read, then corrupt the pde read
+  else if ( thread_uninstall_page_if_unschedulable(owner,upage) ) {
     return;
   }
   
