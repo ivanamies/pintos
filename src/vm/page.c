@@ -145,6 +145,7 @@ bool install_page (void *upage, void *kpage, bool writable)
 void uninstall_page(struct thread * t, void* upage) {
   ASSERT(t != NULL);
   uint32_t * pd = t->page_table.pagedir;
+  // pretty sure I don't need this lock anymore
   // lock_acquire(&t->page_table.pd_lock);
   pagedir_clear_page(pd, upage);
   // lock_release(&t->page_table.pd_lock);
@@ -156,6 +157,8 @@ void uninstall_request_pull(struct thread * owner, void * upage) {
   ASSERT(owner != NULL);
   ASSERT(upage != NULL);
 
+  printf("uninstall request pull owner %p upage %p\n",owner,upage);
+  
   if ( owner == thread_current() ) {
     // just uninstall it
     uninstall_page(owner,upage);
@@ -181,6 +184,9 @@ void uninstall_request_pull(struct thread * owner, void * upage) {
   u_req.upage = upage;
   u_req.signal = -1;
   
+  printf("thread %p request owner %p with u_req %p page %p start\n",
+         thread_current(),owner,&u_req,upage);
+  
   lock_acquire(&owner->page_table.pd_lock);
   list_push_back(&owner->page_table.uninstall_requests,&u_req.lel);  
   lock_release(&owner->page_table.pd_lock);
@@ -190,7 +196,10 @@ void uninstall_request_pull(struct thread * owner, void * upage) {
     cond_wait(&u_req.cv,&u_req.cv_lk);
   }
   lock_release(&u_req.cv_lk);
-  
+
+    printf("thread %p request owner %p with u_req %p page %p exit\n",
+         thread_current(),owner,&u_req,upage);
+
   ASSERT(u_req.signal == 1); // success
 }
 
@@ -209,21 +218,24 @@ void uninstall_request_push(void) {
   lock_acquire(&cur->page_table.pd_lock);
   // printf("thread %p uinstall request push tagiamies 101\n",cur);
   reqs = &cur->page_table.uninstall_requests;
-  for ( lel = list_begin(reqs); lel != list_end(reqs); lel = list_next(lel) ) {
+  for ( lel = list_begin(reqs); lel != list_end(reqs); lel = list_remove(lel) ) {
     // printf("thread %p uinstall request push tagiamies 102\n",cur);
     u_req = list_entry(lel, uninstall_request_t, lel);
 
     // begin signalling
     lock_acquire(&u_req->cv_lk);
     upage = u_req->upage;
-    // printf("thread %p uinstall request push tagiamies 103\n",cur);
+    // printf("thread %p uinstall request %p push upage %p tagiamies 103\n",cur,u_req,upage);
     uninstall_page(cur,upage);
-    // printf("thread %p uinstall request push tagiamies 104\n",cur);
+    // printf("thread %p uinstall request %p push upage %p tagiamies 104\n",cur,u_req,upage);
     // signal that the other thread can proceed
     u_req->signal = 1;
     cond_signal(&u_req->cv,&u_req->cv_lk);
     lock_release(&u_req->cv_lk);
   }
+  // delete list
+  
+  
   // printf("thread %p uinstall request push tagiamies 105\n",cur);
   lock_release(&cur->page_table.pd_lock);
 }

@@ -269,8 +269,10 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
-  /* // handle page uninstall requests */
-  /* uninstall_request_push(); */
+  // handle page uninstall requests
+  if ( thread_current()->page_table.pagedir ) {
+    uninstall_request_push();
+  }
 
   // validate memory
   bool valid = check_user_ptr(fault_addr);

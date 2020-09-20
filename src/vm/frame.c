@@ -76,7 +76,7 @@ static void evict_frame(int idx) {
 
   printf("threaad %p tagiamies 5\n",thread_current());
   
-  printf("thread %p owner requested %p\n",thread_current(),owner);
+  printf("thread %p requested %p uninstall %p\n",thread_current(),owner,upage);
 
   uninstall_request_pull(owner,upage);
   
