@@ -3,7 +3,6 @@
 
 #include "threads/palloc.h"
 #include "threads/vaddr.h"
-#include "threads/synch.h"
 #include "threads/thread.h"
 
 #include "userprog/pagedir.h"
@@ -16,18 +15,6 @@
 #define MAX_FRAMES 128
 
 typedef struct lock lock_t;
-
-typedef struct frame_aux_info {
-  int aux;
-  struct thread * owner; // which process owns the frame, if frame is in use
-  void * kpage; // actual frame which holds data
-  void * upage; // virtual address mapped to this frame, NULL if not mapped
-               // its upage.
-
-  // lock that pins frame data to index for I/O operations
-  lock_t pinning_lock;
-  
-} frame_aux_info_t;
 
 typedef struct frame_table {
   // this lock is for frames and bitmap
@@ -221,7 +208,7 @@ void frame_table_init(void) {
   frame_table_user.clock_hand = 0;
 }
 
-static void* frame_alloc_multiple(int n, struct thread * owner, void * addr) {
+static frame_aux_info_t* frame_alloc_multiple(int n, struct thread * owner, void * addr) {
   ASSERT(n==1); // only works with 1 for now
   printf("tagiamies thread %p frame alloc multiple addr %p\n",thread_current(),addr);
 
@@ -242,14 +229,12 @@ static void* frame_alloc_multiple(int n, struct thread * owner, void * addr) {
   
   res->owner = owner;
   res->upage = addr;
-
-  lock_release(&res->pinning_lock);
   
   printf("tagiamies thread %p frame alloc multiple exit\n",thread_current());
-  return res->kpage;
+  return res;
 }
 
-void* frame_alloc(struct thread * owner, void * addr) {
+frame_aux_info_t* frame_alloc(struct thread * owner, void * addr) {
   ASSERT (owner != NULL); //owner can't be null
   return frame_alloc_multiple(1,owner,addr);
 }

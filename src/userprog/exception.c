@@ -206,8 +206,10 @@ static int grow_stack(void * fault_addr) {
   // get if its writable from the supplemental page table
   virtual_page_info_t info = get_vaddr_info(&thread_current()->page_table,upage);
   ASSERT (info.frame == NULL );
-  
-  uint8_t * kpage = frame_alloc(thread_current(),upage);
+
+  frame_aux_info_t * frame_info = frame_alloc(thread_current(),upage);
+  uint8_t * kpage = frame_info->kpage;
+    
   memset(kpage,0,PGSIZE); // 0 the stack
   
   const bool writable = true;
@@ -225,6 +227,7 @@ static int grow_stack(void * fault_addr) {
   else {
     frame_dealloc(kpage);
   }
+  lock_release(&frame_info->pinning_lock);
   return success;
   
 }
@@ -297,7 +300,8 @@ page_fault (struct intr_frame *f)
   if ( info.valid == 1 ) {
     
     // frame_alloc will always succeed
-    uint8_t *kpage = frame_alloc(thread_current(),upage);
+    frame_aux_info_t * frame_info = frame_alloc(thread_current(),upage);
+    uint8_t *kpage = frame_info->kpage;
     
     bool success = true;
     bool writable = true;
@@ -324,6 +328,7 @@ page_fault (struct intr_frame *f)
     }
     
     success = install_page (upage, kpage, writable);
+    lock_release(&frame_info->pinning_lock); // release the lock on the kpage
     if (!success) {
       printf("page fault exception install_page failed\n");
       frame_dealloc(kpage);
