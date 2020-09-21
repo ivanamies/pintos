@@ -10,12 +10,7 @@
 
 #include "vm/swap.h"
 
-
-// I don't really trust bitmap since the palloc_get_multiple snafu
-// but let's use it and see what it gives me
-#include "lib/kernel/bitmap.h"
-#include "lib/string.h"
-
+#include <string.h>
 #include <stdio.h>
 
 #define MAX_FRAMES 128
@@ -25,12 +20,13 @@ typedef struct lock lock_t;
 typedef struct frame_aux_info {
   int aux;
   struct thread * owner; // which process owns the frame, if frame is in use
-  void * addr; // virtual address mapped to this frame, NULL if not mapped
+  void * kpage; // actual frame which holds data
+  void * upage; // virtual address mapped to this frame, NULL if not mapped
                // its upage.
 
   // lock that pins frame data to index for I/O operations
   lock_t pinning_lock;
-    
+  
 } frame_aux_info_t;
 
 typedef struct frame_table {
@@ -40,8 +36,7 @@ typedef struct frame_table {
   
   void* frames; // MAX_FRAME total, continguous in memory, allocated from palloc_get_multiple
   frame_aux_info_t frame_aux_info[MAX_FRAMES];
-  struct bitmap *bitmap;
-  uint8_t bitmap_data[MAX_FRAMES];
+    
   int clock_hand;
   
 } frame_table_t;
@@ -64,7 +59,7 @@ static void evict_frame(int idx) {
   ASSERT(lock_held_by_current_thread(pinning_lock));
 
   struct thread * owner = frame_table_user.frame_aux_info[idx].owner;
-  uint8_t * upage = frame_table_user.frame_aux_info[idx].addr;
+  uint8_t * upage = frame_table_user.frame_aux_info[idx].upage;
   void * frame = frame_get_frame_no_lock(idx);
 
   /* printf("tagiamies 4\n"); */
@@ -123,18 +118,16 @@ static void evict_frame(int idx) {
     
     // also don't update the data source
   }
-
-  // release the lock we acquired
-  lock_release(pinning_lock);
 }
 
-static int get_frame_slot_with_eviction(void) {
+static frame_aux_info_t * get_frame_slot_with_eviction(void) {
   // printf("tagiamies thread %p get frame slot with eviction\n",thread_current());
 
   uint32_t * pd;
   uint8_t * upage;
   struct thread * owner;
-  
+  struct lock * lk;
+  bool success;
   int clock_hand;
   
   // implement clock algorithm
@@ -145,17 +138,16 @@ static int get_frame_slot_with_eviction(void) {
     clock_hand = frame_table_user.clock_hand;
     lock_release(&frame_table_user.lock);
 
-    struct lock * lk = &frame_table_user.frame_aux_info[clock_hand].pinning_lock;
-    bool success = lock_try_acquire(lk);
+    lk = &frame_table_user.frame_aux_info[clock_hand].pinning_lock;
+    success = lock_try_acquire(lk);
     if ( success == 1 ) {
       owner = frame_table_user.frame_aux_info[clock_hand].owner;
-      upage = frame_table_user.frame_aux_info[clock_hand].addr;
+      upage = frame_table_user.frame_aux_info[clock_hand].upage;
 
       if ( owner == NULL || upage == NULL) {
         ASSERT(owner == NULL);
         ASSERT(upage == NULL);
-        lock_release(lk); // keep here for now
-        return clock_hand;
+        return &frame_table_user.frame_aux_info[clock_hand];
       }
       
       lock_acquire(&owner->page_table.pd_lock);
@@ -188,7 +180,7 @@ static int get_frame_slot_with_eviction(void) {
   
   /* printf("tagiamies 15\n"); */
   // printf("tagiamies get frame slot with eviction exit\n");
-  return clock_hand;
+  return &frame_table_user.frame_aux_info[clock_hand];
 }
 
 int frame_get_index_no_lock(void * p_in) {
@@ -209,52 +201,34 @@ void * frame_get_frame_no_lock(int idx) {
 }
 
 void frame_table_init(void) {
+  void * p;
+  
   lock_init(&frame_table_user.lock);
 
   // 0 all the aux info
   memset(frame_table_user.frame_aux_info,0,sizeof(frame_aux_info_t)*MAX_FRAMES);
-
-  for ( size_t i = 0; i < MAX_FRAMES; ++i ) {
-    lock_init(&frame_table_user.frame_aux_info[i].pinning_lock);
-  }
   
   // let this memory leak because idgaf
   frame_table_user.frames = palloc_get_multiple(PAL_ASSERT | PAL_ZERO | PAL_USER, MAX_FRAMES);
   ASSERT(frame_table_user.frames != NULL);
 
-  frame_table_user.clock_hand = 0;
+  for ( size_t i = 0; i < MAX_FRAMES; ++i ) {
+    lock_init(&frame_table_user.frame_aux_info[i].pinning_lock);
+    p = frame_get_frame_no_lock(i);
+    frame_table_user.frame_aux_info[i].kpage = p;
+  }
   
-  // let bitmap memory leak too
-  size_t bit_cnt = MAX_FRAMES;
-  void * block = &frame_table_user.bitmap_data;
-  size_t block_size = bit_cnt * sizeof(uint8_t);
-  frame_table_user.bitmap = bitmap_create_in_buf(bit_cnt,block,block_size);
+  frame_table_user.clock_hand = 0;
 }
 
 static void* frame_alloc_multiple(int n, struct thread * owner, void * addr) {
   ASSERT(n==1); // only works with 1 for now
   printf("tagiamies thread %p frame alloc multiple addr %p\n",thread_current(),addr);
 
-  /* size_t start = 0; */
-  /* size_t val = 0; */
-  size_t idx;
-  void * res;
-  // I am almost entirely sure there is some bug in bitmap_scan_and_flip
-  //
-  // it should scan and flip left to right
-  /* lock_acquire(&frame_table_user.lock); */
-  /* size_t idx = bitmap_scan_and_flip(frame_table_user.bitmap,start,n,val); */
-  /* lock_release(&frame_table_user.lock); */
-  /* void * res = NULL; */
-  /* if ( idx == BITMAP_ERROR ) { */
-  /*   // evict a frame to use if bitmap is full */
+  frame_aux_info_t * res;
   
-  // stop using the bitmap, it's just adding complexity
-  idx = get_frame_slot_with_eviction();
-  /* } */
-  lock_acquire(&frame_table_user.lock);
-  res = frame_get_frame_no_lock(idx);
-  lock_release(&frame_table_user.lock);
+  res = get_frame_slot_with_eviction();
+  
   // update aux info
   // NOTE THAT YOUR TRANSACTIONS ARE NOT ATOMIC
   // YOU MUST HOLD THE FRAME SLOT PINNING LOCK WHILE YOU
@@ -262,16 +236,17 @@ static void* frame_alloc_multiple(int n, struct thread * owner, void * addr) {
   // - UPDATE THE NEW FRAME
   // - INSTALL THE FRAME FRAME
   // only after you're completely done with the kpage can you let the lock go...
-  for ( size_t i = idx; i < idx+n; ++i ) {
-    lock_acquire(&frame_table_user.frame_aux_info[i].pinning_lock);
-    frame_table_user.frame_aux_info[i].owner = owner;
-    frame_table_user.frame_aux_info[i].addr = addr;
-    lock_release(&frame_table_user.frame_aux_info[i].pinning_lock);
-  }
-  ASSERT (res != NULL);
-  // doesn't keep track of how many pages have been allocated yet
+
+  ASSERT(res != NULL);
+  ASSERT(res->kpage != NULL);
+  
+  res->owner = owner;
+  res->upage = addr;
+
+  lock_release(&res->pinning_lock);
+  
   printf("tagiamies thread %p frame alloc multiple exit\n",thread_current());
-  return res;
+  return res->kpage;
 }
 
 void* frame_alloc(struct thread * owner, void * addr) {
@@ -280,26 +255,24 @@ void* frame_alloc(struct thread * owner, void * addr) {
 }
 
 void frame_dealloc(void * p) {
-  ASSERT(false);
   ASSERT (p != NULL);
   lock_acquire(&frame_table_user.lock);
   int idx = frame_get_index_no_lock(p);
-  bitmap_flip(frame_table_user.bitmap,idx);
-  /* frame_table_user.frame_aux_info[idx] = { 0 }; */
   memset(&frame_table_user.frame_aux_info[idx],0,sizeof(frame_aux_info_t));
   lock_release(&frame_table_user.lock);
 }
 
 void frame_table_dump(int aux) {
-  lock_acquire(&frame_table_user.lock);
+  ASSERT(false);
+  /* lock_acquire(&frame_table_user.lock); */
 
-  printf("===frame table dump %d===\n",aux);
-  for ( int i = 0; i < MAX_FRAMES; ++i ) {
-    char * p = frame_table_user.frames;
-    p += (PGSIZE * i);
-    printf("frame[%d]: %p\n",i,p);
-  }
-  bitmap_dump(frame_table_user.bitmap);
+  /* printf("===frame table dump %d===\n",aux); */
+  /* for ( int i = 0; i < MAX_FRAMES; ++i ) { */
+  /*   char * p = frame_table_user.frames; */
+  /*   p += (PGSIZE * i); */
+  /*   printf("frame[%d]: %p\n",i,p); */
+  /* } */
+  /* bitmap_dump(frame_table_user.bitmap); */
   
-  lock_release(&frame_table_user.lock);  
+  /* lock_release(&frame_table_user.lock);   */
 }
