@@ -151,10 +151,18 @@ static int get_frame_slot_with_eviction(void) {
       owner = frame_table_user.frame_aux_info[clock_hand].owner;
       upage = frame_table_user.frame_aux_info[clock_hand].addr;
 
+      if ( owner == NULL || upage == NULL) {
+        ASSERT(owner == NULL);
+        ASSERT(upage == NULL);
+        lock_release(lk); // keep here for now
+        return clock_hand;
+      }
+      
       lock_acquire(&owner->page_table.pd_lock);
       pd = owner->page_table.pagedir;
       bool a = pagedir_is_accessed(pd,upage); // save copy of accessed bit
-      // set it to false, fuck you
+      // set it to false
+      // if I race on this bit, fuck you
       pagedir_set_accessed(pd,upage,false/*not accessed*/);
       lock_release(&owner->page_table.pd_lock);
       
@@ -227,19 +235,23 @@ static void* frame_alloc_multiple(int n, struct thread * owner, void * addr) {
   ASSERT(n==1); // only works with 1 for now
   printf("tagiamies thread %p frame alloc multiple addr %p\n",thread_current(),addr);
 
-  size_t start = 0;
-  size_t val = 0;
+  /* size_t start = 0; */
+  /* size_t val = 0; */
+  size_t idx;
+  void * res;
   // I am almost entirely sure there is some bug in bitmap_scan_and_flip
   //
   // it should scan and flip left to right
-  lock_acquire(&frame_table_user.lock);
-  size_t idx = bitmap_scan_and_flip(frame_table_user.bitmap,start,n,val);
-  lock_release(&frame_table_user.lock);
-  void * res = NULL;
-  if ( idx == BITMAP_ERROR ) {
-    // evict a frame to use if bitmap is full
-    idx = get_frame_slot_with_eviction();
-  }
+  /* lock_acquire(&frame_table_user.lock); */
+  /* size_t idx = bitmap_scan_and_flip(frame_table_user.bitmap,start,n,val); */
+  /* lock_release(&frame_table_user.lock); */
+  /* void * res = NULL; */
+  /* if ( idx == BITMAP_ERROR ) { */
+  /*   // evict a frame to use if bitmap is full */
+  
+  // stop using the bitmap, it's just adding complexity
+  idx = get_frame_slot_with_eviction();
+  /* } */
   lock_acquire(&frame_table_user.lock);
   res = frame_get_frame_no_lock(idx);
   lock_release(&frame_table_user.lock);
@@ -268,6 +280,7 @@ void* frame_alloc(struct thread * owner, void * addr) {
 }
 
 void frame_dealloc(void * p) {
+  ASSERT(false);
   ASSERT (p != NULL);
   lock_acquire(&frame_table_user.lock);
   int idx = frame_get_index_no_lock(p);

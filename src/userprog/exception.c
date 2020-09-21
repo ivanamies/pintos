@@ -296,15 +296,11 @@ page_fault (struct intr_frame *f)
   
   if ( info.valid == 1 ) {
     
-    bool success = true;
-    bool writable = info.writable;
-    
     // frame_alloc will always succeed
-    // upage CANNOT be uninstalled until the exception has finished
     uint8_t *kpage = frame_alloc(thread_current(),upage);
-    success = install_page (upage, kpage, writable);
-    ASSERT(success); // page fault exception install page must ALWAYS succeed
-
+    
+    bool success = true;
+    bool writable = true;
     if ( info.home == PAGE_SOURCE_OF_DATA_ELF ||
          info.home == PAGE_SOURCE_OF_DATA_MMAP ) {
       struct file * file = info.file;
@@ -312,15 +308,28 @@ page_fault (struct intr_frame *f)
       uint32_t page_zero_bytes = info.page_zero_bytes;
       uint32_t ofs = info.elf_file_ofs;
       ASSERT(page_read_bytes + page_zero_bytes == PGSIZE);
+      writable = info.writable;
       file_seek(file,ofs);
-      success = file_read (file, upage, page_read_bytes) == (int) page_read_bytes;
-      ASSERT(success); // page fault exception must succeed to read elf file
-      memset (upage + page_read_bytes, 0, page_zero_bytes);
+      success = file_read (file, kpage, page_read_bytes) == (int) page_read_bytes;
+      /* hex_dump(0,kpage,128,false); */
+      if ( !success ) {
+        printf("page fault exception elf file read failed\n");
+        frame_dealloc(kpage);
+        kill(f);
+      }
+      memset (kpage + page_read_bytes, 0, page_zero_bytes);
     }
     else if ( info.home == PAGE_SOURCE_OF_DATA_SWAP ) {
-      swap_get_page(upage,PGSIZE,info.swap_loc);
+      swap_get_page(kpage,PGSIZE,info.swap_loc);
     }
     
+    success = install_page (upage, kpage, writable);
+    if (!success) {
+      printf("page fault exception install_page failed\n");
+      frame_dealloc(kpage);
+      printf("successfully dealloc kpage \n");
+      kill(f);
+    }
   }
   else if (is_stackish(fault_addr)) {
     bool valid_stack_access = is_valid_stack_access(f,fault_addr,write);
