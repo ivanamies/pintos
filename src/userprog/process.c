@@ -227,6 +227,8 @@ process_execute (const char *input)
   tid_t tid;
 
   ASSERT(sizeof(struct input_args) <= PGSIZE);
+
+  printf("thread %p process execute start\n",thread_current());
   
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
@@ -285,6 +287,8 @@ process_execute (const char *input)
   /* free(input_copy); */
   palloc_free_page (ia);
   palloc_free_page (input_copy); 
+
+  printf("thread %p exit process execute\n",thread_current());
   
   return tid;
 }
@@ -355,6 +359,18 @@ process_wait (tid_t child_tid UNUSED)
   int current_execution_status;
   int exit_value;
   do {
+    // lazily (and incorrectly) have processes do uninstall requests here also
+    // what happens is if two threads are waiting, they both can end up in the ready queue
+    // uninstall_request_pull is wrong because it expects both threads never be in the ready
+    // queue in that situation
+    // as a temporary fix, have page uninstall requests be done here
+    //
+    // it will also be a problem with processes trapped in semaphores
+    // not sure how to deal with that yet... maybe put it in thread schedule, but I think
+    // I tried that before and it didn't work
+    if ( thread_current()->page_table.pagedir) {
+      uninstall_request_push();
+    }
     get_child_process_status(pid,child_tid,&current_execution_status,&exit_value);
     if ( current_execution_status == PROCESS_RUNNING ) {
       thread_yield();

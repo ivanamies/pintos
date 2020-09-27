@@ -157,9 +157,11 @@ void uninstall_request_pull(struct thread * owner, void * upage) {
   ASSERT(owner != NULL);
   ASSERT(upage != NULL);
 
-  printf("uninstall request pull owner %p upage %p\n",owner,upage);
+  struct thread * cur = thread_current();
   
-  if ( owner == thread_current() ) {
+  printf("uninstall request pull owner %p upage %p\n",owner,upage);
+  printf("owner == cur %d\n",owner==cur);
+  if ( owner == cur ) {
     // just uninstall it
     uninstall_page(owner,upage);
     return;
@@ -216,7 +218,9 @@ void uninstall_request_push(void) {
   // printf("thread %p uinstall request push tagiamies 100\n",cur);
   
   lock_acquire(&cur->page_table.pd_lock);
+  
   // printf("thread %p uinstall request push tagiamies 101\n",cur);
+  
   reqs = &cur->page_table.uninstall_requests;
   for ( lel = list_begin(reqs); lel != list_end(reqs); lel = list_remove(lel) ) {
     // printf("thread %p uinstall request push tagiamies 102\n",cur);

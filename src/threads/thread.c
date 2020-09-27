@@ -606,7 +606,7 @@ int thread_uninstall_page_if_unschedulable(struct thread * query, uint8_t * upag
     t = list_entry (e, struct thread, elem);
     found = query == t;
   }
-
+  
   // has to be done under the same sync granularity as checking the ready list
   if ( found == 0 ) {
     uninstall_page(query,upage);

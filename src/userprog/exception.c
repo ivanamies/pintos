@@ -301,6 +301,7 @@ page_fault (struct intr_frame *f)
     
     // frame_alloc will always succeed
     frame_aux_info_t * frame_info = frame_alloc(thread_current(),upage);
+    printf("thread %p frame alloc exit info.home %d\n",thread_current(),info.home);
     uint8_t *kpage = frame_info->kpage;
     
     bool success = true;
@@ -324,6 +325,7 @@ page_fault (struct intr_frame *f)
       memset (kpage + page_read_bytes, 0, page_zero_bytes);
     }
     else if ( info.home == PAGE_SOURCE_OF_DATA_SWAP ) {
+      printf("thread %p frame %p gotten from %zu\n",thread_current(),kpage,info.swap_loc);
       swap_get_page(kpage,PGSIZE,info.swap_loc);
     }
     

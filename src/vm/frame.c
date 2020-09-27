@@ -60,6 +60,8 @@ static void evict_frame(int idx) {
   
   printf("thread %p requested %p uninstall %p\n",thread_current(),owner,upage);
 
+  // go add the part where you update the other thread's page table
+  // to this function....
   uninstall_request_pull(owner,upage);
   
   printf("thread %p tagiamies 6\n",thread_current());
@@ -71,6 +73,13 @@ static void evict_frame(int idx) {
   /* printf("tagiamies 6\n"); */
 
   // printf("upage %p info.home %d info.writable %d\n",upage,info.home,info.writable);
+  
+  /////////////////
+  // ... shouldn't this entire segment be inside uninstall_request_pull .... ?
+  //////////////////
+  /////////////////
+  ///////////////////
+  ///////////////////
   
   if ( info.home == PAGE_SOURCE_OF_DATA_MMAP ) {
     // call mmap things
@@ -89,22 +98,31 @@ static void evict_frame(int idx) {
     /* printf("tagiamies 7\n"); */
     // write frame to swap space
     info.swap_loc = swap_write_page(frame,PGSIZE);
+    printf("thread %p frame %p written to %zu\n",thread_current(),frame,info.swap_loc);
+
+    ///////////////
+    // hmmmm..........
+    //////////////////////////////////////
+    //////////////////////////////////////
+    //////////////////////////////////////
     /* // update the other process's MMU */
     info.home = PAGE_SOURCE_OF_DATA_SWAP;
     info.frame = NULL;
     /* /\* printf("tagiamies 13\n"); *\/ */
     set_vaddr_info(&owner->page_table,upage,&info);
     /* /\* printf("tagiamies 14\n"); *\/ */
+    //////////////////////////////////////
   }
   else {
     /* printf("tagiamies 15\n"); */
     // assert its .text or .rodata elf segments
     ASSERT(info.writable == 0);
     ASSERT(info.home == PAGE_SOURCE_OF_DATA_ELF);
-    // don't do anything else, just discard it
-    
-    // also don't update the data source
+    // don't do anything else, just discard the info in it    
   }
+  
+  memset(frame,0,PGSIZE);
+
 }
 
 static frame_aux_info_t * get_frame_slot_with_eviction(void) {
@@ -130,7 +148,7 @@ static frame_aux_info_t * get_frame_slot_with_eviction(void) {
     if ( success == 1 ) {
       owner = frame_table_user.frame_aux_info[clock_hand].owner;
       upage = frame_table_user.frame_aux_info[clock_hand].upage;
-
+      
       if ( owner == NULL || upage == NULL) {
         ASSERT(owner == NULL);
         ASSERT(upage == NULL);
@@ -210,20 +228,12 @@ void frame_table_init(void) {
 
 static frame_aux_info_t* frame_alloc_multiple(int n, struct thread * owner, void * addr) {
   ASSERT(n==1); // only works with 1 for now
-  printf("tagiamies thread %p frame alloc multiple addr %p\n",thread_current(),addr);
+  printf("tagiamies thread %p frame alloc multiple for upage %p\n",thread_current(),addr);
 
   frame_aux_info_t * res;
   
   res = get_frame_slot_with_eviction();
   
-  // update aux info
-  // NOTE THAT YOUR TRANSACTIONS ARE NOT ATOMIC
-  // YOU MUST HOLD THE FRAME SLOT PINNING LOCK WHILE YOU
-  // - EVICT THE OLD FRAME
-  // - UPDATE THE NEW FRAME
-  // - INSTALL THE FRAME FRAME
-  // only after you're completely done with the kpage can you let the lock go...
-
   ASSERT(res != NULL);
   ASSERT(res->kpage != NULL);
   
