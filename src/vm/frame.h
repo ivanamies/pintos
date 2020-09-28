@@ -20,6 +20,8 @@ typedef struct frame_aux_info {
 void frame_table_init(void);
 frame_aux_info_t* frame_alloc(struct thread *, void *);
 void frame_dealloc(void *);
+// gets frame lock given frame
+struct lock * frame_get_frame_lock(void *);
 
 // for debugging
 void frame_table_dump(int);

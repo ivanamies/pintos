@@ -77,7 +77,7 @@ bool install_page(void *, void *, bool);
 
 void uninstall_page(struct thread *, void *);
 
-void uninstall_request_pull(struct thread *, void *);
+void uninstall_request_pull(struct thread * owner, void * upage, void * kpage);
 
 void uninstall_request_push(void);
 

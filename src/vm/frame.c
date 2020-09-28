@@ -62,65 +62,10 @@ static void evict_frame(int idx) {
 
   // go add the part where you update the other thread's page table
   // to this function....
-  uninstall_request_pull(owner,upage);
+  uninstall_request_pull(owner,upage,frame);
   
   printf("thread %p tagiamies 6\n",thread_current());
-  
-  /* // figure out where it goes */
-  virtual_page_info_t info = get_vaddr_info(&owner->page_table,upage);
-  ASSERT(info.valid == 1 && "don't try to evict invalid pages");
-
-  /* printf("tagiamies 6\n"); */
-
-  // printf("upage %p info.home %d info.writable %d\n",upage,info.home,info.writable);
-  
-  /////////////////
-  // ... shouldn't this entire segment be inside uninstall_request_pull .... ?
-  //////////////////
-  /////////////////
-  ///////////////////
-  ///////////////////
-  
-  if ( info.home == PAGE_SOURCE_OF_DATA_MMAP ) {
-    // call mmap things
-    // worry about it later
-    ASSERT(false && "don't call mmap things");
     
-    // don't update the data source, we wrote it back to its file
-    // we'll reload it from its file if we fault on it
-  }
-  else if ( info.writable == 1 ) {
-    // must be one of ELF writable (bss) or stack
-    ASSERT(info.home == PAGE_SOURCE_OF_DATA_ELF ||
-           info.home == PAGE_SOURCE_OF_DATA_STACK ||
-           info.home == PAGE_SOURCE_OF_DATA_SWAP);
-    
-    /* printf("tagiamies 7\n"); */
-    // write frame to swap space
-    info.swap_loc = swap_write_page(frame,PGSIZE);
-    printf("thread %p frame %p written to %zu\n",thread_current(),frame,info.swap_loc);
-
-    ///////////////
-    // hmmmm..........
-    //////////////////////////////////////
-    //////////////////////////////////////
-    //////////////////////////////////////
-    /* // update the other process's MMU */
-    info.home = PAGE_SOURCE_OF_DATA_SWAP;
-    info.frame = NULL;
-    /* /\* printf("tagiamies 13\n"); *\/ */
-    set_vaddr_info(&owner->page_table,upage,&info);
-    /* /\* printf("tagiamies 14\n"); *\/ */
-    //////////////////////////////////////
-  }
-  else {
-    /* printf("tagiamies 15\n"); */
-    // assert its .text or .rodata elf segments
-    ASSERT(info.writable == 0);
-    ASSERT(info.home == PAGE_SOURCE_OF_DATA_ELF);
-    // don't do anything else, just discard the info in it    
-  }
-  
   memset(frame,0,PGSIZE);
 
 }
@@ -255,6 +200,12 @@ void frame_dealloc(void * p) {
   int idx = frame_get_index_no_lock(p);
   memset(&frame_table_user.frame_aux_info[idx],0,sizeof(frame_aux_info_t));
   lock_release(&frame_table_user.lock);
+}
+
+struct lock * frame_get_frame_lock(void * upage) {
+  size_t idx = frame_get_index_no_lock(upage);
+  struct lock * res = &frame_table_user.frame_aux_info[idx].pinning_lock;
+  return res;
 }
 
 void frame_table_dump(int aux) {

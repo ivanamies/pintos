@@ -1,12 +1,18 @@
 
+#include <stdio.h>
+
 #include "vm/page.h"
 
-#include "threads/vaddr.h"
-#include "threads/thread.h"
-#include "filesys/file.h"
 #include "threads/malloc.h"
+#include "threads/thread.h"
+#include "threads/vaddr.h"
+
 #include "userprog/pagedir.h"
-#include "lib/stdio.h"
+
+#include "vm/frame.h"
+#include "vm/swap.h"
+
+#include "filesys/file.h"
 
 typedef struct uninstall_request {
   struct list_elem lel;
@@ -63,8 +69,10 @@ void* alloc_virtual_address(page_table_t * page_table UNUSED, virtual_page_info_
   /* return page->addr; */
 }
 
-virtual_page_info_t get_vaddr_info(page_table_t * page_table,
-                                   void * vaddr) {
+static virtual_page_info_t get_vaddr_info_no_lock(page_table_t * page_table,
+                                           void *  vaddr) {
+  ASSERT(lock_held_by_current_thread(&page_table->lock));
+         
   virtual_page_info_t info = { 0 };
   virtual_page_t page;
   virtual_page_t * discovered;
@@ -74,23 +82,30 @@ virtual_page_info_t get_vaddr_info(page_table_t * page_table,
   info.valid = 0;
   
   page.addr = vaddr;
-  
-  lock_acquire(&page_table->lock);
+
   e = hash_find(&page_table->pages,&page.hash_elem);
   
   if ( e != NULL ) {
     discovered = hash_entry(e,virtual_page_t,hash_elem);
     info = discovered->info;
   }
-  
+
+  return info;
+
+}
+
+virtual_page_info_t get_vaddr_info(page_table_t * page_table,
+                                   void * vaddr) {  
+  lock_acquire(&page_table->lock);
+  virtual_page_info_t info = get_vaddr_info_no_lock(page_table,vaddr);
   lock_release(&page_table->lock);
   return info;
 }
 
-// this should be called "set_vaddr_info..."
-int set_vaddr_info(page_table_t * page_table,
-                      void * vaddr,
-                      virtual_page_info_t * info) {
+static int set_vaddr_info_no_lock(page_table_t * page_table,
+                           void * vaddr,
+                           virtual_page_info_t * info) {
+  ASSERT(lock_held_by_current_thread(&page_table->lock));
   virtual_page_t * page = (virtual_page_t *)malloc(sizeof(virtual_page_t));
   page->addr = vaddr;
   virtual_page_t * discovered;
@@ -98,8 +113,6 @@ int set_vaddr_info(page_table_t * page_table,
   int err = 0;
 
   page->addr = vaddr;
-
-  lock_acquire(&page_table->lock);
 
   e = hash_insert(&page_table->pages,&page->hash_elem);
 
@@ -112,6 +125,14 @@ int set_vaddr_info(page_table_t * page_table,
     page->info = *info;
   }
   
+  return err;
+}
+
+int set_vaddr_info(page_table_t * page_table,
+                      void * vaddr,
+                      virtual_page_info_t * info) {
+  lock_acquire(&page_table->lock);
+  int err = set_vaddr_info_no_lock(page_table,vaddr,info);
   lock_release(&page_table->lock);
   return err;
 }
@@ -142,30 +163,86 @@ bool install_page (void *upage, void *kpage, bool writable)
   return p1 && p2;
 }
 
+// process 1 should not touch process 2's page table unless process 2 can't be scheduled
+// if process 2 can't be scheduled, conflict is impossible
 void uninstall_page(struct thread * t, void* upage) {
   ASSERT(t != NULL);
   uint32_t * pd = t->page_table.pagedir;
+  
   // pretty sure I don't need this lock anymore
-  // lock_acquire(&t->page_table.pd_lock);
+  /* lock_acquire(&t->page_table.pd_lock); */
+  
+  // must uninstall page in software and hardware MMU under the same granularity 
   pagedir_clear_page(pd, upage);
-  // lock_release(&t->page_table.pd_lock);
+  
+  /* lock_release(&t->page_table.pd_lock); */
+}
+
+// ... you can't call this with interrupts off...
+static void uninstall_page_supplemental_info(struct thread * t, void * upage, void * kpage) {  
+  ASSERT(lock_held_by_current_thread(frame_get_frame_lock(kpage)));
+  virtual_page_info_t info = get_vaddr_info_no_lock(&t->page_table,upage);
+  ASSERT(info.valid == 1 && "don't try to evict invalid pages");
+  
+  // printf("upage %p info.home %d info.writable %d\n",upage,info.home,info.writable);
+  
+  if ( info.home == PAGE_SOURCE_OF_DATA_MMAP ) {
+    // call mmap things
+    // worry about it later
+    ASSERT(false && "don't call mmap things");
+    
+    // don't update the data source, we wrote it back to its file
+    // we'll reload it from its file if we fault on it
+  }
+  else if ( info.writable == 1 ) {
+    // must be one of ELF writable (bss) or stack
+    // or was changed so that it has been written to swap
+    ASSERT(info.home == PAGE_SOURCE_OF_DATA_ELF ||
+           info.home == PAGE_SOURCE_OF_DATA_STACK ||
+           info.home == PAGE_SOURCE_OF_DATA_SWAP);
+    
+    /* printf("tagiamies 7\n"); */
+    // write frame to swap space
+    info.swap_loc = swap_write_page(kpage,PGSIZE);
+    printf("thread %p kpage %p written to %zu\n",thread_current(),kpage,info.swap_loc);
+    
+    /* // update the other process's MMU */
+    info.home = PAGE_SOURCE_OF_DATA_SWAP;
+    info.frame = NULL;
+    /* /\* printf("tagiamies 13\n"); *\/ */
+    set_vaddr_info_no_lock(&t->page_table,upage,&info);
+    /* /\* printf("tagiamies 14\n"); *\/ */
+  }
+  else {
+    /* printf("tagiamies 15\n"); */
+    // assert it is .text or .rodata elf segments
+    ASSERT(info.writable == 0);
+    ASSERT(info.home == PAGE_SOURCE_OF_DATA_ELF);
+    // don't do anything else, just discard the info in it    
+  }  
 }
 
 // calling thread blocks untill OWNER calls uninstall_request_push on U_REQ
 // not so sure on the naming...
-void uninstall_request_pull(struct thread * owner, void * upage) {
+void uninstall_request_pull(struct thread * owner, void * upage, void * kpage) {
   ASSERT(owner != NULL);
   ASSERT(upage != NULL);
-
+  ASSERT(kpage != NULL);
+  ASSERT(lock_held_by_current_thread(frame_get_frame_lock(kpage)));
+  
   struct thread * cur = thread_current();
   
   printf("uninstall request pull owner %p upage %p\n",owner,upage);
   printf("owner == cur %d\n",owner==cur);
   if ( owner == cur ) {
     // just uninstall it
+    lock_acquire(&owner->page_table.lock);
     uninstall_page(owner,upage);
+    uninstall_page_supplemental_info(owner,upage,kpage);
+    lock_release(&owner->page_table.lock);
     return;
   }
+  
   // if a thread cannot be scheduled, assume it is blocked and uninstall for the
   // thread.
   // we can't race on anything the other thread is doing including with its
@@ -176,10 +253,28 @@ void uninstall_request_pull(struct thread * owner, void * upage) {
   // 1. turn off interrupts, check a thread is blocked, turn on interrupts
   // 2. the thread unblocks itself, interrupts you, reads using its pde
   // 3. you interrupt it mid read, then corrupt the pde read
-  else if ( thread_uninstall_page_if_unschedulable(owner,upage) ) {
+  //
+  // also prevent the owning thread from examining its supplemental page table
+  // when the supplemental page table is unsynched with the hardware page table
+  lock_acquire(&owner->page_table.lock);
+  bool unscheduled_and_uninstalled = thread_uninstall_page_if_unschedulable(owner,upage);
+  if ( unscheduled_and_uninstalled ) {
+    uninstall_page_supplemental_info(owner,upage,kpage);
+  }
+  lock_release(&owner->page_table.lock);
+  if ( unscheduled_and_uninstalled ) {
     return;
   }
   
+  //////////////////////
+  // have to add kpage to this
+  // you cannot even unlock kpage's lock and reacquire because some other page might lock it and install it
+  // you have to hold it through this whole process
+  // luckily there's no problem, you can use the conditional to block all operations from kpage's
+  // owning thread
+  // so really there's two locks on kpage... just the condition is misnamed
+  /////////////////////////
+  ///////////////////////////
   uninstall_request_t u_req;
   lock_init(&u_req.cv_lk);
   cond_init(&u_req.cv);
@@ -199,7 +294,7 @@ void uninstall_request_pull(struct thread * owner, void * upage) {
   }
   lock_release(&u_req.cv_lk);
 
-    printf("thread %p request owner %p with u_req %p page %p exit\n",
+  printf("thread %p request owner %p with u_req %p page %p exit\n",
          thread_current(),owner,&u_req,upage);
 
   ASSERT(u_req.signal == 1); // success
@@ -225,7 +320,7 @@ void uninstall_request_push(void) {
   for ( lel = list_begin(reqs); lel != list_end(reqs); lel = list_remove(lel) ) {
     // printf("thread %p uinstall request push tagiamies 102\n",cur);
     u_req = list_entry(lel, uninstall_request_t, lel);
-
+    
     // begin signalling
     lock_acquire(&u_req->cv_lk);
     upage = u_req->upage;
