@@ -17,6 +17,7 @@
 typedef struct uninstall_request {
   struct list_elem lel;
   void * upage;
+  void * kpage; // lock and condition also block operations on this kpage
   
   struct lock cv_lk;
   struct condition cv;
@@ -180,7 +181,6 @@ void uninstall_page(struct thread * t, void* upage) {
 
 // ... you can't call this with interrupts off...
 static void uninstall_page_supplemental_info(struct thread * t, void * upage, void * kpage) {  
-  ASSERT(lock_held_by_current_thread(frame_get_frame_lock(kpage)));
   virtual_page_info_t info = get_vaddr_info_no_lock(&t->page_table,upage);
   ASSERT(info.valid == 1 && "don't try to evict invalid pages");
   
@@ -209,9 +209,9 @@ static void uninstall_page_supplemental_info(struct thread * t, void * upage, vo
     /* // update the other process's MMU */
     info.home = PAGE_SOURCE_OF_DATA_SWAP;
     info.frame = NULL;
-    /* /\* printf("tagiamies 13\n"); *\/ */
+    /* printf("tagiamies 13\n"); */
     set_vaddr_info_no_lock(&t->page_table,upage,&info);
-    /* /\* printf("tagiamies 14\n"); *\/ */
+    /* printf("tagiamies 14\n"); */
   }
   else {
     /* printf("tagiamies 15\n"); */
@@ -236,6 +236,7 @@ void uninstall_request_pull(struct thread * owner, void * upage, void * kpage) {
   printf("owner == cur %d\n",owner==cur);
   if ( owner == cur ) {
     // just uninstall it
+    // locks are for show
     lock_acquire(&owner->page_table.lock);
     uninstall_page(owner,upage);
     uninstall_page_supplemental_info(owner,upage,kpage);
@@ -266,19 +267,11 @@ void uninstall_request_pull(struct thread * owner, void * upage, void * kpage) {
     return;
   }
   
-  //////////////////////
-  // have to add kpage to this
-  // you cannot even unlock kpage's lock and reacquire because some other page might lock it and install it
-  // you have to hold it through this whole process
-  // luckily there's no problem, you can use the conditional to block all operations from kpage's
-  // owning thread
-  // so really there's two locks on kpage... just the condition is misnamed
-  /////////////////////////
-  ///////////////////////////
   uninstall_request_t u_req;
   lock_init(&u_req.cv_lk);
   cond_init(&u_req.cv);
   u_req.upage = upage;
+  u_req.kpage = kpage; // the requested thread will read from kpage without a lock
   u_req.signal = -1;
   
   printf("thread %p request owner %p with u_req %p page %p start\n",
@@ -309,9 +302,11 @@ void uninstall_request_push(void) {
   struct list_elem * lel;
   uninstall_request_t * u_req;
   void * upage;
+  void * kpage;
 
-  // printf("thread %p uinstall request push tagiamies 100\n",cur);
-  
+  /* printf("thread %p uinstall request push tagiamies 100\n",cur); */
+
+  // what the fuck does this pd_lock acquire do???
   lock_acquire(&cur->page_table.pd_lock);
   
   // printf("thread %p uinstall request push tagiamies 101\n",cur);
@@ -324,9 +319,19 @@ void uninstall_request_push(void) {
     // begin signalling
     lock_acquire(&u_req->cv_lk);
     upage = u_req->upage;
+    // you are guaranteed that the blocked thread owns the kpage lock
+    // the other thread CANNOT run until you fulfill the condition below
+    kpage = u_req->kpage;
+    
     // printf("thread %p uinstall request %p push upage %p tagiamies 103\n",cur,u_req,upage);
+    
+    lock_acquire(&cur->page_table.lock);
     uninstall_page(cur,upage);
+    uninstall_page_supplemental_info(cur,upage,kpage);
+    lock_release(&cur->page_table.lock);
+    
     // printf("thread %p uinstall request %p push upage %p tagiamies 104\n",cur,u_req,upage);
+    
     // signal that the other thread can proceed
     u_req->signal = 1;
     cond_signal(&u_req->cv,&u_req->cv_lk);
