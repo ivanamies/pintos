@@ -233,7 +233,6 @@ void uninstall_request_pull(struct thread * owner, void * upage, void * kpage) {
   struct thread * cur = thread_current();
   
   printf("uninstall request pull owner %p upage %p\n",owner,upage);
-  printf("owner == cur %d\n",owner==cur);
   if ( owner == cur ) {
     // just uninstall it
     // locks are for show

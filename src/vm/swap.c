@@ -122,9 +122,9 @@ block_sector_t swap_write_page(void * p_, size_t sz) {
   // this is synchronized for you
   for ( sectors_read = 0; sectors_read < max_sectors_read; ++sectors_read ) {
     p = p_ + sectors_read * BLOCK_SECTOR_SIZE;
-    /* printf("t %p tagiamies 9 sector %zu\n",thread_current(),sector); */
+    // printf("t %p tagiamies 9 sector %zu\n",thread_current(),sector);
     block_write(swap_table.block,sector+sectors_read,p);
-    /* printf("t %p tagiamies 10\n",thread_current()); */
+    // printf("t %p tagiamies 10\n",thread_current());
   }
 
   ////
