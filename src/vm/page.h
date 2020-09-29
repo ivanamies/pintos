@@ -52,6 +52,7 @@ typedef struct page_table {
   uint32_t * pagedir; // userprog/pagedir's pagedir
   struct list uninstall_requests;
   // pagedir's and uninstall_requests's locks
+  // I am almost entirely sure that it isn't needed for pagedir
   struct lock pd_lock; 
   
   struct hash pages; // hash table of virtual_page_t
@@ -71,6 +72,8 @@ virtual_page_info_t get_vaddr_info(page_table_t * page_table, void * vaddr);
 // returns error code 1 if failed
 // virtual_page_info_t will be COPIED
 int set_vaddr_info(page_table_t * page_table, void * vaddr, virtual_page_info_t * info);
+
+void page_process_exit(void);
 
 // installs upage(arg1) to kpage(arg2) and if its writable(arg3)
 bool install_page(void *, void *, bool);

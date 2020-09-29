@@ -100,6 +100,7 @@ static frame_aux_info_t * get_frame_slot_with_eviction(void) {
         return &frame_table_user.frame_aux_info[clock_hand];
       }
       
+      // almost entirely sure I don't need this lock
       lock_acquire(&owner->page_table.pd_lock);
       pd = owner->page_table.pagedir;
       bool a = pagedir_is_accessed(pd,upage); // save copy of accessed bit
@@ -202,13 +203,41 @@ void frame_dealloc(void * p) {
   lock_release(&frame_table_user.lock);
 }
 
+void frame_process_exit(void) {
+  struct thread * cur = thread_current();
+  struct lock * lk;
+  size_t i;
+
+  for ( i = 0; i < MAX_FRAMES; ++i ){
+    lk = &frame_table_user.frame_aux_info[i].pinning_lock;
+    // spin while trying to acquire it
+    // uninstall pages in the meanwhile
+    while ( !lock_try_acquire(lk) ) {
+      uninstall_request_push();
+    }
+
+    // okay I acquired the lock
+    
+    if ( frame_table_user.frame_aux_info[i].owner == cur ) {
+      frame_table_user.frame_aux_info[i].owner = NULL;
+      frame_table_user.frame_aux_info[i].upage = NULL;
+      // do not touch the kpage field
+    }
+    
+    // don't bother uninstalling anything
+    // that only matters for upage things and it's impossible to call into it now
+    
+    lock_release(lk);
+  }
+}
+
 struct lock * frame_get_frame_lock(void * upage) {
   size_t idx = frame_get_index_no_lock(upage);
   struct lock * res = &frame_table_user.frame_aux_info[idx].pinning_lock;
   return res;
 }
 
-void frame_table_dump(int aux) {
+void frame_table_dump(int aux UNUSED) {
   ASSERT(false);
   /* lock_acquire(&frame_table_user.lock); */
 

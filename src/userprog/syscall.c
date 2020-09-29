@@ -259,12 +259,12 @@ struct file * fd_get_file(int fd) {
   lock_acquire(&fd_table_lock);
   int fd_idx = fd_to_fd_idx_no_lock(fd);
   int ret = is_valid_fd_entry_no_lock(fd_idx);
-  struct file * res;
+  struct file * res = NULL;
   if ( ret == 1 ) {
     res = fd_table[fd_idx].file;
-    ASSERT ( res != NULL );
   }
   lock_release(&fd_table_lock);
+  ASSERT( res != NULL);
   return res;
 }
 

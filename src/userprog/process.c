@@ -411,6 +411,13 @@ process_exit (void)
   struct thread *cur = thread_current ();
   uint32_t *pd;
 
+  // destroy the frames I own
+  frame_process_exit();
+  // destroy the pages I own
+  page_process_exit();
+  
+  // probably not needed
+  // page directories should only ever be accessed from its own thread
   lock_acquire(&cur->page_table.pd_lock);
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */

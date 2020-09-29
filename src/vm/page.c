@@ -42,6 +42,11 @@ static bool page_less(const struct hash_elem * a_,
   return res;
 }
 
+static void page_destroy(struct hash_elem *e, void * aux UNUSED) {
+  virtual_page_t * p = hash_entry(e,virtual_page_t,hash_elem);
+  free(p);
+}
+
 void init_supplemental_page_table(page_table_t * page_table) {
 
   hash_init(&page_table->pages, page_hash, page_less, NULL);
@@ -136,6 +141,26 @@ int set_vaddr_info(page_table_t * page_table,
   int err = set_vaddr_info_no_lock(page_table,vaddr,info);
   lock_release(&page_table->lock);
   return err;
+}
+
+
+void page_process_exit(void) {
+  struct thread * cur = thread_current();
+
+  // it should be impossible to add more uninstall requests
+  // because I own no more user frames
+  
+  // clear any left over uninstall requests just in case
+  uninstall_request_push();
+  
+  ASSERT(list_empty(&cur->page_table.uninstall_requests));
+
+  // you MUST only add hash entries to supplemental page table in the same thread
+  // or else the guarantee of transaction atomicty synching hardware and software page tables is broken
+  // acquire the hash table lock anyways because I'm too lazy to check and test right right now
+  lock_acquire(&cur->page_table.lock);
+  hash_destroy(&cur->page_table.pages,page_destroy);
+  lock_release(&cur->page_table.lock);
 }
 
 /* Adds a mapping from user virtual address UPAGE to kernel
@@ -293,7 +318,6 @@ void uninstall_request_pull(struct thread * owner, void * upage, void * kpage) {
 }
 
 // calling thread fulfills all uninstall requests that are pending
-// maybe I have to get the thread scheduler to call this with interrupts off...
 void uninstall_request_push(void) {
   struct thread * cur = thread_current();
   ASSERT(cur != NULL);
@@ -311,7 +335,7 @@ void uninstall_request_push(void) {
   // printf("thread %p uinstall request push tagiamies 101\n",cur);
   
   reqs = &cur->page_table.uninstall_requests;
-  for ( lel = list_begin(reqs); lel != list_end(reqs); lel = list_remove(lel) ) {
+  for ( lel = list_begin(reqs); lel != list_end(reqs); lel = list_remove(lel) /*delete list*/) {
     // printf("thread %p uinstall request push tagiamies 102\n",cur);
     u_req = list_entry(lel, uninstall_request_t, lel);
     
@@ -319,6 +343,7 @@ void uninstall_request_push(void) {
     lock_acquire(&u_req->cv_lk);
     upage = u_req->upage;
     // you are guaranteed that the blocked thread owns the kpage lock
+    // guaranteed ASSERT(lock_owned_by_thread(frame_io_pinning_lock,blocked_thread));
     // the other thread CANNOT run until you fulfill the condition below
     kpage = u_req->kpage;
     
@@ -336,7 +361,6 @@ void uninstall_request_push(void) {
     cond_signal(&u_req->cv,&u_req->cv_lk);
     lock_release(&u_req->cv_lk);
   }
-  // delete list
   
   
   // printf("thread %p uinstall request push tagiamies 105\n",cur);
