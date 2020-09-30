@@ -23,7 +23,7 @@ typedef struct frame_table {
   
   void* frames; // MAX_FRAME total, continguous in memory, allocated from palloc_get_multiple
   frame_aux_info_t frame_aux_info[MAX_FRAMES];
-    
+  
   int clock_hand;
   
 } frame_table_t;
@@ -55,17 +55,13 @@ static void evict_frame(int idx) {
   /* // assume it can't somehow interrupt a fault-less memory access by owner */
   /* // It's a big assumption */
   /* uninstall_page(owner,upage); */
-
-  printf("threaad %p tagiamies 5\n",thread_current());
   
-  printf("thread %p requested %p uninstall %p\n",thread_current(),owner,upage);
+  printf("tagiamies 5 thread %p requested %p uninstall %p\n",thread_current(),owner,upage);
 
   // go add the part where you update the other thread's page table
   // to this function....
   uninstall_request_pull(owner,upage,frame);
-  
-  printf("thread %p tagiamies 6\n",thread_current());
-    
+      
   memset(frame,0,PGSIZE);
 
 }
@@ -94,6 +90,7 @@ static frame_aux_info_t * get_frame_slot_with_eviction(void) {
       owner = frame_table_user.frame_aux_info[clock_hand].owner;
       upage = frame_table_user.frame_aux_info[clock_hand].upage;
       
+      printf("thread %p acquired pinning lk %p\n",thread_current(),lk);
       if ( owner == NULL || upage == NULL) {
         ASSERT(owner == NULL);
         ASSERT(upage == NULL);
@@ -174,7 +171,7 @@ void frame_table_init(void) {
 
 static frame_aux_info_t* frame_alloc_multiple(int n, struct thread * owner, void * addr) {
   ASSERT(n==1); // only works with 1 for now
-  printf("tagiamies thread %p frame alloc multiple for upage %p\n",thread_current(),addr);
+  // printf("tagiamies thread %p frame alloc multiple for upage %p\n",thread_current(),addr);
 
   frame_aux_info_t * res;
   
@@ -186,7 +183,7 @@ static frame_aux_info_t* frame_alloc_multiple(int n, struct thread * owner, void
   res->owner = owner;
   res->upage = addr;
   
-  printf("tagiamies thread %p frame alloc multiple exit\n",thread_current());
+  // printf("tagiamies thread %p frame alloc multiple exit\n",thread_current());
   return res;
 }
 
@@ -209,25 +206,36 @@ void frame_process_exit(void) {
   size_t i;
 
   for ( i = 0; i < MAX_FRAMES; ++i ){
-    lk = &frame_table_user.frame_aux_info[i].pinning_lock;
-    // spin while trying to acquire it
-    // uninstall pages in the meanwhile
-    while ( !lock_try_acquire(lk) ) {
-      uninstall_request_push();
+    // evilly read frame aux info without the lock
+    // I only care if THIS PROCESS AND ONLY THIS PROCESS owns the frame
+    // it can't be mutated to "I own this frame"
+    //
+    // some weird bug poped out??
+    // race condition or I can't do double-checked locking here?
+    if (frame_table_user.frame_aux_info[i].owner == cur) {
+      lk = &frame_table_user.frame_aux_info[i].pinning_lock;
+      // now try to write to it
+      // spin while trying to acquire it
+      // uninstall pages in the meanwhile
+      while ( !lock_try_acquire(lk) ) {
+        printf("tagiamies process exit thread %p trying to acquire frame %zu %p lock\n",
+               cur,i,frame_table_user.frame_aux_info[i].kpage);
+        uninstall_request_push();
+      }
+      
+      // okay I acquired the lock
+      // recheck if it got mutated
+      if ( frame_table_user.frame_aux_info[i].owner == cur ) {
+        frame_table_user.frame_aux_info[i].owner = NULL;
+        frame_table_user.frame_aux_info[i].upage = NULL;
+        // do not touch the kpage field
+      }
+      
+      // don't bother uninstalling anything
+      // that only matters for upage things and it's impossible to call into it now
+    
+      lock_release(lk);
     }
-
-    // okay I acquired the lock
-    
-    if ( frame_table_user.frame_aux_info[i].owner == cur ) {
-      frame_table_user.frame_aux_info[i].owner = NULL;
-      frame_table_user.frame_aux_info[i].upage = NULL;
-      // do not touch the kpage field
-    }
-    
-    // don't bother uninstalling anything
-    // that only matters for upage things and it's impossible to call into it now
-    
-    lock_release(lk);
   }
 }
 

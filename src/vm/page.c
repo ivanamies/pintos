@@ -44,6 +44,10 @@ static bool page_less(const struct hash_elem * a_,
 
 static void page_destroy(struct hash_elem *e, void * aux UNUSED) {
   virtual_page_t * p = hash_entry(e,virtual_page_t,hash_elem);
+  block_sector_t sector = p->info.swap_loc;
+  if ( p->info.home == PAGE_SOURCE_OF_DATA_SWAP_OUT ) {
+    swap_make_page_available(sector);
+  }
   free(p);
 }
 
@@ -143,7 +147,6 @@ int set_vaddr_info(page_table_t * page_table,
   return err;
 }
 
-
 void page_process_exit(void) {
   struct thread * cur = thread_current();
 
@@ -224,7 +227,7 @@ static void uninstall_page_supplemental_info(struct thread * t, void * upage, vo
     // or was changed so that it has been written to swap
     ASSERT(info.home == PAGE_SOURCE_OF_DATA_ELF ||
            info.home == PAGE_SOURCE_OF_DATA_STACK ||
-           info.home == PAGE_SOURCE_OF_DATA_SWAP);
+           info.home == PAGE_SOURCE_OF_DATA_SWAP_OUT);
     
     /* printf("tagiamies 7\n"); */
     // write frame to swap space
@@ -232,7 +235,7 @@ static void uninstall_page_supplemental_info(struct thread * t, void * upage, vo
     printf("thread %p kpage %p written to %zu\n",thread_current(),kpage,info.swap_loc);
     
     /* // update the other process's MMU */
-    info.home = PAGE_SOURCE_OF_DATA_SWAP;
+    info.home = PAGE_SOURCE_OF_DATA_SWAP_IN;
     info.frame = NULL;
     /* printf("tagiamies 13\n"); */
     set_vaddr_info_no_lock(&t->page_table,upage,&info);
@@ -298,8 +301,8 @@ void uninstall_request_pull(struct thread * owner, void * upage, void * kpage) {
   u_req.kpage = kpage; // the requested thread will read from kpage without a lock
   u_req.signal = -1;
   
-  printf("thread %p request owner %p with u_req %p page %p start\n",
-         thread_current(),owner,&u_req,upage);
+  printf("thread %p request owner %p with u_req %p upage %p kpage %pstart\n",
+         thread_current(),owner,&u_req,upage,kpage);
   
   lock_acquire(&owner->page_table.pd_lock);
   list_push_back(&owner->page_table.uninstall_requests,&u_req.lel);  
@@ -307,6 +310,8 @@ void uninstall_request_pull(struct thread * owner, void * upage, void * kpage) {
 
   lock_acquire(&u_req.cv_lk);
   while ( u_req.signal == -1 ) {
+    // uninstall pages in the meanwhile
+    uninstall_request_push();
     cond_wait(&u_req.cv,&u_req.cv_lk);
   }
   lock_release(&u_req.cv_lk);
