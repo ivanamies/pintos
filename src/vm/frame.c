@@ -56,7 +56,7 @@ static void evict_frame(int idx) {
   /* // It's a big assumption */
   /* uninstall_page(owner,upage); */
   
-  printf("tagiamies 5 thread %p requested %p uninstall %p\n",thread_current(),owner,upage);
+  // printf("tagiamies 5 thread %p requested %p uninstall %p\n",thread_current(),owner,upage);
 
   // go add the part where you update the other thread's page table
   // to this function....
@@ -90,7 +90,7 @@ static frame_aux_info_t * get_frame_slot_with_eviction(void) {
       owner = frame_table_user.frame_aux_info[clock_hand].owner;
       upage = frame_table_user.frame_aux_info[clock_hand].upage;
       
-      printf("thread %p acquired pinning lk %p\n",thread_current(),lk);
+      // printf("thread %p acquired pinning lk %p\n",thread_current(),lk);
       if ( owner == NULL || upage == NULL) {
         ASSERT(owner == NULL);
         ASSERT(upage == NULL);
@@ -210,9 +210,6 @@ void frame_process_exit(void) {
     // now try to write to it
     // spin while trying to acquire it
     // uninstall pages in the meanwhile
-    //
-    // for some double checked locking doesn't work here...
-    // is there some error here?
     while ( !lock_try_acquire(lk) ) {
       printf("tagiamies process exit thread %p trying to acquire frame %zu %p lock %p\n",
              cur,i,frame_table_user.frame_aux_info[i].kpage,

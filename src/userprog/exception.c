@@ -337,7 +337,7 @@ page_fault (struct intr_frame *f)
     }
     
     success = install_page (upage, kpage, writable);
-    printf("thread %p released pinning lk %p\n",thread_current(),&frame_info->pinning_lock);
+    // printf("thread %p released pinning lk %p\n",thread_current(),&frame_info->pinning_lock);
     lock_release(&frame_info->pinning_lock); // release the lock on the kpage
     if (!success) {
       printf("page fault exception install_page failed\n");

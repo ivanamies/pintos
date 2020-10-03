@@ -232,7 +232,7 @@ static void uninstall_page_supplemental_info(struct thread * t, void * upage, vo
     /* printf("tagiamies 7\n"); */
     // write frame to swap space
     info.swap_loc = swap_write_page(kpage,PGSIZE);
-    printf("thread %p kpage %p written to %zu\n",thread_current(),kpage,info.swap_loc);
+    // printf("thread %p kpage %p written to %zu\n",thread_current(),kpage,info.swap_loc);
     
     /* // update the other process's MMU */
     info.home = PAGE_SOURCE_OF_DATA_SWAP_IN;
@@ -260,7 +260,7 @@ void uninstall_request_pull(struct thread * owner, void * upage, void * kpage) {
   
   struct thread * cur = thread_current();
   
-  printf("uninstall request pull owner %p upage %p\n",owner,upage);
+  // printf("uninstall request pull owner %p upage %p\n",owner,upage);
   if ( owner == cur ) {
     // just uninstall it
     // locks are for show
@@ -301,8 +301,8 @@ void uninstall_request_pull(struct thread * owner, void * upage, void * kpage) {
   u_req.kpage = kpage; // the requested thread will read from kpage without a lock
   u_req.signal = -1;
   
-  printf("thread %p request owner %p with u_req %p upage %p kpage %pstart\n",
-         thread_current(),owner,&u_req,upage,kpage);
+  // printf("thread %p request owner %p with u_req %p upage %p kpage %pstart\n",
+  /* thread_current(),owner,&u_req,upage,kpage); */
   
   lock_acquire(&owner->page_table.pd_lock);
   list_push_back(&owner->page_table.uninstall_requests,&u_req.lel);  
@@ -316,8 +316,8 @@ void uninstall_request_pull(struct thread * owner, void * upage, void * kpage) {
   }
   lock_release(&u_req.cv_lk);
 
-  printf("thread %p request owner %p with u_req %p page %p exit\n",
-         thread_current(),owner,&u_req,upage);
+  // printf("thread %p request owner %p with u_req %p page %p exit\n",
+  /* thread_current(),owner,&u_req,upage); */
 
   ASSERT(u_req.signal == 1); // success
 }
