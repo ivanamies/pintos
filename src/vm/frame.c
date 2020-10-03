@@ -222,16 +222,12 @@ void frame_process_exit(void) {
     }
 
     if (frame_table_user.frame_aux_info[i].owner == cur) {
+
+      uninstall_page(cur,frame_table_user.frame_aux_info[i].upage);
       
-      // okay I acquired the lock
-      // recheck if it got mutated
-      if ( frame_table_user.frame_aux_info[i].owner == cur ) {
-        frame_table_user.frame_aux_info[i].owner = NULL;
-        frame_table_user.frame_aux_info[i].upage = NULL;
-        // do not touch the kpage field
-      }
-      // don't bother uninstalling anything
-      // that only matters for upage things and it's impossible to call into it now
+      frame_table_user.frame_aux_info[i].owner = NULL;
+      frame_table_user.frame_aux_info[i].upage = NULL;      
+      
     }
 
     // release the lock we acquired
