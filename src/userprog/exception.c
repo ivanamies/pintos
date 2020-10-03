@@ -301,11 +301,12 @@ page_fault (struct intr_frame *f)
     
     // frame_alloc will always succeed
     frame_aux_info_t * frame_info = frame_alloc(thread_current(),upage);
-    printf("thread %p frame alloc exit info.home %d\n",thread_current(),info.home);
+    // printf("thread %p frame alloc exit info.home %d\n",thread_current(),info.home);
     uint8_t *kpage = frame_info->kpage;
     
     bool success = true;
     bool writable = true;
+    ASSERT(info.home != PAGE_SOURCE_OF_DATA_SWAP_OUT);
     if ( info.home == PAGE_SOURCE_OF_DATA_ELF ||
          info.home == PAGE_SOURCE_OF_DATA_MMAP ) {
       struct file * file = info.file;
@@ -324,12 +325,19 @@ page_fault (struct intr_frame *f)
       }
       memset (kpage + page_read_bytes, 0, page_zero_bytes);
     }
-    else if ( info.home == PAGE_SOURCE_OF_DATA_SWAP ) {
-      printf("thread %p frame %p gotten from %zu\n",thread_current(),kpage,info.swap_loc);
+    else if ( info.home == PAGE_SOURCE_OF_DATA_SWAP_IN ) {
+      // printf("thread %p frame %p gotten from %zu\n",thread_current(),kpage,info.swap_loc);
       swap_get_page(kpage,PGSIZE,info.swap_loc);
+      // some chance of a transactional problem to update supplemental page table here
+      // do it anyways
+      // should be impossible, we both lock the page_table lock AND disable interrupts if
+      // some other thread is modifying this thread's page_table
+      info.home = PAGE_SOURCE_OF_DATA_SWAP_OUT;
+      set_vaddr_info(&thread_current()->page_table,upage,&info);
     }
     
     success = install_page (upage, kpage, writable);
+    printf("thread %p released pinning lk %p\n",thread_current(),&frame_info->pinning_lock);
     lock_release(&frame_info->pinning_lock); // release the lock on the kpage
     if (!success) {
       printf("page fault exception install_page failed\n");

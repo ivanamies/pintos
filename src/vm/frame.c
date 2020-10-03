@@ -206,22 +206,22 @@ void frame_process_exit(void) {
   size_t i;
 
   for ( i = 0; i < MAX_FRAMES; ++i ){
-    // evilly read frame aux info without the lock
-    // I only care if THIS PROCESS AND ONLY THIS PROCESS owns the frame
-    // it can't be mutated to "I own this frame"
+    lk = &frame_table_user.frame_aux_info[i].pinning_lock;
+    // now try to write to it
+    // spin while trying to acquire it
+    // uninstall pages in the meanwhile
     //
-    // some weird bug poped out??
-    // race condition or I can't do double-checked locking here?
+    // for some double checked locking doesn't work here...
+    // is there some error here?
+    while ( !lock_try_acquire(lk) ) {
+      printf("tagiamies process exit thread %p trying to acquire frame %zu %p lock %p\n",
+             cur,i,frame_table_user.frame_aux_info[i].kpage,
+             &frame_table_user.frame_aux_info[i].pinning_lock);
+      uninstall_request_push();
+      thread_yield();
+    }
+
     if (frame_table_user.frame_aux_info[i].owner == cur) {
-      lk = &frame_table_user.frame_aux_info[i].pinning_lock;
-      // now try to write to it
-      // spin while trying to acquire it
-      // uninstall pages in the meanwhile
-      while ( !lock_try_acquire(lk) ) {
-        printf("tagiamies process exit thread %p trying to acquire frame %zu %p lock\n",
-               cur,i,frame_table_user.frame_aux_info[i].kpage);
-        uninstall_request_push();
-      }
       
       // okay I acquired the lock
       // recheck if it got mutated
@@ -230,12 +230,13 @@ void frame_process_exit(void) {
         frame_table_user.frame_aux_info[i].upage = NULL;
         // do not touch the kpage field
       }
-      
       // don't bother uninstalling anything
       // that only matters for upage things and it's impossible to call into it now
-    
-      lock_release(lk);
     }
+
+    // release the lock we acquired
+    lock_release(lk);
+
   }
 }
 

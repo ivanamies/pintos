@@ -411,6 +411,7 @@ process_exit (void)
   struct thread *cur = thread_current ();
   uint32_t *pd;
 
+  printf("===tagiamies process exit start\n");
   // destroy the frames I own
   frame_process_exit();
   // destroy the pages I own
@@ -433,7 +434,9 @@ process_exit (void)
          that's been freed (and cleared). */
       cur->page_table.pagedir = NULL;
       pagedir_activate (NULL);
+      printf("===tagiamies process before pd_destroy\n");
       pagedir_destroy (pd);
+      printf("===tagiamies process after pd_destroy\n");
     }
   lock_release(&cur->page_table.pd_lock);
 }

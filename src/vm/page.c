@@ -45,7 +45,7 @@ static bool page_less(const struct hash_elem * a_,
 static void page_destroy(struct hash_elem *e, void * aux UNUSED) {
   virtual_page_t * p = hash_entry(e,virtual_page_t,hash_elem);
   block_sector_t sector = p->info.swap_loc;
-  if ( p->info.home == PAGE_SOURCE_OF_DATA_SWAP_OUT ) {
+  if ( p->info.home == PAGE_SOURCE_OF_DATA_SWAP_IN ) {
     swap_make_page_available(sector);
   }
   free(p);
