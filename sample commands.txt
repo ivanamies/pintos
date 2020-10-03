@@ -1,0 +1,19 @@
+
+
+add to path:
+
+PATH="/Users/cslusr/Documents/academics/etc_eecs/os/pintos/src/utils:/Users/cslusr/Documents/academics/etc_eecs/os/pintos/src/misc/bochs_bin"
+
+export PINTOSDIR="/Users/cslusr/Documents/academics/etc_eecs/os/pintos"
+
+
+pintos -- run alarm-zero
+
+pintos --gdb -- run alarm-zero
+
+pintos-gdb kernel.o
+
+
+running all tests for a project:
+cd ~/Documents/academics/etc_eecs/os/pintos/src/threads/build
+make check
