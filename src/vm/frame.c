@@ -211,9 +211,9 @@ void frame_process_exit(void) {
     // spin while trying to acquire it
     // uninstall pages in the meanwhile
     while ( !lock_try_acquire(lk) ) {
-      printf("tagiamies process exit thread %p trying to acquire frame %zu %p lock %p\n",
-             cur,i,frame_table_user.frame_aux_info[i].kpage,
-             &frame_table_user.frame_aux_info[i].pinning_lock);
+      /* printf("tagiamies process exit thread %p trying to acquire frame %zu %p lock %p\n", */
+      /*        cur,i,frame_table_user.frame_aux_info[i].kpage, */
+      /*        &frame_table_user.frame_aux_info[i].pinning_lock); */
       uninstall_request_push();
       thread_yield();
     }

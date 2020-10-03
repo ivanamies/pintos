@@ -228,7 +228,7 @@ process_execute (const char *input)
 
   ASSERT(sizeof(struct input_args) <= PGSIZE);
 
-  printf("thread %p process execute start\n",thread_current());
+  // printf("thread %p process execute start\n",thread_current());
   
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
@@ -271,7 +271,7 @@ process_execute (const char *input)
   // wait until the process was created successfully or not
   lock_acquire(&ia->lk);
   while ( ia->signal == -1 ) {
-    printf("thread %p waiting on ia->signal\n",thread_current());
+    // printf("thread %p waiting on ia->signal\n",thread_current());
     cond_wait(&ia->cv,&ia->lk);
   }
   lock_release(&ia->lk);
@@ -288,7 +288,7 @@ process_execute (const char *input)
   palloc_free_page (ia);
   palloc_free_page (input_copy); 
 
-  printf("thread %p exit process execute\n",thread_current());
+  // printf("thread %p exit process execute\n",thread_current());
   
   return tid;
 }
@@ -298,7 +298,7 @@ process_execute (const char *input)
 static void
 start_process (void *input_args_)
 {
-  printf("stack set up thread %p\n",thread_current());
+  // printf("stack set up thread %p\n",thread_current());
 
   struct input_args *ia = input_args_;
   ASSERT(ia != NULL);
@@ -411,7 +411,7 @@ process_exit (void)
   struct thread *cur = thread_current ();
   uint32_t *pd;
 
-  printf("===tagiamies process exit start\n");
+  // printf("===tagiamies process exit start\n");
   // destroy the frames I own
   frame_process_exit();
   // destroy the pages I own
@@ -434,9 +434,9 @@ process_exit (void)
          that's been freed (and cleared). */
       cur->page_table.pagedir = NULL;
       pagedir_activate (NULL);
-      printf("===tagiamies process before pd_destroy\n");
+      // printf("===tagiamies process before pd_destroy\n");
       pagedir_destroy (pd);
-      printf("===tagiamies process after pd_destroy\n");
+      // printf("===tagiamies process after pd_destroy\n");
     }
   lock_release(&cur->page_table.pd_lock);
 }
@@ -732,7 +732,7 @@ void* push_stack(void * data, size_t n, void * esp_) {
 static bool
 setup_stack (struct input_args * ia, void **esp) 
 {
-  printf("thread %p set up stack\n",thread_current());
+  /* printf("thread %p set up stack\n",thread_current()); */
   
   ASSERT (ia != NULL);
   ASSERT (ia->argc >= 1); // the first argument in ia->argv is the file name 
@@ -761,11 +761,11 @@ setup_stack (struct input_args * ia, void **esp)
   //
   // push on arguments
   for ( i = ia->argc-1; i >= 0; --i ) {
-    printf("thread %p set up stack 1\n",thread_current());
+    /* printf("thread %p set up stack 1\n",thread_current()); */
     (*esp) = push_stack(ia->argv[i],strlen(ia->argv[i])+1 /* include null */, *esp);
     strings_on_stack[num_strings_pushed] = *esp;
     ++num_strings_pushed;
-    printf("thread %p set up stack 2\n",thread_current());
+    /* printf("thread %p set up stack 2\n",thread_current()); */
   }
 
   // esp is always rounded to a word length
@@ -783,7 +783,7 @@ setup_stack (struct input_args * ia, void **esp)
   // push on dummy return address
   (*esp) = push_stack(&nothing,sizeof(void *),*esp);
 
-  printf("thread %p exit set up stack\n",thread_current());
+  // printf("thread %p exit set up stack\n",thread_current());
 
   success = true;
   return success;
