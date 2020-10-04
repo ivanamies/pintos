@@ -302,7 +302,7 @@ void uninstall_request_pull(struct thread * owner, void * upage, void * kpage) {
   u_req.signal = -1;
   
   // printf("thread %p request owner %p with u_req %p upage %p kpage %pstart\n",
-  /* thread_current(),owner,&u_req,upage,kpage); */
+         /* thread_current(),owner,&u_req,upage,kpage); */
   
   lock_acquire(&owner->page_table.pd_lock);
   list_push_back(&owner->page_table.uninstall_requests,&u_req.lel);  
@@ -316,8 +316,8 @@ void uninstall_request_pull(struct thread * owner, void * upage, void * kpage) {
   }
   lock_release(&u_req.cv_lk);
 
-  // printf("thread %p request owner %p with u_req %p page %p exit\n",
-  /* thread_current(),owner,&u_req,upage); */
+// printf("thread %p request owner %p with u_req %p page %p exit\n",
+/* thread_current(),owner,&u_req,upage); */
 
   ASSERT(u_req.signal == 1); // success
 }

@@ -92,7 +92,6 @@ block_sector_t swap_write_page(void * p_, size_t sz) {
   //
   // swap table lock covers all io operations to sector hash_table and swap table
   // no reason to think block_write and block_read are re-entrant
-  // or can't conflict with each other
   lock_acquire(&swap_table.lock);
   
   ASSERT (!hash_empty(&swap_table.available_block_pages));
@@ -109,13 +108,13 @@ block_sector_t swap_write_page(void * p_, size_t sz) {
   sector = out->sector;
   
   // write sz bytes of p to swap
-  // this is synchronized for you
+  // this is synchronized for you (?)
+  printf("t %p tagiamies 9 sector %zu\n",thread_current(),sector);
   for ( sectors_read = 0; sectors_read < max_sectors_read; ++sectors_read ) {
     p = p_ + sectors_read * BLOCK_SECTOR_SIZE;
-    // printf("t %p tagiamies 9 sector %zu\n",thread_current(),sector);
     block_write(swap_table.block,sector+sectors_read,p);
-    // printf("t %p tagiamies 10\n",thread_current());
   }
+  printf("t %p tagiamies 10\n",thread_current());
   
   // remove out from available_block_pages and send to unavailable_block_pages
   hash_out = hash_insert(&swap_table.unavailable_block_pages,&out->hash_elem);

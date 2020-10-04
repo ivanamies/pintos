@@ -264,6 +264,8 @@ page_fault (struct intr_frame *f)
      be assured of reading CR2 before it changed). */
   intr_enable ();
 
+  printf("thread %p enter exception handler\n",thread_current());
+  
   /* Count page faults. */
   page_fault_cnt++;
 
@@ -295,7 +297,7 @@ page_fault (struct intr_frame *f)
   // get if its writable from the supplemental page table
   virtual_page_info_t info = get_vaddr_info(&thread_current()->page_table,upage);
 
-  // printf("info.valid %d thread %p upage %p home %d writable %d\n",info.valid,thread_current(),upage,info.home,info.writable);
+  printf("info.valid %d thread %p upage %p home %d writable %d\n",info.valid,thread_current(),upage,info.home,info.writable);
   
   if ( info.valid == 1 ) {
     
@@ -359,14 +361,6 @@ page_fault (struct intr_frame *f)
   else {
     // info was not valid && address not stackish
     kill(f);
-  }
-
-  /* // 0x8048000 */
-  /* size_t sum = 0; */
-  /* for ( int i = 0; i < PGSIZE; ++i ) { */
-  /*   sum += upage[i]; */
-  /* } */
-  /* printf("upage %p sum %zu\n",upage,sum); */
-  
+  }  
 
 }

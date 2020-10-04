@@ -133,6 +133,7 @@ block_read (struct block *block, block_sector_t sector, void *buffer)
 void
 block_write (struct block *block, block_sector_t sector, const void *buffer)
 {
+  // printf("===tagiamies block write\n");
   check_sector (block, sector);
   ASSERT (block->type != BLOCK_FOREIGN);
   block->ops->write (block->aux, sector, buffer);
@@ -188,6 +189,7 @@ block_register (const char *name, enum block_type type,
                 const char *extra_info, block_sector_t size,
                 const struct block_operations *ops, void *aux)
 {
+  // printf("===tagiamies block register\n");
   struct block *block = malloc (sizeof *block);
   if (block == NULL)
     PANIC ("Failed to allocate memory for block device descriptor");

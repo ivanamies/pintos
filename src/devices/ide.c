@@ -346,6 +346,7 @@ ide_read (void *d_, block_sector_t sec_no, void *buffer)
 {
   struct ata_disk *d = d_;
   struct channel *c = d->channel;
+  // printf("acquire lock %p\n",&c->lock);
   lock_acquire (&c->lock);
   select_sector (d, sec_no);
   issue_pio_command (c, CMD_READ_SECTOR_RETRY);
@@ -354,6 +355,7 @@ ide_read (void *d_, block_sector_t sec_no, void *buffer)
     PANIC ("%s: disk read failed, sector=%"PRDSNu, d->name, sec_no);
   input_sector (c, buffer);
   lock_release (&c->lock);
+  // printf("release lock %p\n",&c->lock);
 }
 
 /* Write sector SEC_NO to disk D from BUFFER, which must contain
@@ -366,12 +368,16 @@ ide_write (void *d_, block_sector_t sec_no, const void *buffer)
 {
   struct ata_disk *d = d_;
   struct channel *c = d->channel;
+  // printf("===tagiamies ide write 1\n");
   lock_acquire (&c->lock);
+  // printf("===tagiamies ide write 2\n");
   select_sector (d, sec_no);
   issue_pio_command (c, CMD_WRITE_SECTOR_RETRY);
   if (!wait_while_busy (d))
     PANIC ("%s: disk write failed, sector=%"PRDSNu, d->name, sec_no);
-  output_sector (c, buffer);
+  // printf("===tagiamies ide write 3\n");
+  output_sector (c, buffer); // possible for this to be faulted in
+  // printf("===tagiamies ide write 4\n");
   sema_down (&c->completion_wait);
   lock_release (&c->lock);
 }

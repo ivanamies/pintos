@@ -11,12 +11,12 @@ struct file;
 struct uninstall_request;
 
 typedef enum page_source_of_data {
-  PAGE_SOURCE_OF_DATA_UNDEFINED,
-  PAGE_SOURCE_OF_DATA_ELF, // .text/.rodata/.bss are R only, .data is R/W
-  PAGE_SOURCE_OF_DATA_STACK,
-  PAGE_SOURCE_OF_DATA_MMAP,
-  PAGE_SOURCE_OF_DATA_SWAP_IN,
-  PAGE_SOURCE_OF_DATA_SWAP_OUT,
+  PAGE_SOURCE_OF_DATA_UNDEFINED, // 0
+  PAGE_SOURCE_OF_DATA_ELF, // 1 .text/.rodata/.bss are R only, .data is R/W
+  PAGE_SOURCE_OF_DATA_STACK, // 2
+  PAGE_SOURCE_OF_DATA_MMAP, // 3
+  PAGE_SOURCE_OF_DATA_SWAP_IN, // 4
+  PAGE_SOURCE_OF_DATA_SWAP_OUT, // 5
   PAGE_SOURCE_OF_DATA_COUNT
 } page_source_of_data_e;
 

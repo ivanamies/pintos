@@ -1,5 +1,8 @@
 #include "filesys/file.h"
+
 #include <debug.h>
+#include <stdio.h>
+
 #include "filesys/inode.h"
 #include "threads/malloc.h"
 
@@ -17,6 +20,7 @@ struct file
 struct file *
 file_open (struct inode *inode) 
 {
+  printf("===tagiamies file read\n");
   struct file *file = calloc (1, sizeof *file);
   if (inode != NULL && file != NULL)
     {
@@ -45,6 +49,7 @@ file_reopen (struct file *file)
 void
 file_close (struct file *file) 
 {
+  printf("===tagiamies file close\n");
   if (file != NULL)
     {
       file_allow_write (file);
@@ -68,6 +73,7 @@ file_get_inode (struct file *file)
 off_t
 file_read (struct file *file, void *buffer, off_t size) 
 {
+  printf("===tagiamies file read\n");
   off_t bytes_read = inode_read_at (file->inode, buffer, size, file->pos);
   file->pos += bytes_read;
   return bytes_read;
@@ -81,6 +87,7 @@ file_read (struct file *file, void *buffer, off_t size)
 off_t
 file_read_at (struct file *file, void *buffer, off_t size, off_t file_ofs) 
 {
+  printf("===tagiamies file read at\n");
   return inode_read_at (file->inode, buffer, size, file_ofs);
 }
 
@@ -94,6 +101,7 @@ file_read_at (struct file *file, void *buffer, off_t size, off_t file_ofs)
 off_t
 file_write (struct file *file, const void *buffer, off_t size) 
 {
+  printf("===tagiamies file write\n");
   off_t bytes_written = inode_write_at (file->inode, buffer, size, file->pos);
   file->pos += bytes_written;
   return bytes_written;
@@ -110,6 +118,7 @@ off_t
 file_write_at (struct file *file, const void *buffer, off_t size,
                off_t file_ofs) 
 {
+  printf("===tagiamies file write at\n");
   return inode_write_at (file->inode, buffer, size, file_ofs);
 }
 

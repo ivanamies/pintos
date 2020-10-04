@@ -401,7 +401,8 @@ static int get_num_args(int syscall_no) {
 static void
 syscall_handler (struct intr_frame *f UNUSED) 
 {
-
+  printf("thread %p syscall enter\n",thread_current());
+  
   int fd;
   
   int tmp_int;
@@ -559,5 +560,8 @@ syscall_handler (struct intr_frame *f UNUSED)
     printf("didn't get a project 2 sys call\n");
     ASSERT(false);
     process_terminate(PROCESS_KILLED,-1);
-  }  
+  }
+
+  printf("thread %p syscall exit\n");
+
 }

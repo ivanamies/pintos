@@ -48,18 +48,9 @@ static void evict_frame(int idx) {
   struct thread * owner = frame_table_user.frame_aux_info[idx].owner;
   uint8_t * upage = frame_table_user.frame_aux_info[idx].upage;
   void * frame = frame_get_frame_no_lock(idx);
-
-  /* printf("tagiamies 4\n"); */
   
-  /* // uninstall the page */
-  /* // assume it can't somehow interrupt a fault-less memory access by owner */
-  /* // It's a big assumption */
-  /* uninstall_page(owner,upage); */
-  
-  // printf("tagiamies 5 thread %p requested %p uninstall %p\n",thread_current(),owner,upage);
+  printf("tagiamies 5 thread %p requested %p uninstall %p\n",thread_current(),owner,upage);
 
-  // go add the part where you update the other thread's page table
-  // to this function....
   uninstall_request_pull(owner,upage,frame);
       
   memset(frame,0,PGSIZE);
