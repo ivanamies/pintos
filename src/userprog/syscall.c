@@ -1,24 +1,28 @@
 #include "userprog/syscall.h"
+
 #include <stdio.h>
 #include <syscall-nr.h>
+#include <string.h>
+#include <kernel/hash.h>
+
+#include "devices/shutdown.h"
+#include "devices/input.h"
+
 #include "threads/interrupt.h"
 #include "threads/thread.h"
-
 #include "threads/vaddr.h"
+#include "threads/synch.h"
+#include "threads/palloc.h"
+
 #include "userprog/pagedir.h"
 #include "userprog/exception.h"
 #include "userprog/process.h"
-#include "devices/shutdown.h"
-#include "devices/input.h"
-#include "threads/synch.h"
-#include "threads/palloc.h"
-#include "filesys/inode.h"
+
+#include "vm/mmap.h"
+#include "vm/frame.h"
+
 #include "filesys/file.h"
 #include "filesys/filesys.h"
-#include "vm/mmap.h"
-
-#include <string.h>
-#include "lib/kernel/hash.h"
 
 static void syscall_handler (struct intr_frame *);
 
@@ -401,7 +405,7 @@ static int get_num_args(int syscall_no) {
 static void
 syscall_handler (struct intr_frame *f UNUSED) 
 {
-  printf("thread %p syscall enter\n",thread_current());
+  /* printf("thread %p syscall enter\n",thread_current()); */
   
   int fd;
   
@@ -506,7 +510,19 @@ syscall_handler (struct intr_frame *f UNUSED)
       f->eax = sz;
     }
     else {
+      printf("===tagiamies fd read\n");
+      // get kpages
+      struct list kpages;
+      list_init(&kpages);
+      frame_alloc_into_list(&kpages,p,sz);
+      // install kpages
+      install_pages(&kpages);
+      
       f->eax = fd_read(fd,p,sz);
+
+      // uninstall kpages
+      uninstall_pages(&kpages);
+      printf("===tagiamies fd read exit\n");
     }
   }
   else if ( syscall_no == SYS_WRITE ) {
@@ -520,7 +536,32 @@ syscall_handler (struct intr_frame *f UNUSED)
       putbuf(p,size);
     }
     else {
+      printf("===tagiamies fd write\n");
+      // get kpages
+      struct list kpages;
+      list_init(&kpages);
+      printf("before frame alloc into list\n");
+      
+      frame_alloc_into_list(&kpages,p,size);
+
+      printf("size %zu list_size %zu\n",size,list_size(&kpages));
+
+      printf("install pages\n");
+        
+      // install kpages
+      install_pages(&kpages);
+      
+      printf("finish install pages\n");
+      
       f->eax = fd_write(fd,p,size);
+
+      printf("uninstall pages\n");
+      
+      uninstall_pages(&kpages);
+
+      printf("finish uninstall pages\n");
+
+      printf("===tagiamies fd write exit\n");
     }
   }
   else if ( syscall_no == SYS_SEEK ) {
@@ -537,6 +578,8 @@ syscall_handler (struct intr_frame *f UNUSED)
     fd_close(fd);
   }
   else if ( syscall_no == SYS_MMAP ) {
+    // deal with the problems of frame allocs later, if needed at all
+    
     int fd = (int)user_args[0];
     if (fd == 0 || fd == 1 || fd == 2 ) {
       process_terminate(PROCESS_KILLED,-1);      
@@ -562,6 +605,6 @@ syscall_handler (struct intr_frame *f UNUSED)
     process_terminate(PROCESS_KILLED,-1);
   }
 
-  printf("thread %p syscall exit\n");
+  /* printf("thread %p syscall exit\n",thread_current()); */
 
 }

@@ -27,6 +27,7 @@ typedef struct virtual_page_info {
   struct thread * owner;
   page_source_of_data_e home;
   void * frame; // frame that backs this virtual page. NULL if not backed
+                // unfortunately useless. Use pagedir_get_page instead.
   
   // for elf file reads
   struct file * file;
@@ -80,6 +81,12 @@ void page_process_exit(void);
 bool install_page(void *, void *, bool);
 
 void uninstall_page(struct thread *, void *);
+
+void * query_page_installed(void * upage);
+
+void install_pages(struct list * gets);
+
+void uninstall_pages(struct list * gets);
 
 void uninstall_request_pull(struct thread * owner, void * upage, void * kpage);
 

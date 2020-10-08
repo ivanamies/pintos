@@ -3,6 +3,8 @@
 
 #include "threads/synch.h"
 
+#include <kernel/list.h>
+
 struct thread;
 
 typedef struct frame_aux_info {
@@ -17,9 +19,16 @@ typedef struct frame_aux_info {
   
 } frame_aux_info_t;
 
+typedef struct frame_aux_info_list_elem {
+  struct list_elem lel;
+  frame_aux_info_t * frame_aux_info;
+} frame_aux_info_list_elem_t;
+
 void frame_table_init(void);
 frame_aux_info_t* frame_alloc(struct thread *, void *);
 void frame_dealloc(void *);
+
+void frame_alloc_into_list(struct list * gets, void * addr_, size_t sz);
 
 void frame_process_exit(void);
 

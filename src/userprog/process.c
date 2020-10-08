@@ -541,7 +541,7 @@ load (struct input_args * ia, void (**eip) (void), void **esp)
   off_t file_ofs;
   bool success = false;
   int i;
-
+  
   // copy process name into thread
   strlcpy(t->process_name,file_name,PROCESS_NAME_MAX_LENGTH);
   // allocate and activate the supplemental page table

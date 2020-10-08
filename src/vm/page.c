@@ -198,13 +198,73 @@ void uninstall_page(struct thread * t, void* upage) {
   ASSERT(t != NULL);
   uint32_t * pd = t->page_table.pagedir;
   
-  // pretty sure I don't need this lock anymore
+  // add back in this lock
+  // other threads can uninstall other threads' pages
+  // it's just fucking it up is really hard
+  
   /* lock_acquire(&t->page_table.pd_lock); */
   
   // must uninstall page in software and hardware MMU under the same granularity 
   pagedir_clear_page(pd, upage);
   
   /* lock_release(&t->page_table.pd_lock); */
+}
+
+void * query_page_installed(void * upage) {
+  struct thread * cur = thread_current();
+  uint32_t * pd = cur->page_table.pagedir;
+  // you NEED locks around this
+  void * p = pagedir_get_page (pd, upage);
+  //
+  return p;
+}
+
+void install_pages(struct list * gets) {
+  struct thread * cur = thread_current();
+  struct list_elem * lel;
+  frame_aux_info_list_elem_t * frame_info_lel;
+  frame_aux_info_t * frame_info;
+  const bool writable = true;
+  uint8_t * upage;
+  uint8_t * kpage;
+
+  for ( lel = list_begin(gets); lel != list_end(gets); lel = list_next(lel) ) {
+    frame_info_lel = list_entry(lel,frame_aux_info_list_elem_t,lel);
+    frame_info = frame_info_lel->frame_aux_info;
+    ASSERT(frame_info != NULL);
+    ASSERT(lock_held_by_current_thread(&frame_info->pinning_lock));
+    ASSERT(cur == frame_info->owner);
+    upage = frame_info->upage;
+    kpage = frame_info->kpage;
+    printf("install page upage %p pg_ofs(upage) %d kpage %p\n",upage,pg_ofs(upage),kpage);
+    install_page(upage,kpage,writable);
+  }
+}
+
+void uninstall_pages(struct list * gets) {
+  struct thread * cur = thread_current();
+  struct list_elem * lel;
+  frame_aux_info_list_elem_t * frame_info_lel;
+  frame_aux_info_t * frame_info;
+  uint8_t * upage;
+
+  for ( lel = list_begin(gets); lel != list_end(gets);  ) {
+    frame_info_lel = list_entry(lel,frame_aux_info_list_elem_t,lel);
+    frame_info = frame_info_lel->frame_aux_info;
+    ASSERT(frame_info != NULL);
+    ASSERT(lock_held_by_current_thread(&frame_info->pinning_lock));
+    ASSERT(cur == frame_info->owner);
+    upage = frame_info->upage;
+    uninstall_page(cur,upage);
+    
+    // free pinning lock on kpage so it can be evicted and that upage uninstalled again
+    lock_release(&frame_info->pinning_lock);
+    
+    // advance list iterator
+    lel = list_remove(lel);
+    // free the struct that contains the previous list iterator
+    free(frame_info_lel);
+  }
 }
 
 // ... you can't call this with interrupts off...

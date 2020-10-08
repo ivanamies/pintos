@@ -124,12 +124,12 @@ pintos_init (void)
   thread_start ();
   serial_init_queue ();
   timer_calibrate ();
-  printf("===tagiamies 7\n");
+  // printf("===tagiamies 7\n");
 
 #ifdef FILESYS
   /* Initialize file system. */
   ide_init ();
-  printf("===tagiamies 8\n");
+  // printf("===tagiamies 8\n");
   locate_block_devices ();
   filesys_init (format_filesys);
 #endif
