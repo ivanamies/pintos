@@ -58,6 +58,11 @@ static void evict_frame(int idx) {
 
 }
 
+void evict_frame_w_kpage(void * kpage) {
+  size_t idx = frame_get_index_no_lock(kpage);
+  evict_frame(idx);
+}
+
 static frame_aux_info_t * get_frame_slot_with_eviction(void) {
   /* printf("tagiamies thread %p get frame slot with eviction\n",thread_current()); */
 
@@ -222,40 +227,36 @@ void frame_alloc_into_list(struct list * gets, void * addr_, size_t sz) {
   printf("start upage %p end upage %p diff %zu num_pages %zu\n",start_upage,end_upage,end_upage-start_upage,num_pages);
 
   for ( i = 0; i < num_pages; ++i ) {
-
-    printf("=== tagiamies frame alloc into list 1\n");
     
     page_info = get_vaddr_info(&cur->page_table,upage);
+
+    printf("frame alloc into list thread %p upage %p home %d\n",cur,upage,page_info.home);
     
     // if we've seen this page before, evict its contents
-    if (page_info.valid == 1) {
-
-      printf("=== tagiamies frame alloc into list 2\n");
-    
+    if (page_info.valid == 1) {    
       // do not supply pages that are both elf and not writable...
       ASSERT(!(page_info.home == PAGE_SOURCE_OF_DATA_ELF &&
                !page_info.writable));
       
       // if already installed, find the frame and evict it
       if ( (kpage = query_page_installed(upage)) ) {
-        printf("=== tagiamies frame alloc into list 3\n");
         frame_idx = frame_get_index_no_lock(kpage);
         lk = &frame_table_user.frame_aux_info[frame_idx].pinning_lock;
-        printf("=== tagiamies frame alloc into list 3.3 frame_idx %zu lk %p\n",frame_idx,lk);
         // spin until we acquire the lock we want
         while ( !lock_try_acquire(lk) ) {
           printf("frame alloc into list trying to acquire kpage %p with lk %p\n",kpage,lk);
           uninstall_request_push(); // may uninstall this very upage...
           thread_yield();
         }
-        printf("=== tagiamies frame alloc into list 4\n");
         // if page still installed, evict it
         if ( query_page_installed(upage) != NULL ) {
           evict_frame(frame_idx); // also uninstalls the upage
         }
-        printf("=== tagiamies frame alloc into list 5\n");
         lock_release(&frame_table_user.frame_aux_info[frame_idx].pinning_lock);
       }
+
+      // get back the page info, because it may have changed in evict_frame
+      page_info = get_vaddr_info(&cur->page_table,upage);
       
       // clear the page
       // don't let anything remain in the pages touched
@@ -265,31 +266,30 @@ void frame_alloc_into_list(struct list * gets, void * addr_, size_t sz) {
       // but also do nothing if PAGE_SOURCE_OF_DATA_MMAP
       // case 1, clean. then we discard the current data
       // case 2, dirty. we also discard the current data
-      printf("=== tagiamies frame alloc into list 6\n");
       if (page_info.home == PAGE_SOURCE_OF_DATA_SWAP_IN) {
-        printf("=== tagiamies frame alloc into list 7\n");
         // discard the swap info
         // I am not a """real""" operating system
         // make the swap space available
         swap_make_page_available(page_info.swap_loc);
       }
+      
+      if ( page_info.home == PAGE_SOURCE_OF_DATA_ELF ||
+           page_info.home == PAGE_SOURCE_OF_DATA_STACK ||
+           page_info.home == PAGE_SOURCE_OF_DATA_SWAP_IN ) {
+        // set upage to paged out
+        page_info.home = PAGE_SOURCE_OF_DATA_SWAP_OUT;
+        set_vaddr_info(&cur->page_table,upage,&page_info);
+      }
     }
     
-    printf("=== tagiamies frame alloc into list 8\n");
-      
     // give us a new frame for this upage
     frame_aux_info = frame_alloc(cur,upage); // somehow asserts?
-    printf("=== tagiamies frame alloc into list 9\n");
     ASSERT(lock_held_by_current_thread(&frame_aux_info->pinning_lock));
     frame_aux_lel = (frame_aux_info_list_elem_t *)malloc(sizeof(frame_aux_info_list_elem_t));
     frame_aux_lel->frame_aux_info = frame_aux_info;
     list_push_back(gets,&frame_aux_lel->lel);
     upage += PGSIZE;
-    printf("=== tagiamies frame alloc into list 10\n");
   }
-  
-  printf("=== tagiamies frame alloc into list 11\n");
-
 }
 
 void frame_process_exit(void) {

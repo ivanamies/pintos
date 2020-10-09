@@ -556,7 +556,9 @@ syscall_handler (struct intr_frame *f UNUSED)
       f->eax = fd_write(fd,p,size);
 
       printf("uninstall pages\n");
-      
+
+      // YOU DON'T NEED TO UNINSTALL PAGES AT ALL
+      // you merely need to release the locks
       uninstall_pages(&kpages);
 
       printf("finish uninstall pages\n");

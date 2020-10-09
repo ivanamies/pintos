@@ -71,7 +71,7 @@ void* alloc_virtual_address(page_table_t * page_table, virtual_page_info_t * inf
 // virtual_page_info_t has valid == 0 if failed
 virtual_page_info_t get_vaddr_info(page_table_t * page_table, void * vaddr);
 
-// returns error code 1 if failed
+// returns 1 if the page already exists
 // virtual_page_info_t will be COPIED
 int set_vaddr_info(page_table_t * page_table, void * vaddr, virtual_page_info_t * info);
 

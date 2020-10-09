@@ -120,7 +120,7 @@ static int set_vaddr_info_no_lock(page_table_t * page_table,
   page->addr = vaddr;
   virtual_page_t * discovered;
   struct hash_elem * e;
-  int err = 0;
+  int prev = 0;
 
   page->addr = vaddr;
 
@@ -130,12 +130,13 @@ static int set_vaddr_info_no_lock(page_table_t * page_table,
     discovered = hash_entry(e,virtual_page_t,hash_elem);
     discovered->info = *info;
     free(page);
+    prev = 1;
   }
   else {
     page->info = *info;
   }
   
-  return err;
+  return prev;
 }
 
 int set_vaddr_info(page_table_t * page_table,
@@ -241,12 +242,13 @@ void install_pages(struct list * gets) {
   }
 }
 
+// should be renamed release locks or something
 void uninstall_pages(struct list * gets) {
   struct thread * cur = thread_current();
   struct list_elem * lel;
   frame_aux_info_list_elem_t * frame_info_lel;
   frame_aux_info_t * frame_info;
-  uint8_t * upage;
+  uint8_t * kpage;  
 
   for ( lel = list_begin(gets); lel != list_end(gets);  ) {
     frame_info_lel = list_entry(lel,frame_aux_info_list_elem_t,lel);
@@ -254,10 +256,17 @@ void uninstall_pages(struct list * gets) {
     ASSERT(frame_info != NULL);
     ASSERT(lock_held_by_current_thread(&frame_info->pinning_lock));
     ASSERT(cur == frame_info->owner);
-    upage = frame_info->upage;
-    uninstall_page(cur,upage);
     
-    // free pinning lock on kpage so it can be evicted and that upage uninstalled again
+    /* kpage = frame_info->kpage; */
+    
+    /* printf("uninstall page thread %p kpage %p\n",cur,kpage); */
+    /* evict_frame_w_kpage(kpage); // also uninstalls the upage */
+
+    /* // release the page */
+    /* // free pinning lock on kpage so it can be evicted and that upage uninstalled again */
+    /* frame_info->owner = NULL; */
+    /* frame_info->upage = NULL; */
+    
     lock_release(&frame_info->pinning_lock);
     
     // advance list iterator
@@ -272,7 +281,7 @@ static void uninstall_page_supplemental_info(struct thread * t, void * upage, vo
   virtual_page_info_t info = get_vaddr_info_no_lock(&t->page_table,upage);
   ASSERT(info.valid == 1 && "don't try to evict invalid pages");
   
-  // printf("upage %p info.home %d info.writable %d\n",upage,info.home,info.writable);
+  printf("uninstall page supplemental info upage %p kpage %p info.home %d info.writable %d\n",upage,kpage,info.home,info.writable);
   
   if ( info.home == PAGE_SOURCE_OF_DATA_MMAP ) {
     // call mmap things

@@ -38,4 +38,6 @@ struct lock * frame_get_frame_lock(void *);
 // for debugging
 void frame_table_dump(int);
 
+void evict_frame_w_kpage(void * kpage);
+
 #endif /* vm/frame.h */
