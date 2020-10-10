@@ -184,6 +184,7 @@ bool install_page (void *upage, void *kpage, bool writable)
   lock_acquire(&t->page_table.pd_lock);
   /* Verify that there's not already a page at that virtual
      address, then map our page there. */
+  printf("thread %p install acquire lock\n",t);
   bool p1 = pagedir_get_page (pd, upage) == NULL;
   bool p2 = false;
   if ( p1 ) {
@@ -191,6 +192,7 @@ bool install_page (void *upage, void *kpage, bool writable)
     p2 = pagedir_set_page (pd, upage, kpage, writable);
   }
   lock_release(&t->page_table.pd_lock);
+  printf("thread %p install release lock\n",t);
   return p1 && p2;
 }
 
@@ -200,17 +202,11 @@ void uninstall_page(struct thread * t, void* upage) {
   ASSERT(t != NULL);
   uint32_t * pd = t->page_table.pagedir;
   
-  // add back in this lock
-  // other threads can uninstall other threads' pages
-  // it's just fucking it up is really hard
-  
-  lock_acquire(&t->page_table.pd_lock);
-  
-    printf("thread %p uninstalled upage %p\n",t,upage);
-  // must uninstall page in software and hardware MMU under the same granularity 
-  pagedir_clear_page(pd, upage);
-  
-  lock_release(&t->page_table.pd_lock);
+  // acquire the pd_lock before calling this
+  // really you should only be uninstalling threads from request push
+  ASSERT(lock_held_by_current_thread(&t->page_table.pd_lock));
+  printf("thread %p uninstalled upage %p\n",t,upage);
+  pagedir_clear_page(pd, upage);  
 }
 
 void * query_page_installed(void * upage) {
@@ -337,10 +333,12 @@ void uninstall_request_pull(struct thread * owner, void * upage, void * kpage) {
   if ( owner == cur ) {
     // just uninstall it
     // locks are for show
+    lock_acquire(&owner->page_table.pd_lock);
     lock_acquire(&owner->page_table.lock);
     uninstall_page(owner,upage);
     uninstall_page_supplemental_info(owner,upage,kpage);
     lock_release(&owner->page_table.lock);
+    lock_release(&owner->page_table.pd_lock);
     return;
   }
   
@@ -358,11 +356,13 @@ void uninstall_request_pull(struct thread * owner, void * upage, void * kpage) {
   // also prevent the owning thread from examining its supplemental page table
   // when the supplemental page table is unsynched with the hardware page table
   lock_acquire(&owner->page_table.lock);
+  lock_acquire(&owner->page_table.pd_lock);
   bool unscheduled_and_uninstalled = thread_uninstall_page_if_unschedulable(owner,upage);
   if ( unscheduled_and_uninstalled ) {
     uninstall_page_supplemental_info(owner,upage,kpage);
   }
   lock_release(&owner->page_table.lock);
+  lock_release(&owner->page_table.pd_lock);
   if ( unscheduled_and_uninstalled ) {
     return;
   }
