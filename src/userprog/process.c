@@ -411,7 +411,7 @@ process_exit (void)
   struct thread *cur = thread_current ();
   uint32_t *pd;
 
-  printf("===tagiamies process exit start\n");
+  // printf("===tagiamies process exit start\n");
   // destroy the frames I own
   frame_process_exit();
   // destroy the pages I own
