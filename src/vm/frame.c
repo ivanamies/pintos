@@ -50,7 +50,7 @@ static void evict_frame(int idx) {
   uint8_t * upage = frame_table_user.frame_aux_info[idx].upage;
   void * frame = frame_get_frame_no_lock(idx);
   
-  /* printf("tagiamies 5 thread %p requested %p uninstall %p\n",thread_current(),owner,upage); */
+  printf("tagiamies 5 thread %p requested %p uninstall %p\n",thread_current(),owner,upage);
 
   uninstall_request_pull(owner,upage,frame);
       
@@ -284,6 +284,7 @@ void frame_alloc_into_list(struct list * gets, void * addr_, size_t sz) {
     
     // give us a new frame for this upage
     frame_aux_info = frame_alloc(cur,upage); // somehow asserts?
+    printf("frame alloc into list thread %p upage %p got kpage %p\n",cur,upage,frame_aux_info->kpage);
     ASSERT(lock_held_by_current_thread(&frame_aux_info->pinning_lock));
     frame_aux_lel = (frame_aux_info_list_elem_t *)malloc(sizeof(frame_aux_info_list_elem_t));
     frame_aux_lel->frame_aux_info = frame_aux_info;
