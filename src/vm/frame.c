@@ -53,7 +53,7 @@ static void evict_frame(int idx) {
   printf("tagiamies 5 thread %p requested %p uninstall %p\n",thread_current(),owner,upage);
 
   uninstall_request_pull(owner,upage,frame);
-      
+  
   memset(frame,0,PGSIZE);
 
 }
@@ -313,7 +313,9 @@ void frame_process_exit(void) {
 
     if (frame_table_user.frame_aux_info[i].owner == cur) {
 
+      lock_acquire(&cur->page_table.pd_lock);
       uninstall_page(cur,frame_table_user.frame_aux_info[i].upage);
+      lock_release(&cur->page_table.pd_lock);
       
       frame_table_user.frame_aux_info[i].owner = NULL;
       frame_table_user.frame_aux_info[i].upage = NULL;      
