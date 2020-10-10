@@ -254,38 +254,22 @@ void frame_alloc_into_list(struct list * gets, void * addr_, size_t sz) {
           uninstall_request_push(); // may uninstall this very upage...
           thread_yield();
         }
-        // if page still installed, evict it
-        if ( query_page_installed(upage) != NULL ) {
-          evict_frame(frame_idx); // also uninstalls the upage
+        // if page still installed, keep it
+        if ( kpage == query_page_installed(upage) ) {
+          
         }
-        lock_release(&frame_table_user.frame_aux_info[frame_idx].pinning_lock);
+        else { // else release the frame lock and alloc 
+          lock_release(&frame_table_user.frame_aux_info[frame_idx].pinning_lock);
+          frame_aux_info = frame_alloc(cur,upage);
+        }
       }
-
-      // get back the page info, because it may have changed in evict_frame
-      page_info = get_vaddr_info(&cur->page_table,upage);
-      
-      // clear the page
-      // don't let anything remain in the pages touched
+      else { // else not installed, page it in
+        ASSERT(false); // wip
+      }
+    }
+    else { // else we've seen it now
       //
-      // do nothing if info.home is PAGE_SOURCE_OF_DATA_SWAP_OUT
-      // or info.home == PAGE_SOURCE_OF_DATA_ELF and writable is false
-      // but also do nothing if PAGE_SOURCE_OF_DATA_MMAP
-      // case 1, clean. then we discard the current data
-      // case 2, dirty. we also discard the current data
-      if (page_info.home == PAGE_SOURCE_OF_DATA_SWAP_IN) {
-        // discard the swap info
-        // I am not a """real""" operating system
-        // make the swap space available
-        swap_make_page_available(page_info.swap_loc);
-      }
-      
-      if ( page_info.home == PAGE_SOURCE_OF_DATA_ELF ||
-           page_info.home == PAGE_SOURCE_OF_DATA_STACK ||
-           page_info.home == PAGE_SOURCE_OF_DATA_SWAP_IN ) {
-        // set upage to paged out
-        page_info.home = PAGE_SOURCE_OF_DATA_SWAP_OUT;
-        set_vaddr_info(&cur->page_table,upage,&page_info);
-      }
+      ASSERT(false && "frame alloc into list fail, you should've seen this page before.");
     }
     
     // give us a new frame for this upage
