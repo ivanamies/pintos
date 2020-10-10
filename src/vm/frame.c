@@ -51,9 +51,15 @@ static void evict_frame(int idx) {
   void * frame = frame_get_frame_no_lock(idx);
   
   /* printf("tagiamies 5 thread %p requested %p uninstall %p\n",thread_current(),owner,upage); */
-
+  
   uninstall_request_pull(owner,upage,frame);
-      
+
+  // clear the frame aux info
+  // set it to something correct later
+  // don't set it here.
+  frame_table_user.frame_aux_info[idx].owner = NULL;
+  frame_table_user.frame_aux_info[idx].upage = NULL;
+  
   memset(frame,0,PGSIZE);
 
 }
@@ -173,7 +179,7 @@ void frame_table_init(void) {
 
 static frame_aux_info_t* frame_alloc_multiple(int n, struct thread * owner, void * addr) {
   ASSERT(n==1); // only works with 1 for now
-  printf("tagiamies thread %p frame alloc multiple for upage %p\n",thread_current(),addr);
+  // printf("tagiamies thread %p frame alloc multiple for upage %p\n",thread_current(),addr);
 
   frame_aux_info_t * res;
   

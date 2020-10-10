@@ -297,7 +297,7 @@ page_fault (struct intr_frame *f)
   // get if its writable from the supplemental page table
   virtual_page_info_t info = get_vaddr_info(&thread_current()->page_table,upage);
 
-  printf("exception info.valid %d thread %p upage %p home %d writable %d\n",info.valid,thread_current(),upage,info.home,info.writable);
+  // printf("exception info.valid %d thread %p upage %p home %d writable %d\n",info.valid,thread_current(),upage,info.home,info.writable);
   
   if ( info.valid == 1 ) {
     

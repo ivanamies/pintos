@@ -281,7 +281,7 @@ static void uninstall_page_supplemental_info(struct thread * t, void * upage, vo
   virtual_page_info_t info = get_vaddr_info_no_lock(&t->page_table,upage);
   ASSERT(info.valid == 1 && "don't try to evict invalid pages");
   
-  printf("uninstall page supplemental info upage %p kpage %p info.home %d info.writable %d\n",upage,kpage,info.home,info.writable);
+  // printf("thread %p uninstall page supplemental info upage %p kpage %p info.home %d info.writable %d\n",thread_current(),upage,kpage,info.home,info.writable);
   
   if ( info.home == PAGE_SOURCE_OF_DATA_MMAP ) {
     // call mmap things
@@ -329,7 +329,8 @@ void uninstall_request_pull(struct thread * owner, void * upage, void * kpage) {
   
   struct thread * cur = thread_current();
   
-  // printf("uninstall request pull owner %p upage %p\n",owner,upage);
+  // printf("thread %p uninstall request pull owner %p upage %p\n",thread_current(),owner,upage);
+  
   if ( owner == cur ) {
     // just uninstall it
     // locks are for show
@@ -400,8 +401,6 @@ void uninstall_request_push(void) {
   uninstall_request_t * u_req;
   void * upage;
   void * kpage;
-
-  /* printf("thread %p uinstall request push tagiamies 100\n",cur); */
 
   // what the fuck does this pd_lock acquire do???
   lock_acquire(&cur->page_table.pd_lock);
