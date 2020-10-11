@@ -7,6 +7,7 @@
 #include "threads/malloc.h"
 
 #include "userprog/pagedir.h"
+#include "userprog/exception.h"
 
 #include "vm/swap.h"
 
@@ -254,26 +255,27 @@ void frame_alloc_into_list(struct list * gets, void * addr_, size_t sz) {
           uninstall_request_push(); // may uninstall this very upage...
           thread_yield();
         }
-        // if page still installed, keep it
+        // if page still installed, keep frame_aux_info
         if ( kpage == query_page_installed(upage) ) {
-          
+          frame_aux_info = &frame_table_user.frame_aux_info[frame_idx];
         }
-        else { // else release the frame lock and alloc 
+        else { // else release the frame lock and page in the upage
           lock_release(&frame_table_user.frame_aux_info[frame_idx].pinning_lock);
-          frame_aux_info = frame_alloc(cur,upage);
+          frame_aux_info = load_upage(upage,&page_info);
+          ASSERT(lock_held_by_current_thread(&frame_aux_info->pinning_lock));
         }
       }
-      else { // else not installed, page it in
-        ASSERT(false); // wip
+      else { // else not installed, page in the upage
+        frame_aux_info = load_upage(upage,&page_info);
+        ASSERT(lock_held_by_current_thread(&frame_aux_info->pinning_lock));
       }
     }
     else { // else we've seen it now
-      //
+      // it's possible to have not seen this before...
+      // make some struct on the stack spanning more than 1 page
       ASSERT(false && "frame alloc into list fail, you should've seen this page before.");
     }
     
-    // give us a new frame for this upage
-    frame_aux_info = frame_alloc(cur,upage); // somehow asserts?
     ASSERT(lock_held_by_current_thread(&frame_aux_info->pinning_lock));
     frame_aux_lel = (frame_aux_info_list_elem_t *)malloc(sizeof(frame_aux_info_list_elem_t));
     frame_aux_lel->frame_aux_info = frame_aux_info;
