@@ -199,7 +199,7 @@ int is_valid_stack_access(struct intr_frame * f, void * fault_addr_, int write U
   return res;
 }
 
-static int grow_stack(void * fault_addr) {
+frame_aux_info_t * grow_stack(void * fault_addr) {
   // allocate and map pages until fault_addr stops faulting
   
   uint8_t * upage = pg_round_down(fault_addr);
@@ -225,11 +225,12 @@ static int grow_stack(void * fault_addr) {
     set_vaddr_info(&thread_current()->page_table,upage,&info);
   }
   else {
-    frame_dealloc(kpage);
+    frame_info->owner = NULL;
+    frame_info->upage = NULL;
+    lock_release(&frame_info->pinning_lock);
+    frame_info = NULL;
   }
-  lock_release(&frame_info->pinning_lock);
-  return success;
-  
+  return frame_info;  
 }
 
 frame_aux_info_t * load_upage(void * upage_, virtual_page_info_t * info) {
@@ -353,7 +354,8 @@ page_fault (struct intr_frame *f)
             user ? "user" : "kernel");
     kill(f);
   }
-
+  
+  frame_aux_info_t * frame_info = NULL;
   uint8_t * upage = pg_round_down(fault_addr);  
   // get if its writable from the supplemental page table
   virtual_page_info_t info = get_vaddr_info(&thread_current()->page_table,upage);
@@ -361,7 +363,7 @@ page_fault (struct intr_frame *f)
   // printf("exception info.valid %d thread %p upage %p home %d writable %d\n",info.valid,thread_current(),upage,info.home,info.writable);
   
   if ( info.valid == 1 ) {
-    frame_aux_info_t * frame_info = load_upage(upage,&info);
+    frame_info = load_upage(upage,&info);
     if ( !frame_info ) {
       printf("failed to fault in upage %p\n",upage);
       kill(f);
@@ -374,10 +376,14 @@ page_fault (struct intr_frame *f)
     if ( !valid_stack_access ) {
       kill(f);
     }
-    int success = grow_stack(fault_addr);
-    if (!success) {
+    frame_info = grow_stack(fault_addr);
+
+    if (frame_info == NULL) {
       kill(f);
-    }    
+    }
+    
+    lock_release(&frame_info->pinning_lock);
+
   }
   else {
     // info was not valid && address not stackish

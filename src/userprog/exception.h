@@ -16,6 +16,8 @@ void exception_print_stats (void);
 int is_stackish(void*);
 int is_valid_stack_access(struct intr_frame *, void *, int /*unused*/ );
 
+struct frame_aux_info * grow_stack(void * fault_addr);
+
 struct frame_aux_info * load_upage(void * upage_, struct virtual_page_info * info);
 
 #endif /* userprog/exception.h */

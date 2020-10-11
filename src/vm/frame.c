@@ -213,17 +213,19 @@ void frame_dealloc(void * p) {
 void frame_alloc_into_list(struct list * gets, void * addr_, size_t sz) {
   struct thread * cur = thread_current();
   
-  frame_aux_info_list_elem_t * frame_aux_lel; // for gets
+  frame_aux_info_list_elem_t * frame_aux_lel = NULL; // for gets
   
-  frame_aux_info_t * frame_aux_info;
-  struct lock * lk;
+  frame_aux_info_t * frame_aux_info = NULL;
+  struct lock * lk = NULL;
   
-  virtual_page_info_t page_info;
+  virtual_page_info_t page_info = { 0 };
   
-  uint8_t * upage;
-  uint8_t * kpage;
-  size_t frame_idx;
-  size_t i;
+  uint8_t * upage = NULL;
+  uint8_t * kpage = NULL;
+  size_t frame_idx = 0;
+  size_t i = 0;
+
+  bool success;
 
   uint8_t * start_upage = pg_round_down(addr_);
   uint8_t * end_upage = pg_round_down(((uint8_t *)addr_) + sz);
@@ -270,12 +272,18 @@ void frame_alloc_into_list(struct list * gets, void * addr_, size_t sz) {
         ASSERT(lock_held_by_current_thread(&frame_aux_info->pinning_lock));
       }
     }
-    else { // else we've seen it now
-      // it's possible to have not seen this before...
-      // make some struct on the stack spanning more than 1 page
-      ASSERT(false && "frame alloc into list fail, you should've seen this page before.");
+    else if ( is_stackish(upage) ) {
+      // we checked the validity of upage previously in syscall
+      // no good way to ASSERT this without the interrupt context
+      
+      frame_aux_info = grow_stack(upage);
+      ASSERT(frame_aux_info != NULL && "stack growth must succeed\n");
     }
-    
+    else {
+      ASSERT(false && "frame alloc into list fail, how did you do this??");
+    }
+
+    ASSERT(frame_aux_info != NULL);
     ASSERT(lock_held_by_current_thread(&frame_aux_info->pinning_lock));
     frame_aux_lel = (frame_aux_info_list_elem_t *)malloc(sizeof(frame_aux_info_list_elem_t));
     frame_aux_lel->frame_aux_info = frame_aux_info;

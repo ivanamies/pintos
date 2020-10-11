@@ -243,7 +243,7 @@ void install_pages(struct list * gets) {
 }
 
 // should be renamed release locks or something
-void uninstall_pages(struct list * gets) {
+void release_page_locks(struct list * gets) {
   struct thread * cur = thread_current();
   struct list_elem * lel;
   frame_aux_info_list_elem_t * frame_info_lel;

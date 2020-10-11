@@ -86,7 +86,7 @@ void * query_page_installed(void * upage);
 
 void install_pages(struct list * gets);
 
-void uninstall_pages(struct list * gets);
+void release_page_locks(struct list * gets);
 
 void uninstall_request_pull(struct thread * owner, void * upage, void * kpage);
 
