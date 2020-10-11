@@ -23,7 +23,7 @@ static long long page_fault_cnt;
 static void kill (struct intr_frame *);
 static void page_fault (struct intr_frame *);
 
-static size_t max_stack_pages = 32;
+static size_t max_stack_pages = 64;
 
 /* Registers handlers for interrupts that can be caused by user
    programs.
