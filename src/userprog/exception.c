@@ -232,6 +232,67 @@ static int grow_stack(void * fault_addr) {
   
 }
 
+frame_aux_info_t * load_upage(void * upage_, virtual_page_info_t * info) {
+  uint8_t * upage = upage_;
+  ASSERT(pg_ofs(upage) == 0);// upage must be aligned
+  ASSERT(query_page_installed(upage) == NULL); // upage must not be installed
+  ASSERT(info->valid == 1); // info must be valid
+  
+  frame_aux_info_t * frame_info = frame_alloc(thread_current(),upage);
+  ASSERT(frame_info != NULL); // frame_alloc will always succeed
+  ASSERT(lock_held_by_current_thread(&frame_info->pinning_lock));
+  // printf("thread %p frame alloc exit info->home %d\n",thread_current(),info->home);
+  uint8_t *kpage = frame_info->kpage;
+    
+  bool success = true;
+  bool writable = true;
+  ASSERT(info->home != PAGE_SOURCE_OF_DATA_SWAP_OUT);
+  if ( info->home == PAGE_SOURCE_OF_DATA_ELF ||
+       info->home == PAGE_SOURCE_OF_DATA_MMAP ) {
+    struct file * file = info->file;
+    uint32_t page_read_bytes = info->page_read_bytes;
+    uint32_t page_zero_bytes = info->page_zero_bytes;
+    uint32_t ofs = info->elf_file_ofs;
+    ASSERT(page_read_bytes + page_zero_bytes == PGSIZE);
+    writable = info->writable;
+    file_seek(file,ofs);
+    success = file_read (file, kpage, page_read_bytes) == (int) page_read_bytes;
+    /* hex_dump(0,kpage,128,false); */
+    if ( !success ) {
+      printf("exception page fault elf file read failed\n");
+      goto load_upage_cleanup;
+    }
+    memset (kpage + page_read_bytes, 0, page_zero_bytes);
+  }
+  else if ( info->home == PAGE_SOURCE_OF_DATA_SWAP_IN ) {
+    // printf("thread %p frame %p gotten from %zu\n",thread_current(),kpage,info->swap_loc);
+    swap_get_page(kpage,PGSIZE,info->swap_loc);
+    // some chance of a transactional problem to update supplemental page table here
+    // do it anyways
+    // should be impossible, we both lock the page_table lock AND disable interrupts if
+    // some other thread is modifying this thread's page_table
+    info->home = PAGE_SOURCE_OF_DATA_SWAP_OUT;
+    set_vaddr_info(&thread_current()->page_table,upage,info);
+  }
+  
+  success = install_page (upage, kpage, writable);
+  if ( !success ) {
+    printf("exception install page failed upage %p kpage %p\n",upage,kpage);
+    goto load_upage_cleanup;    
+  }
+  
+ load_upage_cleanup:
+  if (!success ) {
+    if ( frame_info != NULL && lock_held_by_current_thread(&frame_info->pinning_lock) ) {
+      // effectively deallocates it
+      frame_info->upage = NULL;
+      lock_release(&frame_info->pinning_lock);
+      frame_info = NULL;
+    }
+  }
+  return frame_info;
+}
+
 /* Page fault handler.  This is a skeleton that must be filled in
    to implement virtual memory.  Some solutions to project 2 may
    also require modifying this code.
@@ -296,57 +357,17 @@ page_fault (struct intr_frame *f)
   uint8_t * upage = pg_round_down(fault_addr);  
   // get if its writable from the supplemental page table
   virtual_page_info_t info = get_vaddr_info(&thread_current()->page_table,upage);
-
+  
   // printf("exception info.valid %d thread %p upage %p home %d writable %d\n",info.valid,thread_current(),upage,info.home,info.writable);
   
   if ( info.valid == 1 ) {
-    
-    // frame_alloc will always succeed
-    frame_aux_info_t * frame_info = frame_alloc(thread_current(),upage);
-    // printf("thread %p frame alloc exit info.home %d\n",thread_current(),info.home);
-    uint8_t *kpage = frame_info->kpage;
-    
-    bool success = true;
-    bool writable = true;
-    ASSERT(info.home != PAGE_SOURCE_OF_DATA_SWAP_OUT);
-    if ( info.home == PAGE_SOURCE_OF_DATA_ELF ||
-         info.home == PAGE_SOURCE_OF_DATA_MMAP ) {
-      struct file * file = info.file;
-      uint32_t page_read_bytes = info.page_read_bytes;
-      uint32_t page_zero_bytes = info.page_zero_bytes;
-      uint32_t ofs = info.elf_file_ofs;
-      ASSERT(page_read_bytes + page_zero_bytes == PGSIZE);
-      writable = info.writable;
-      file_seek(file,ofs);
-      success = file_read (file, kpage, page_read_bytes) == (int) page_read_bytes;
-      /* hex_dump(0,kpage,128,false); */
-      if ( !success ) {
-        printf("page fault exception elf file read failed\n");
-        frame_dealloc(kpage);
-        kill(f);
-      }
-      memset (kpage + page_read_bytes, 0, page_zero_bytes);
-    }
-    else if ( info.home == PAGE_SOURCE_OF_DATA_SWAP_IN ) {
-      // printf("thread %p frame %p gotten from %zu\n",thread_current(),kpage,info.swap_loc);
-      swap_get_page(kpage,PGSIZE,info.swap_loc);
-      // some chance of a transactional problem to update supplemental page table here
-      // do it anyways
-      // should be impossible, we both lock the page_table lock AND disable interrupts if
-      // some other thread is modifying this thread's page_table
-      info.home = PAGE_SOURCE_OF_DATA_SWAP_OUT;
-      set_vaddr_info(&thread_current()->page_table,upage,&info);
-    }
-    
-    success = install_page (upage, kpage, writable);
-    // printf("thread %p released pinning lk %p\n",thread_current(),&frame_info->pinning_lock);
-    lock_release(&frame_info->pinning_lock); // release the lock on the kpage
-    if (!success) {
-      printf("page fault exception install_page failed\n");
-      frame_dealloc(kpage);
-      printf("successfully dealloc kpage \n");
+    frame_aux_info_t * frame_info = load_upage(upage,&info);
+    if ( !frame_info ) {
+      printf("failed to fault in upage %p\n",upage);
       kill(f);
     }
+    // printf("thread %p released pinning lk %p\n",thread_current(),&frame_info->pinning_lock);
+    lock_release(&frame_info->pinning_lock); // release the lock on the kpage
   }
   else if (is_stackish(fault_addr)) {
     bool valid_stack_access = is_valid_stack_access(f,fault_addr,write);
