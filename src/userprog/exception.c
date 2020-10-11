@@ -236,7 +236,8 @@ frame_aux_info_t * grow_stack(void * fault_addr) {
 frame_aux_info_t * load_upage(void * upage_, virtual_page_info_t * info) {
   uint8_t * upage = upage_;
   ASSERT(pg_ofs(upage) == 0);// upage must be aligned
-  ASSERT(query_page_installed(upage) == NULL); // upage must not be installed
+  // can't assert, upage might be installed read only
+  // ASSERT(query_page_installed(upage) == NULL);
   ASSERT(info->valid == 1); // info must be valid
   
   frame_aux_info_t * frame_info = frame_alloc(thread_current(),upage);
@@ -365,7 +366,6 @@ page_fault (struct intr_frame *f)
   if ( info.valid == 1 ) {
     frame_info = load_upage(upage,&info);
     if ( !frame_info ) {
-      printf("failed to fault in upage %p\n",upage);
       kill(f);
     }
     // printf("thread %p released pinning lk %p\n",thread_current(),&frame_info->pinning_lock);

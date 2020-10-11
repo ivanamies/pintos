@@ -520,8 +520,8 @@ syscall_handler (struct intr_frame *f UNUSED)
       
       f->eax = fd_read(fd,p,sz);
 
-      // uninstall kpages
-      uninstall_pages(&kpages);
+      // release kpage locks
+      release_page_locks(&kpages);
       /* printf("===tagiamies fd read exit\n"); */
     }
   }
@@ -557,12 +557,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 
       /* printf("uninstall pages\n"); */
 
-      // YOU DON'T NEED TO UNINSTALL PAGES AT ALL
-      // you merely need to release the locks
-      // this function is poorly named...
-      uninstall_pages(&kpages);
-
-      /* printf("finish uninstall pages\n"); */
+      release_page_locks(&kpages);
 
       /* printf("===tagiamies fd write exit\n"); */
     }
