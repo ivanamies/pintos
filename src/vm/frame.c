@@ -231,13 +231,13 @@ void frame_alloc_into_list(struct list * gets, void * addr_, size_t sz) {
   
   // set addr at the boundary of a page
   upage = start_upage;
-  printf("start upage %p end upage %p diff %zu num_pages %zu\n",start_upage,end_upage,end_upage-start_upage,num_pages);
+  // printf("start upage %p end upage %p diff %zu num_pages %zu\n",start_upage,end_upage,end_upage-start_upage,num_pages);
 
   for ( i = 0; i < num_pages; ++i ) {
     
     page_info = get_vaddr_info(&cur->page_table,upage);
 
-    printf("frame alloc into list thread %p upage %p home %d\n",cur,upage,page_info.home);
+    // printf("frame alloc into list thread %p upage %p home %d\n",cur,upage,page_info.home);
     
     // if we've seen this page before, evict its contents
     if (page_info.valid == 1) {    
@@ -251,7 +251,7 @@ void frame_alloc_into_list(struct list * gets, void * addr_, size_t sz) {
         lk = &frame_table_user.frame_aux_info[frame_idx].pinning_lock;
         // spin until we acquire the lock we want
         while ( !lock_try_acquire(lk) ) {
-          printf("frame alloc into list trying to acquire kpage %p with lk %p\n",kpage,lk);
+          // printf("frame alloc into list trying to acquire kpage %p with lk %p\n",kpage,lk);
           uninstall_request_push(); // may uninstall this very upage...
           thread_yield();
         }

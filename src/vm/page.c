@@ -237,7 +237,7 @@ void install_pages(struct list * gets) {
     ASSERT(cur == frame_info->owner);
     upage = frame_info->upage;
     kpage = frame_info->kpage;
-    printf("install page upage %p pg_ofs(upage) %d kpage %p\n",upage,pg_ofs(upage),kpage);
+    // printf("install page upage %p pg_ofs(upage) %d kpage %p\n",upage,pg_ofs(upage),kpage);
     install_page(upage,kpage,writable);
   }
 }

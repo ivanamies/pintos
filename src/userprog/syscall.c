@@ -510,7 +510,7 @@ syscall_handler (struct intr_frame *f UNUSED)
       f->eax = sz;
     }
     else {
-      printf("===tagiamies fd read\n");
+      /* printf("===tagiamies fd read\n"); */
       // get kpages
       struct list kpages;
       list_init(&kpages);
@@ -522,7 +522,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 
       // uninstall kpages
       uninstall_pages(&kpages);
-      printf("===tagiamies fd read exit\n");
+      /* printf("===tagiamies fd read exit\n"); */
     }
   }
   else if ( syscall_no == SYS_WRITE ) {
@@ -536,34 +536,35 @@ syscall_handler (struct intr_frame *f UNUSED)
       putbuf(p,size);
     }
     else {
-      printf("===tagiamies fd write\n");
+      /* printf("===tagiamies fd write\n"); */
       // get kpages
       struct list kpages;
       list_init(&kpages);
-      printf("before frame alloc into list\n");
+      /* printf("before frame alloc into list\n"); */
       
       frame_alloc_into_list(&kpages,p,size);
 
-      printf("size %zu list_size %zu\n",size,list_size(&kpages));
+      /* printf("size %zu list_size %zu\n",size,list_size(&kpages)); */
 
-      printf("install pages\n");
+      /* printf("install pages\n"); */
         
       // install kpages
       install_pages(&kpages);
       
-      printf("finish install pages\n");
+      /* printf("finish install pages\n"); */
       
       f->eax = fd_write(fd,p,size);
 
-      printf("uninstall pages\n");
+      /* printf("uninstall pages\n"); */
 
       // YOU DON'T NEED TO UNINSTALL PAGES AT ALL
       // you merely need to release the locks
+      // this function is poorly named...
       uninstall_pages(&kpages);
 
-      printf("finish uninstall pages\n");
+      /* printf("finish uninstall pages\n"); */
 
-      printf("===tagiamies fd write exit\n");
+      /* printf("===tagiamies fd write exit\n"); */
     }
   }
   else if ( syscall_no == SYS_SEEK ) {
