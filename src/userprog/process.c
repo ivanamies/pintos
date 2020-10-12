@@ -557,7 +557,9 @@ load (struct input_args * ia, void (**eip) (void), void **esp)
   process_activate ();
 
   /* Open executable file. */
+  filesys_lock_acquire();
   file = filesys_open (file_name); // closed when process exits
+  filesys_lock_release();
   if (file == NULL) 
     {
       printf ("load: %s: open failed\n", file_name);

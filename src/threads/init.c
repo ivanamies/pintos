@@ -132,6 +132,7 @@ pintos_init (void)
   // printf("===tagiamies 8\n");
   locate_block_devices ();
   filesys_init (format_filesys);
+  filesys_lock_init();
 #endif
 
   printf ("Boot complete.\n");

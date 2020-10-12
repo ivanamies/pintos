@@ -2,6 +2,9 @@
 #include <debug.h>
 #include <stdio.h>
 #include <string.h>
+
+#include "threads/synch.h"
+
 #include "filesys/file.h"
 #include "filesys/free-map.h"
 #include "filesys/inode.h"
@@ -11,6 +14,8 @@
 struct block *fs_device;
 
 static void do_format (void);
+
+static struct lock filesys_lock;
 
 /* Initializes the file system module.
    If FORMAT is true, reformats the file system. */
@@ -100,4 +105,17 @@ do_format (void)
     PANIC ("root directory creation failed");
   free_map_close ();
   printf ("done.\n");
+}
+
+
+void filesys_lock_init(void) {
+  lock_init(&filesys_lock);
+}
+
+void filesys_lock_acquire(void) {
+  lock_acquire(&filesys_lock);
+}
+
+void filesys_lock_release(void) {
+  lock_release(&filesys_lock);  
 }
