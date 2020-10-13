@@ -103,7 +103,7 @@ int mmap(int fd, void * addr_) {
   
   virtual_page_info_t info;
   
-  struct file * file = file_reopen(fd_get_file(fd));
+  struct file * file = fd_get_file(fd); // apparently cannot call file_reopen here. because.
   ASSERT(file != NULL);
   
   size_t old_ofs = file_tell(file); // get the old file ofs
@@ -151,7 +151,6 @@ int mmap(int fd, void * addr_) {
  memory_map_done:
   // unseek the fd to what it was
   file_seek(file,old_ofs);
-  file_close(file);
   return res;
 }
 
@@ -177,7 +176,7 @@ void munmap(mapid_t mapping) {
   }
   
   // write pages back to file
-  struct file * file = file_reopen(entry->file);
+  struct file * file = entry->file;
   uint8_t * upage = entry->addr;
   size_t sz = file_length(file);
   int num_pages = sz / PGSIZE;
@@ -203,6 +202,4 @@ void munmap(mapid_t mapping) {
   entry->fd = 0;
   entry->file = NULL;
   entry->addr = NULL;
-
-  file_close(file);
 }

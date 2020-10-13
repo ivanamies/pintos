@@ -243,28 +243,33 @@ frame_aux_info_t * load_upage(void * upage_, virtual_page_info_t * info) {
   frame_aux_info_t * frame_info = frame_alloc(thread_current(),upage);
   ASSERT(frame_info != NULL); // frame_alloc will always succeed
   ASSERT(lock_held_by_current_thread(&frame_info->pinning_lock));
-  // printf("thread %p frame alloc exit info->home %d\n",thread_current(),info->home);
+  // printf("exception load upage 1 thread %p upage %p info->home %d\n",thread_current(),upage,info->home);
   uint8_t *kpage = frame_info->kpage;
-    
+  
   bool success = true;
   bool writable = true;
   ASSERT(info->home != PAGE_SOURCE_OF_DATA_SWAP_OUT);
   if ( info->home == PAGE_SOURCE_OF_DATA_ELF ||
        info->home == PAGE_SOURCE_OF_DATA_MMAP ) {
-    struct file * file = info->file;
-    uint32_t page_read_bytes = info->page_read_bytes;
-    uint32_t page_zero_bytes = info->page_zero_bytes;
-    uint32_t ofs = info->file_ofs;
+    struct file * file = file_reopen(info->file);
+    ASSERT(file != info->file); // do not call file_reopen on a file_reopened file
+    size_t page_read_bytes = info->page_read_bytes;
+    size_t page_zero_bytes = info->page_zero_bytes;
+    size_t ofs = info->file_ofs;
+    // printf("exception load upage 2 thread %p info->home %d page_read_bytes %d page_zero_bytes %d ofs %d\n",thread_current(),info->home,page_read_bytes,page_zero_bytes,ofs);
     ASSERT(page_read_bytes + page_zero_bytes == PGSIZE);
     writable = info->writable;
     file_seek(file,ofs);
-    success = file_read (file, kpage, page_read_bytes) == (int) page_read_bytes;
+    size_t gotten_bytes = file_read (file, kpage, page_read_bytes);
+    success = gotten_bytes == page_read_bytes;
+    // printf("exception load upage 3 thread %p upage %p file %p info->file %p gotten_bytes %zu\n",thread_current(),upage,file,info->file,gotten_bytes);
     /* hex_dump(0,kpage,128,false); */
     if ( !success ) {
       printf("exception page fault elf file read failed\n");
       goto load_upage_cleanup;
     }
     memset (kpage + page_read_bytes, 0, page_zero_bytes);
+    file_close(file);
   }
   else if ( info->home == PAGE_SOURCE_OF_DATA_SWAP_IN ) {
     // printf("thread %p frame %p gotten from %zu\n",thread_current(),kpage,info->swap_loc);

@@ -582,7 +582,7 @@ syscall_handler (struct intr_frame *f UNUSED)
   }
   else if ( syscall_no == SYS_MMAP ) {
     // deal with the problems of frame allocs later, if needed at all
-    printf("tagiamies mmap 1\n");
+    // printf("tagiamies mmap 1\n");
     
     int fd = (int)user_args[0];
     if (fd == 0 || fd == 1 || fd == 2 ) {
@@ -598,7 +598,7 @@ syscall_handler (struct intr_frame *f UNUSED)
       process_terminate(PROCESS_KILLED,-1);
     }
     
-    printf("tagiamies mmap 2\n");
+    // printf("tagiamies mmap 2\n");
 
     f->eax = mmap(fd,p);
   }
