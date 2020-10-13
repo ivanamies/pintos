@@ -252,7 +252,9 @@ frame_aux_info_t * load_upage(void * upage_, virtual_page_info_t * info) {
   if ( info->home == PAGE_SOURCE_OF_DATA_ELF ||
        info->home == PAGE_SOURCE_OF_DATA_MMAP ) {
     struct file * file = file_reopen(info->file);
-    ASSERT(file != info->file); // do not call file_reopen on a file_reopened file
+    // do not call file_reopen on a file_reopen'd file
+    // or however the fuck you did that, don't do that.
+    ASSERT(file != info->file);
     size_t page_read_bytes = info->page_read_bytes;
     size_t page_zero_bytes = info->page_zero_bytes;
     size_t ofs = info->file_ofs;
