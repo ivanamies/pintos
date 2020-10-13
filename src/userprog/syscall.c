@@ -604,7 +604,7 @@ syscall_handler (struct intr_frame *f UNUSED)
   }
   else if ( syscall_no == SYS_MUNMAP ) {
     mapid_t mapping = (int)user_args[0];
-    munmap(fd);
+    munmap(mapping);
   }
   else {
     printf("didn't get a project 2 sys call\n");

@@ -225,8 +225,6 @@ void frame_alloc_into_list(struct list * gets, void * addr_, size_t sz) {
   size_t frame_idx = 0;
   size_t i = 0;
 
-  bool success;
-
   uint8_t * start_upage = pg_round_down(addr_);
   uint8_t * end_upage = pg_round_down(((uint8_t *)addr_) + sz);
   size_t num_pages = (end_upage - start_upage) / PGSIZE + 1;
