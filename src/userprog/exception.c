@@ -254,7 +254,7 @@ frame_aux_info_t * load_upage(void * upage_, virtual_page_info_t * info) {
     struct file * file = info->file;
     uint32_t page_read_bytes = info->page_read_bytes;
     uint32_t page_zero_bytes = info->page_zero_bytes;
-    uint32_t ofs = info->elf_file_ofs;
+    uint32_t ofs = info->file_ofs;
     ASSERT(page_read_bytes + page_zero_bytes == PGSIZE);
     writable = info->writable;
     file_seek(file,ofs);

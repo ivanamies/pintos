@@ -92,6 +92,7 @@ static int alloc_mapid(int fd, struct file * file, void * p) {
 // doesn't guard against intra-process race conditions but those don't exist here.
 int mmap(int fd, void * addr_) {
   ASSERT(fd != 0 && fd != 1 && fd != 2);
+  struct thread * curr = thread_current();
   uint8_t * addr = addr_;
   ASSERT( addr == (uint8_t *)pg_round_down(addr)); // addr must be page aligned previously
   int err = 0;
@@ -99,61 +100,51 @@ int mmap(int fd, void * addr_) {
   bool writable = true;
   uint8_t * upage = NULL;
   int i;
-  int page_read_bytes;
-  int page_zero_bytes;
   
   virtual_page_info_t info;
   
   struct file * file = fd_get_file(fd);
   ASSERT(file != NULL);
-
+  
   size_t old_ofs = file_tell(file); // get the old file ofs
   
   int sz = file_length(file);
-  int num_pages = sz / PGSIZE;
   size_t ofs = 0;
   
-  // reset file to 0
-  file_seek(file,0);
-  
+  int num_pages = sz / PGSIZE;
   if ( sz % PGSIZE != 0 ) {
     ++num_pages;
   }
+
+  // bytes to load segment with
+  size_t total_bytes = num_pages * PGSIZE;
+  size_t zero_bytes = total_bytes - sz;
+  
+  // reset file to ofs == 0
+  file_seek(file,ofs);
+
+  // we cannot map the stack
+  if ( is_stackish(addr) ) {
+    err = 1;
+    ASSERT(res == -1);
+    goto memory_map_done;
+  }
   
   // check every page needed is unmapped
+  // we also cannot map executable memory
   for ( i = 0; i < num_pages; ++i ) {
     upage = addr + i*PGSIZE;
-    info = get_vaddr_info(&thread_current()->page_table,upage);
+    info = get_vaddr_info(&curr->page_table,upage);
     if ( info.valid == 1 ) {
       err = 1;
+      ASSERT(res == -1);
       goto memory_map_done;
     }
   }
   
-  // if we are not writing to the stack pointer
-  // allocate memory to save kpages in
-  //
-  // fault in stack pages later if we are stackish
-  if ( !is_stackish(addr) ) {
-    for ( i = 0; i < num_pages; ++i ) {
-      if ( i < num_pages-1 ) {
-        page_read_bytes = PGSIZE;
-        page_zero_bytes = 0;
-      }
-      else {
-        page_read_bytes = sz % PGSIZE;
-        page_zero_bytes = PGSIZE - sz;
-      }
-      
-      // this can actually load every page but leave it at one page for now
-      err = !load_segment(file,ofs,upage,page_read_bytes,page_zero_bytes,writable,PAGE_SOURCE_OF_DATA_MMAP);
-      
-      ofs += page_read_bytes;
-    }
-  }
-  
-  ASSERT( err == 0);
-  
+  // maps ALL the upages to the file
+  err = !load_segment(file,ofs,upage,sz,zero_bytes,writable,PAGE_SOURCE_OF_DATA_MMAP);
+                      
   if ( err == 0 ) {
     res = alloc_mapid(fd,file,addr);
   }
@@ -163,16 +154,18 @@ int mmap(int fd, void * addr_) {
   return res;
 }
 
-void munmap(int mapid) {
+void munmap(mapid_t mapping) {
   mapid_table_t * mapid_table = &thread_current()->mapid_table; // mapid's need only be unique to the process
   
   mapid_w_hook_t mapid_w_hook = { 0 };
-  mapid_w_hook.mapid = mapid;
+  mapid_w_hook.mapid = mapping;
   
   struct hash_elem * hash_elem = hash_find(&mapid_table->mapids,&mapid_w_hook.hash_elem);
   if ( hash_elem == NULL ) {
     return; // no element found
   }
+  
+  ASSERT(false);
   
   // write pages back to file
   mapid_w_hook_t * entry = hash_entry(hash_elem, mapid_w_hook_t, hash_elem);

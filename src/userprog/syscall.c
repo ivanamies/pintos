@@ -582,6 +582,7 @@ syscall_handler (struct intr_frame *f UNUSED)
   }
   else if ( syscall_no == SYS_MMAP ) {
     // deal with the problems of frame allocs later, if needed at all
+    printf("tagiamies mmap 1\n");
     
     int fd = (int)user_args[0];
     if (fd == 0 || fd == 1 || fd == 2 ) {
@@ -596,11 +597,14 @@ syscall_handler (struct intr_frame *f UNUSED)
     else if ( p != pg_round_down(p) ) {
       process_terminate(PROCESS_KILLED,-1);
     }
-    int sz = fd_tell(fd);
-    if ( sz == -1 ) {
-      process_terminate(PROCESS_KILLED,-1);
-    }
-    /* f->eax = mmap(fd,sz,p); */
+    
+    printf("tagiamies mmap 2\n");
+
+    f->eax = mmap(fd,p);
+  }
+  else if ( syscall_no == SYS_MUNMAP ) {
+    mapid_t mapping = (int)user_args[0];
+    munmap(fd);
   }
   else {
     printf("didn't get a project 2 sys call\n");

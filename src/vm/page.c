@@ -248,7 +248,6 @@ void release_page_locks(struct list * gets) {
   struct list_elem * lel;
   frame_aux_info_list_elem_t * frame_info_lel;
   frame_aux_info_t * frame_info;
-  uint8_t * kpage;  
 
   for ( lel = list_begin(gets); lel != list_end(gets);  ) {
     frame_info_lel = list_entry(lel,frame_aux_info_list_elem_t,lel);
@@ -465,7 +464,7 @@ load_segment (struct file *file, uint32_t ofs, uint8_t *upage,
   struct thread * t = thread_current();
   
   ASSERT(t != NULL);
-
+  
   file_seek (file, ofs);
   while (read_bytes > 0 || zero_bytes > 0) 
     {
@@ -484,7 +483,7 @@ load_segment (struct file *file, uint32_t ofs, uint8_t *upage,
       info.writable = writable;
       info.page_read_bytes = page_read_bytes;
       info.page_zero_bytes = page_zero_bytes;
-      info.elf_file_ofs = ofs;
+      info.file_ofs = ofs;
       set_vaddr_info(&t->page_table,upage,&info);
       //
       

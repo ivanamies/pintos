@@ -29,12 +29,12 @@ typedef struct virtual_page_info {
   void * frame; // frame that backs this virtual page. NULL if not backed
                 // unfortunately useless. Use pagedir_get_page instead.
   
-  // for elf file reads
+  // for mmap and elf file reads
   struct file * file;
   uint32_t page_read_bytes;
   uint32_t page_zero_bytes;
   int writable;
-  uint32_t elf_file_ofs;
+  uint32_t file_ofs;
 
   // block_sector_t for reading back from swap, if in swap
   size_t swap_loc;
