@@ -103,7 +103,7 @@ int mmap(int fd, void * addr_) {
   
   virtual_page_info_t info;
   
-  struct file * file = fd_get_file(fd);
+  struct file * file = file_reopen(fd_get_file(fd));
   ASSERT(file != NULL);
   
   size_t old_ofs = file_tell(file); // get the old file ofs
@@ -142,47 +142,67 @@ int mmap(int fd, void * addr_) {
     }
   }
   
-  // maps ALL the upages to the file
+  // maps the ENTIRE file to upages
   err = !load_segment(file,ofs,upage,sz,zero_bytes,writable,PAGE_SOURCE_OF_DATA_MMAP);
-                      
+  
   if ( err == 0 ) {
     res = alloc_mapid(fd,file,addr);
   }
  memory_map_done:
   // unseek the fd to what it was
   file_seek(file,old_ofs);
+  file_close(file);
   return res;
 }
 
 void munmap(mapid_t mapping) {
-  mapid_table_t * mapid_table = &thread_current()->mapid_table; // mapid's need only be unique to the process
-  
+  struct thread * curr = thread_current();
+  mapid_table_t * mapid_table = &curr->mapid_table; // mapid's need only be unique to the process
   mapid_w_hook_t mapid_w_hook = { 0 };
   mapid_w_hook.mapid = mapping;
   
   struct hash_elem * hash_elem = hash_find(&mapid_table->mapids,&mapid_w_hook.hash_elem);
+  // check if we've seen this mapping before
   if ( hash_elem == NULL ) {
     return; // no element found
   }
-  
-  ASSERT(false);
+  mapid_w_hook_t * entry = hash_entry(hash_elem, mapid_w_hook_t, hash_elem);
+
+  // check if this mapping has already been cleared
+  if ( entry->fd == 0 || entry->file == NULL || entry->addr == NULL ) {
+    ASSERT(entry->fd == 0);
+    ASSERT(entry->file == NULL);
+    ASSERT(entry->addr == NULL);
+    return;
+  }
   
   // write pages back to file
-  mapid_w_hook_t * entry = hash_entry(hash_elem, mapid_w_hook_t, hash_elem);
-  struct file * file = entry->file;
+  struct file * file = file_reopen(entry->file);
+  uint8_t * upage = entry->addr;
   size_t sz = file_length(file);
-  void * addr = entry->addr;
-  file_write(file,addr,sz);
-
   int num_pages = sz / PGSIZE;
   if ( sz % PGSIZE != 0 ) {
     ++num_pages;
   }
-  // unmap the pages in the supplemental page table
+  virtual_page_info_t page_info;
   for ( int i = 0; i < num_pages; ++i ) {
-    uint8_t * upage = addr + i*PGSIZE;
-    virtual_page_info_t info = { 0 };
-    set_vaddr_info(&thread_current()->page_table,upage,&info);
+    page_info = get_vaddr_info(&curr->page_table,upage);
+    ASSERT(page_info.valid == 1);
+    
+    frame_evict_if_installed(upage);
+    
+    // unmap the pages in the supplemental page table
+    memset(&page_info,0,sizeof(virtual_page_info_t));
+    set_vaddr_info(&curr->page_table,upage,&page_info);
+    
+    upage += PGSIZE;
   }
-  
+
+  // clear the information in mapid table
+  // do not recycle the mapid_t mapping
+  entry->fd = 0;
+  entry->file = NULL;
+  entry->addr = NULL;
+
+  file_close(file);
 }

@@ -282,13 +282,13 @@ static void uninstall_page_supplemental_info(struct thread * t, void * upage, vo
   
   // printf("thread %p uninstall page supplemental info upage %p kpage %p info.home %d info.writable %d\n",thread_current(),upage,kpage,info.home,info.writable);
   
-  if ( info.home == PAGE_SOURCE_OF_DATA_MMAP ) {
-    // call mmap things
-    // worry about it later
-    ASSERT(false && "don't call mmap things");
-    
-    // don't update the data source, we wrote it back to its file
-    // we'll reload it from its file if we fault on it
+  if ( info.home == PAGE_SOURCE_OF_DATA_MMAP ) {    
+    struct file * file = file_reopen(info.file); // makes a copy of the file to avoid weird races on cursor position
+    size_t page_read_bytes = info.page_read_bytes;
+    size_t file_ofs = info.file_ofs;
+    file_seek(file,file_ofs);
+    file_write(file,kpage,page_read_bytes); // can't do the entire PGSIZE
+    file_close(file);
   }
   else if ( info.writable == 1 ) {
     // must be one of ELF writable (bss) or stack
@@ -304,10 +304,6 @@ static void uninstall_page_supplemental_info(struct thread * t, void * upage, vo
     
     /* // update the other process's MMU */
     info.home = PAGE_SOURCE_OF_DATA_SWAP_IN;
-    info.frame = NULL;
-    /* printf("tagiamies 13\n"); */
-    set_vaddr_info_no_lock(&t->page_table,upage,&info);
-    /* printf("tagiamies 14\n"); */
   }
   else {
     /* printf("tagiamies 15\n"); */
@@ -315,7 +311,10 @@ static void uninstall_page_supplemental_info(struct thread * t, void * upage, vo
     ASSERT(info.writable == 0);
     ASSERT(info.home == PAGE_SOURCE_OF_DATA_ELF);
     // don't do anything else, just discard the info in it    
-  }  
+  }
+
+  info.frame = NULL;
+  set_vaddr_info_no_lock(&t->page_table,upage,&info);
 }
 
 // calling thread blocks untill OWNER calls uninstall_request_push on U_REQ

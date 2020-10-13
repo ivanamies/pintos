@@ -343,3 +343,28 @@ void frame_table_dump(int aux UNUSED) {
   
   /* lock_release(&frame_table_user.lock);   */
 }
+
+// more or less the same methodology to obtain kpage from installed upage
+// from frame.c's frame_alloc_into_list
+void frame_evict_if_installed(void * upage) {
+  uint8_t * kpage = NULL;
+  size_t frame_idx = 0;
+  struct lock * lk = NULL;
+  if ( ( kpage = query_page_installed(upage) ) ) {
+    frame_idx = frame_get_index_no_lock(kpage);
+    lk = &frame_table_user.frame_aux_info[frame_idx].pinning_lock;
+    while ( !lock_try_acquire(lk) ) {
+      uninstall_request_push(); // may uninstall this very upage...
+      thread_yield();
+    }
+    // if page still installed, keep frame_aux_info
+    if ( kpage == query_page_installed(upage) ) {
+      evict_frame(frame_idx);
+    }
+    lock_release(lk);
+    ASSERT(query_page_installed(upage) == NULL);
+  }
+  // else if kpage is not installed, there is nothing to do
+  // and we ignore the upage
+
+}

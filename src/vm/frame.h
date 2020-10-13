@@ -40,4 +40,6 @@ void frame_table_dump(int);
 
 void evict_frame_w_kpage(void * kpage);
 
+void frame_evict_if_installed(void * upage);
+
 #endif /* vm/frame.h */
