@@ -37,6 +37,7 @@ typedef struct fd_file {
   char file_name[MAX_FILE_NAME_LEN];
   struct file * file;
   int is_open; // 0 if this fd is closed, 1 if this fd is open
+  int not_closeable; // 0 if closeable, 1 if not closeable
   int pid; // pid of owning process
 } fd_file_t;
 
@@ -72,6 +73,7 @@ void init_fd_table(void) {
     fd_table[i].file_name[0] = 0;
     fd_table[i].file = NULL;
     fd_table[i].is_open = 0;
+    fd_table[i].not_closeable = 0;
     fd_table[i].pid = -1;
   }
   
@@ -86,7 +88,9 @@ static void clear_fd(struct fd_file * fd_file) {
   fd_file->file_name[0] = 0;
   if ( fd_file->file != NULL ) {
     if ( fd_file->is_open == 1 ) {
-      file_close(fd_file->file);
+      if ( fd_file->not_closeable == 0 ) {
+        file_close(fd_file->file);
+      }
     }
     fd_file->file = NULL;
   }
@@ -177,7 +181,9 @@ static void fd_close(int fd) {
   int ret = is_valid_fd_entry_no_lock(fd_idx);
   if ( ret == 1 ) {
     ASSERT(fd_table[fd_idx].file != NULL);
-    file_close(fd_table[fd_idx].file);
+    if ( fd_table[fd_idx].not_closeable == 0 ) {
+      file_close(fd_table[fd_idx].file);
+    }
     fd_table[fd_idx].fd = -1;
     fd_table[fd_idx].is_open = 0;
   }
@@ -272,6 +278,19 @@ struct file * fd_get_file(int fd) {
   lock_release(&fd_table_lock);
   ASSERT( res != NULL);
   return res;
+}
+
+// not_closeable == 0 not closeable
+// not_closeable == 1 is closeable
+static int fd_mark_closeable(int fd, int not_closeable) {
+  lock_acquire(&fd_table_lock);
+  int fd_idx = fd_to_fd_idx_no_lock(fd);
+  int ret = is_valid_fd_entry_no_lock(fd_idx);
+  if ( ret == 1 ) {
+    fd_table[fd_idx].not_closeable = not_closeable;
+  }
+  lock_release(&fd_table_lock);
+  return ret;    
 }
 
 void
@@ -598,6 +617,8 @@ syscall_handler (struct intr_frame *f UNUSED)
       process_terminate(PROCESS_KILLED,-1);
     }
     
+    fd_mark_closeable(fd,1 /*not closeable*/);
+    
     // printf("tagiamies mmap 2\n");
 
     f->eax = mmap(fd,p);
@@ -605,6 +626,9 @@ syscall_handler (struct intr_frame *f UNUSED)
   else if ( syscall_no == SYS_MUNMAP ) {
     mapid_t mapping = (int)user_args[0];
     munmap(mapping);
+    // deal with this later
+    // maybe just never close fds that are mapped to :^)
+    // fd_mark_closeable(fd,0 /*is closeable*/);
   }
   else {
     printf("didn't get a project 2 sys call\n");

@@ -18,7 +18,6 @@ int fd_tell(int fd);
 
 void fd_deny_write(int fd);
 
-
 // functions that basically shouldn't exist
 // and are hacks
 struct file * fd_get_file(int fd);
