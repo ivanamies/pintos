@@ -21,7 +21,7 @@
 typedef struct mapid_with_hook {
   struct hash_elem hash_elem;
   
-  int mapid;
+  mapid_t mapid;
   int fd;
   struct file * file;
   void * addr;
@@ -83,6 +83,26 @@ static int alloc_mapid(int fd, struct file * file, void * p) {
   ASSERT(hash_elem == NULL);
   
   return res;
+}
+
+void mmap_process_exit(void) {
+  struct thread * curr = thread_current();
+  mapid_table_t * mapid_table = &curr->mapid_table;
+    
+  struct hash_iterator i;
+  hash_first(&i,&mapid_table->mapids);
+  while ( hash_next(&i) ) {
+    mapid_w_hook_t * entry = hash_entry(hash_cur(&i), mapid_w_hook_t, hash_elem);
+    mapid_t mapid = entry->mapid;
+    if ( entry->fd != 0 || entry->file != NULL || entry->addr != NULL ) {
+      ASSERT(entry->fd != 0);
+      ASSERT(entry->file != NULL);
+      ASSERT(entry->addr != NULL);
+      munmap(mapid);
+    }
+  }
+
+  destroy_mapid_table(mapid_table);
 }
 
 // fd is the file descriptor
@@ -196,7 +216,7 @@ void munmap(mapid_t mapping) {
     
     upage += PGSIZE;
   }
-
+  
   // clear the information in mapid table
   // do not recycle the mapid_t mapping
   entry->fd = 0;

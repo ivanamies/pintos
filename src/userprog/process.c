@@ -411,11 +411,13 @@ process_exit (void)
   struct thread *cur = thread_current ();
   uint32_t *pd;
 
-  // printf("===tagiamies process exit start\n");
+  // destroy the mmap mappings I own
+  // mmap_process_exit();
   // destroy the frames I own
   frame_process_exit();
   // destroy the pages I own
   page_process_exit();
+
   
   // probably not needed
   // page directories should only ever be accessed from its own thread

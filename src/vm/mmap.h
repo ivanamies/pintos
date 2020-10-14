@@ -12,6 +12,8 @@ typedef struct mapid_table {
 int mmap(int, void *);
 void munmap(mapid_t mapping);
 
+void mmap_process_exit(void);
+
 void destroy_mapid_table(mapid_table_t *);
 void init_mapid_table(mapid_table_t *);
 
