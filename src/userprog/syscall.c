@@ -497,8 +497,11 @@ syscall_handler (struct intr_frame *f UNUSED)
     f->eax = success;
   }
   else if ( syscall_no == SYS_REMOVE ) {
-    // I forgot to implement this.
-    // wops.
+    tmp_char_ptr = (char *)user_args[0];
+    if ( check_user_ptr_with_terminate(f,tmp_char_ptr,0) ) {
+      return;
+    }
+    f->eax = filesys_remove(tmp_char_ptr);
   }
   else if ( syscall_no == SYS_OPEN ) {
     tmp_char_ptr = (char *)user_args[0];    
