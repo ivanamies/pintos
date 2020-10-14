@@ -88,19 +88,10 @@ static int alloc_mapid(int fd, struct file * file, void * p) {
 void mmap_process_exit(void) {
   struct thread * curr = thread_current();
   mapid_table_t * mapid_table = &curr->mapid_table;
-    
-  struct hash_iterator i;
-  hash_first(&i,&mapid_table->mapids);
-  while ( hash_next(&i) ) {
-    mapid_w_hook_t * entry = hash_entry(hash_cur(&i), mapid_w_hook_t, hash_elem);
-    mapid_t mapid = entry->mapid;
-    if ( entry->fd != 0 || entry->file != NULL || entry->addr != NULL ) {
-      ASSERT(entry->fd != 0);
-      ASSERT(entry->file != NULL);
-      ASSERT(entry->addr != NULL);
-      munmap(mapid);
-    }
-  }
+
+  // two cases for mapids
+  // they're installed when process exited. Then they were flushed by frame_process_exit.
+  // they weren't installed. Then their files were already synch'd and we discard the mapids.
 
   destroy_mapid_table(mapid_table);
 }

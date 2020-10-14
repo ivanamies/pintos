@@ -307,10 +307,11 @@ void frame_process_exit(void) {
       uninstall_request_push();
       thread_yield();
     }
-
+    
     if (frame_table_user.frame_aux_info[i].owner == cur) {
-
-      uninstall_page(cur,frame_table_user.frame_aux_info[i].upage);
+      
+      // uninstalls the page AND does all upage book keeping like flashing mmap pages
+      evict_frame(i);
       
       frame_table_user.frame_aux_info[i].owner = NULL;
       frame_table_user.frame_aux_info[i].upage = NULL;      
