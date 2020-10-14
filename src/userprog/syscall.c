@@ -276,7 +276,6 @@ struct file * fd_get_file(int fd) {
     res = fd_table[fd_idx].file;
   }
   lock_release(&fd_table_lock);
-  ASSERT( res != NULL);
   return res;
 }
 

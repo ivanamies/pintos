@@ -121,7 +121,7 @@ static int set_vaddr_info_no_lock(page_table_t * page_table,
   virtual_page_t * discovered;
   struct hash_elem * e;
   int prev = 0;
-
+  
   page->addr = vaddr;
 
   e = hash_insert(&page_table->pages,&page->hash_elem);

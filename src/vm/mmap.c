@@ -115,7 +115,9 @@ int mmap(int fd, void * addr_) {
   virtual_page_info_t info;
   
   struct file * file = fd_get_file(fd); // apparently cannot call file_reopen here. because.
-  ASSERT(file != NULL);
+  if ( file == NULL ) {
+    return -1;
+  }
   
   size_t old_ofs = file_tell(file); // get the old file ofs
   
@@ -154,7 +156,8 @@ int mmap(int fd, void * addr_) {
   }
   
   // maps the ENTIRE file to upages
-  err = !load_segment(file,ofs,upage,sz,zero_bytes,writable,PAGE_SOURCE_OF_DATA_MMAP);
+  // addr MUST be aligned to a page
+  err = !load_segment(file,ofs,addr,sz,zero_bytes,writable,PAGE_SOURCE_OF_DATA_MMAP);
   
   if ( err == 0 ) {
     res = alloc_mapid(fd,file,addr);

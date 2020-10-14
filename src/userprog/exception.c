@@ -352,7 +352,7 @@ page_fault (struct intr_frame *f)
   // validate memory
   bool valid = check_user_ptr(fault_addr);
 
-  /* printf("tagiamies valid %d fault_addr %p write %d\n",valid,fault_addr,write); */
+  // printf("tagiamies valid %d fault_addr %p write %d\n",valid,fault_addr,write);
     
   if ( !valid ) {
     printf ("Page fault at %p: %s error %s page in %s context.\n",
@@ -395,6 +395,6 @@ page_fault (struct intr_frame *f)
   else {
     // info was not valid && address not stackish
     kill(f);
-  }  
-
+  }
+  
 }
