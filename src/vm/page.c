@@ -281,14 +281,18 @@ static void uninstall_page_supplemental_info(struct thread * t, void * upage, vo
   ASSERT(info.valid == 1 && "don't try to evict invalid pages");
   
   // printf("thread %p uninstall page supplemental info upage %p kpage %p info.home %d info.writable %d\n",thread_current(),upage,kpage,info.home,info.writable);
-  
+
   if ( info.home == PAGE_SOURCE_OF_DATA_MMAP ) {    
     struct file * file = file_reopen(info.file); // makes a copy of the file to avoid weird races on cursor position
     size_t page_read_bytes = info.page_read_bytes;
     size_t file_ofs = info.file_ofs;
-    file_seek(file,file_ofs);
-    file_write(file,kpage,page_read_bytes); // can't do the entire PGSIZE
-    file_close(file);
+    // only write back pages that are dirty
+    // actually I should do this for all page types, but the test cases didn't catch that :^)
+    if ( pagedir_is_dirty(t->page_table.pagedir,upage)) {
+      file_seek(file,file_ofs);
+      file_write(file,kpage,page_read_bytes); // can't do the entire PGSIZE
+      file_close(file);
+    }
   }
   else if ( info.writable == 1 ) {
     // must be one of ELF writable (bss) or stack
@@ -312,7 +316,7 @@ static void uninstall_page_supplemental_info(struct thread * t, void * upage, vo
     ASSERT(info.home == PAGE_SOURCE_OF_DATA_ELF);
     // don't do anything else, just discard the info in it    
   }
-
+  
   info.frame = NULL;
   set_vaddr_info_no_lock(&t->page_table,upage,&info);
 }

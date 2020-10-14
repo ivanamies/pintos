@@ -237,14 +237,10 @@ void frame_alloc_into_list(struct list * gets, void * addr_, size_t sz) {
     
     page_info = get_vaddr_info(&cur->page_table,upage);
 
-    // printf("frame alloc into list thread %p upage %p home %d\n",cur,upage,page_info.home);
+    // printf("frame alloc into list thread %p upage %p home %d writable %d\n",cur,upage,page_info.home,page_info.writable);
     
     // if we've seen this page before, evict its contents
-    if (page_info.valid == 1) {    
-      // do not supply pages that are both elf and not writable...
-      ASSERT(!(page_info.home == PAGE_SOURCE_OF_DATA_ELF &&
-               !page_info.writable));
-      
+    if (page_info.valid == 1) {          
       // if already installed, find the frame and evict it
       if ( (kpage = query_page_installed(upage)) ) {
         frame_idx = frame_get_index_no_lock(kpage);
