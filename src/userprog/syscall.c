@@ -608,19 +608,20 @@ syscall_handler (struct intr_frame *f UNUSED)
     }
     void * p = user_args[1];
     // kill process if p is NULL, a kernal address, or bad stack
-    if ( check_user_ptr_no_mapping(p) ) {
+    if ( p == NULL ) {
+      f->eax = -1;
+    }
+    else if ( check_user_ptr_no_mapping(p) ) {
       process_terminate(PROCESS_KILLED,-1);      
     }
     // process if p is not page aligned
     else if ( p != pg_round_down(p) ) {
-      process_terminate(PROCESS_KILLED,-1);
+      f->eax = -1;
     }
-    
-    fd_mark_closeable(fd,1 /*not closeable*/);
-    
-    // printf("tagiamies mmap 2\n");
-
-    f->eax = mmap(fd,p);
+    else {
+      fd_mark_closeable(fd,1 /*not closeable*/);
+      f->eax = mmap(fd,p);
+    }
   }
   else if ( syscall_no == SYS_MUNMAP ) {
     mapid_t mapping = (int)user_args[0];
