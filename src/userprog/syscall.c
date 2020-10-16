@@ -134,7 +134,9 @@ static int create_fd(const char * file_name, struct file * file) {
 
 int open_fd(const char * const file_name) {
   int fd;
+  filesys_lock_acquire();
   struct file * file = filesys_open(file_name); // I assume this is thread safe?
+  filesys_lock_release();
   if ( file == NULL ) {
     fd = -1;
     return fd;
@@ -412,11 +414,20 @@ syscall_handler (struct intr_frame *f UNUSED)
     if ( check_user_ptr_with_terminate((void *)tmp_char_ptr /*file_name*/) ) {
       return;
     }
-    
+
+    filesys_lock_acquire();
     success = filesys_create(tmp_char_ptr,tmp_int);
+    filesys_lock_release();
     f->eax = success;
   }
   else if ( syscall_no == SYS_REMOVE ) {
+    tmp_char_ptr = (char *)user_args[0];    
+    if ( check_user_ptr_with_terminate((void *)tmp_char_ptr /*file_name*/) ) {
+      return;
+    }
+    filesys_lock_acquire();
+    f->eax = filesys_remove(tmp_char_ptr);
+    filesys_lock_release();
   }
   else if ( syscall_no == SYS_OPEN ) {
     tmp_char_ptr = (char *)user_args[0];    
