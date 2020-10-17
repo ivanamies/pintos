@@ -253,7 +253,7 @@ process_execute (const char *input)
     strlcpy (ia->argv[ia->argc],token,INPUT_ARGS_MAX_ARG_LENGTH);
     ++ia->argc;
   }
-    
+  
   /* Create a new thread to execute FILE_NAME. */
   ia->signal = -1; 
   tid = thread_create (input, PRI_DEFAULT, start_process, ia); // shouldn't this be input_copy?

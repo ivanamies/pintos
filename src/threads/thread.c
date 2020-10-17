@@ -45,6 +45,14 @@ struct kernel_thread_frame
     void *aux;                  /* Auxiliary data for function. */
   };
 
+typedef struct sleep_hack {
+  size_t ticks; // overflow is a feature
+  size_t interval;
+  struct thread * waiter;
+} sleep_hack_t;
+
+static sleep_hack_t sleep_hack;
+
 /* Statistics. */
 static long long idle_ticks;    /* # of timer ticks spent idle. */
 static long long kernel_ticks;  /* # of timer ticks in kernel threads. */
@@ -71,6 +79,12 @@ static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 
+static void sleep_hack_init(void) {
+  sleep_hack.ticks = 0;
+  sleep_hack.interval = 10000;
+  sleep_hack.waiter = NULL;
+}
+
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
    general and it is possible in this case only because loader.S
@@ -93,6 +107,8 @@ thread_init (void)
   list_init (&ready_list);
   list_init (&all_list);
 
+  sleep_hack_init();
+  
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
   init_thread (initial_thread, "main", PRI_DEFAULT);
@@ -133,7 +149,9 @@ thread_tick (void)
 #endif
   else
     kernel_ticks++;
-
+  
+  ++sleep_hack.ticks;
+  
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
     intr_yield_on_return ();
@@ -215,7 +233,7 @@ thread_block (void)
 {
   ASSERT (!intr_context ());
   ASSERT (intr_get_level () == INTR_OFF);
-
+  
   thread_current ()->status = THREAD_BLOCKED;
   schedule ();
 }
@@ -570,6 +588,15 @@ schedule (void)
   ASSERT (cur->status != THREAD_RUNNING);
   ASSERT (is_thread (next));
 
+  // interrupts are off
+  if ( sleep_hack.ticks > sleep_hack.interval ) {
+    sleep_hack.ticks = 0;
+    if ( sleep_hack.waiter != NULL ) {
+      thread_unblock(sleep_hack.waiter);
+      sleep_hack.waiter = NULL;
+    }
+  }
+  
   if (cur != next)
     prev = switch_threads (cur, next);
   thread_schedule_tail (prev);
@@ -588,7 +615,13 @@ allocate_tid (void)
 
   return tid;
 }
-
+
+void thread_hack_sleep(void) {
+  thread_block();
+}
+
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
+
+
