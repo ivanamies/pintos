@@ -81,7 +81,7 @@ static tid_t allocate_tid (void);
 
 static void sleep_hack_init(void) {
   sleep_hack.ticks = 0;
-  sleep_hack.interval = 10000;
+  sleep_hack.interval = 50;
   sleep_hack.waiter = NULL;
 }
 
@@ -616,8 +616,11 @@ allocate_tid (void)
   return tid;
 }
 
-void thread_hack_sleep(void) {
+void thread_sleep_hack(void) {
+  enum intr_level old_level = intr_disable();
+  sleep_hack.waiter = thread_current();
   thread_block();
+  intr_set_level (old_level);
 }
 
 /* Offset of `stack' member within `struct thread'.

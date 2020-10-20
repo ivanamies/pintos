@@ -36,6 +36,7 @@
 #include "devices/ide.h"
 #include "filesys/filesys.h"
 #include "filesys/fsutil.h"
+#include "filesys/cache.h"
 #endif
 
 /* Page directory with kernel mappings only. */
@@ -125,7 +126,11 @@ pintos_init (void)
   /* Initialize file system. */
   ide_init ();
   locate_block_devices ();
+  cache_init_early();
+  printf("tagiamies 1\n");
   filesys_init (format_filesys);
+  printf("tagiamies 99\n");
+  /* cache_init_late(); */
 #endif
 
   printf ("Boot complete.\n");

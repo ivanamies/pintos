@@ -95,7 +95,7 @@ static void cache_write_back(void * aux UNUSED) {
   while ( true ) {
     // sleep until the scheduler wakes us up again
     // when we wake up depends on the scheduler
-    thread_hack_sleep();
+    thread_sleep_hack();
     
     // write all sectors to cache
     for ( i = 0; i < MAX_CACHE_ENTRIES; ++i ) {
@@ -117,7 +117,7 @@ static void cache_write_back_init(void) {
   ASSERT(tid != TID_ERROR);
 }
 
-void cache_init() {
+void cache_init_early() {
   memset(&cache,0,sizeof(cache));
   cache.block = block_get_role(BLOCK_FILESYS);
   lock_init(&cache.cache_entries_map_lock);
@@ -134,12 +134,15 @@ void cache_init() {
     cache.cache_entries[i].idx = i;
   }
   
-  cache_write_back_init();
+}
+
+void cache_init_late() {
+  cache_write_back_init();  
 }
 
 static void read_ahead(block_sector_t target) {
   uint8_t random_buffer[BLOCK_SECTOR_SIZE]; // marked volatile. code MUST access this.
-  cache_block_read(&random_buffer,target);
+  cache_block_read(cache.block,target,&random_buffer);
 }
 
 static void evict_cache_entry(size_t cache_entry_idx) {
@@ -158,7 +161,9 @@ static void evict_cache_entry(size_t cache_entry_idx) {
 
 // 0 for read
 // 1 for write
-static void cache_block_action(void * buffer, block_sector_t target, int write) {
+static void cache_block_action(block_sector_t target, void * buffer, int write) {
+  ASSERT(buffer != NULL);
+  
   struct hash_elem * hash_elem;
   // marked volatile for usage with double-checked locking
   cache_entry_t * cache_entry;
@@ -226,10 +231,21 @@ static void cache_block_action(void * buffer, block_sector_t target, int write) 
   }
 }
 
-void cache_block_read(void * buffer, block_sector_t target) {
-  cache_block_action(buffer,target,0 /*read*/);
+void cache_block_read(struct block * block, block_sector_t target, void * buffer) {
+  ASSERT(block == cache.block);
+  /* cache_block_action(target,buffer,0 /\*read*\/); */
+  // calling this somehow corrupts threads
+  block_read(block,target,buffer);
 }
 
-void cache_block_write(void * buffer, block_sector_t target) {
-  cache_block_action(buffer,target,1 /*write*/);
+void cache_block_write(struct block * block, block_sector_t target, const void * buffer) {
+  ASSERT(block == cache.block);
+  ASSERT(buffer != NULL);
+  // copy over buffer to tmp buffer to suppress warnings
+  uint8_t tmp_buffer[BLOCK_SECTOR_SIZE];
+  memcpy(&tmp_buffer,buffer,BLOCK_SECTOR_SIZE);
+
+  // calling this somehow corrupts threads
+  /* cache_block_action(target,&tmp_buffer,1 /\*write*\/); */
+  block_write(block,target,buffer);
 }
