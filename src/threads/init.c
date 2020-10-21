@@ -129,7 +129,7 @@ pintos_init (void)
   cache_init_early();
   printf("tagiamies 1\n");
   filesys_init (format_filesys);
-  printf("tagiamies 99\n");
+  printf("tagiamies 10\n");
   /* cache_init_late(); */
 #endif
 

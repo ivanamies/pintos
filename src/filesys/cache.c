@@ -163,82 +163,92 @@ static void evict_cache_entry(size_t cache_entry_idx) {
 // 1 for write
 static void cache_block_action(block_sector_t target, void * buffer, int write) {
   ASSERT(buffer != NULL);
-  
-  struct hash_elem * hash_elem;
-  // marked volatile for usage with double-checked locking
-  cache_entry_t * cache_entry;
-  // rw_lock_t * rw_lock;
-  cache_entry_t cache_entry_key;
-  cache_entry_key.sector = target;
-  size_t to_evict;
-  void * src;
-  void * dst;
-  
- cache_block_action_try_again:
-  // acquire lock around hash table
-  // lock_acquire(&cache.cache_entries_map_lock);
-  hash_elem = hash_find(&cache.cache_entries_map,&cache_entry_key.hash_elem);
-  // lock_release(&cache.cache_entries_map_lock);
-  
-  // we might have found the entry we're looking for
-  if ( hash_elem ) {
-    cache_entry = hash_entry(hash_elem,cache_entry_t,hash_elem);
-    // rw_lock_read_acquire(&cache_entry->rw_lock);
-    // we found the entry we're looking for
-    if ( ((volatile block_sector_t)cache_entry->sector) == target ) {
-      cache_entry->accessed = true;
-      if ( write ) {
-        src = buffer;
-        dst = &cache.cache_data[cache_entry->idx];
-      }
-      else {
-        src = &cache.cache_data[cache_entry->idx];
-        dst = buffer;
-      }
-      memcpy(dst,src,BLOCK_SECTOR_SIZE);
-      // rw_lock_read_release(&cache_entry->rw_lock);
-    }
-    else {
-      // rw_lock_read_release(&cache_entry->rw_lock);
-      // somehow try again ??
-      goto cache_block_action_try_again; // ??
-    }
+
+  if ( write ) {
+    block_write(cache.block,target,buffer);
   }
   else {
-    // evict some cache entry
-    to_evict = get_entry_to_evict();
-    cache_entry = &cache.cache_entries[to_evict];
-    
-    // rw_lock = &cache_entry->rw_lock;
-    // rw_lock_write_acquire(rw_lock);
-    evict_cache_entry(to_evict);
-    // fill in the entry
-    cache_entry->accessed = true;
-    cache_entry->sector = target;
-    if ( write ) {
-      cache_entry->dirty = true;
-      memcpy(&cache.cache_data[to_evict],buffer,BLOCK_SECTOR_SIZE);
-      // rw_lock_write_release(rw_lock);
-    }
-    else {
-      cache_entry->dirty = false;
-      // copy filesys block into evicted cache entry
-      block_read(cache.block,target,&cache.cache_data[to_evict]);
-      memcpy(buffer,&cache.cache_data[to_evict],BLOCK_SECTOR_SIZE);
-      // rw_lock_write_release(rw_lock);
-      read_ahead(target+1);
-    }
+    block_read(cache.block,target,buffer);
   }
+
+ /*  struct hash_elem * hash_elem; */
+ /*  // marked volatile for usage with double-checked locking */
+ /*  cache_entry_t * cache_entry; */
+ /*  // rw_lock_t * rw_lock; */
+ /*  cache_entry_t cache_entry_key; */
+ /*  cache_entry_key.sector = target; */
+ /*  size_t to_evict; */
+ /*  void * src; */
+ /*  void * dst; */
+  
+ /* cache_block_action_try_again: */
+ /*  // acquire lock around hash table */
+ /*  // lock_acquire(&cache.cache_entries_map_lock); */
+ /*  hash_elem = hash_find(&cache.cache_entries_map,&cache_entry_key.hash_elem); */
+ /*  // lock_release(&cache.cache_entries_map_lock); */
+  
+ /*  // we might have found the entry we're looking for */
+ /*  if ( hash_elem ) { */
+ /*    cache_entry = hash_entry(hash_elem,cache_entry_t,hash_elem); */
+ /*    // rw_lock_read_acquire(&cache_entry->rw_lock); */
+ /*    // we found the entry we're looking for */
+ /*    if ( ((volatile block_sector_t)cache_entry->sector) == target ) { */
+ /*      cache_entry->accessed = true; */
+ /*      if ( write ) { */
+ /*        src = buffer; */
+ /*        dst = &cache.cache_data[cache_entry->idx]; */
+ /*      } */
+ /*      else { */
+ /*        src = &cache.cache_data[cache_entry->idx]; */
+ /*        dst = buffer; */
+ /*      } */
+ /*      memcpy(dst,src,BLOCK_SECTOR_SIZE); */
+ /*      // rw_lock_read_release(&cache_entry->rw_lock); */
+ /*    } */
+ /*    else { */
+ /*      // rw_lock_read_release(&cache_entry->rw_lock); */
+ /*      // somehow try again ?? */
+ /*      goto cache_block_action_try_again; // ?? */
+ /*    } */
+ /*  } */
+ /*  else { */
+ /*    // evict some cache entry */
+ /*    to_evict = get_entry_to_evict(); */
+ /*    cache_entry = &cache.cache_entries[to_evict]; */
+    
+ /*    // rw_lock = &cache_entry->rw_lock; */
+ /*    // rw_lock_write_acquire(rw_lock); */
+ /*    evict_cache_entry(to_evict); */
+ /*    // fill in the entry */
+ /*    cache_entry->accessed = true; */
+ /*    cache_entry->sector = target; */
+ /*    if ( write ) { */
+ /*      cache_entry->dirty = true; */
+ /*      memcpy(&cache.cache_data[to_evict],buffer,BLOCK_SECTOR_SIZE); */
+ /*      // rw_lock_write_release(rw_lock); */
+ /*    } */
+ /*    else { */
+ /*      cache_entry->dirty = false; */
+ /*      // copy filesys block into evicted cache entry */
+ /*      block_read(cache.block,target,&cache.cache_data[to_evict]); */
+ /*      memcpy(buffer,&cache.cache_data[to_evict],BLOCK_SECTOR_SIZE); */
+ /*      // rw_lock_write_release(rw_lock); */
+ /*      read_ahead(target+1); */
+ /*    } */
+    
+ /*    // you forgot to update the map */
+ /*  } */
 }
 
 void cache_block_read(struct block * block, block_sector_t target, void * buffer) {
+  printf("cache.block %p block %p\n",cache.block,block);
   ASSERT(block == cache.block);
-  /* cache_block_action(target,buffer,0 /\*read*\/); */
   // calling this somehow corrupts threads
-  block_read(block,target,buffer);
+  cache_block_action(target,buffer,0 /*read*/);
 }
 
 void cache_block_write(struct block * block, block_sector_t target, const void * buffer) {
+  printf("cache.block %p block %p\n",cache.block,block);
   ASSERT(block == cache.block);
   ASSERT(buffer != NULL);
   // copy over buffer to tmp buffer to suppress warnings
@@ -246,6 +256,5 @@ void cache_block_write(struct block * block, block_sector_t target, const void *
   memcpy(&tmp_buffer,buffer,BLOCK_SECTOR_SIZE);
 
   // calling this somehow corrupts threads
-  /* cache_block_action(target,&tmp_buffer,1 /\*write*\/); */
-  block_write(block,target,buffer);
+  cache_block_action(target,&tmp_buffer,1 /*write*/);
 }
