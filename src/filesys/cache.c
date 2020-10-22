@@ -306,10 +306,10 @@ void cache_block_read(struct block * block, block_sector_t target, void * buffer
   /* printf("cache block read %u result:\n",target); */
   /* print_sum(buffer); */
 
-  // debug code
-  block_read(block,target,&random_buffer);
-  int err = memcmp(buffer,random_buffer,BLOCK_SECTOR_SIZE);
-  ASSERT(err == 0);
+  /* // debug code */
+  /* block_read(block,target,&random_buffer); */
+  /* int err = memcmp(buffer,random_buffer,BLOCK_SECTOR_SIZE); */
+  /* ASSERT(err == 0); */
 }
 
 void cache_block_write(struct block * block, block_sector_t target, const void * buffer) {
@@ -321,12 +321,10 @@ void cache_block_write(struct block * block, block_sector_t target, const void *
   
   cache_block_action(target,&tmp_buffer,1 /*write*/);
 
-  // debug code
-  block_write(block,target,buffer);
-  cache_block_read(block,target,&tmp_buffer);
-  int err = memcmp(buffer,tmp_buffer,BLOCK_SECTOR_SIZE);
-  ASSERT(err == 0);
-  
-  
+  /* // debug code */
+  /* block_write(block,target,buffer); */
+  /* cache_block_read(block,target,&tmp_buffer); */
+  /* int err = memcmp(buffer,tmp_buffer,BLOCK_SECTOR_SIZE); */
+  /* ASSERT(err == 0); */  
 }
 
