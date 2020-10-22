@@ -76,7 +76,6 @@ inode_init (void)
 bool
 inode_create (block_sector_t sector, off_t length)
 {
-  /* printf("tagiamies 3.1\n"); */
   struct inode_disk *disk_inode = NULL;
   bool success = false;
 
@@ -96,21 +95,21 @@ inode_create (block_sector_t sector, off_t length)
         {
           /* block_write (fs_device, sector, disk_inode); */
           cache_block_write (fs_device, sector, disk_inode);
+          
           if (sectors > 0) 
             {
               static char zeros[BLOCK_SECTOR_SIZE];
               size_t i;
               
               for (i = 0; i < sectors; i++) {
-                block_write (fs_device, disk_inode->start + i, zeros);
-                /* cache_block_write (fs_device, disk_inode->start + i, zeros); */
+                /* block_write (fs_device, disk_inode->start + i, zeros); */
+                cache_block_write (fs_device, disk_inode->start + i, zeros);
               }
             }
           success = true; 
         } 
       free (disk_inode);
     }
-  printf("tagiamies 3.2\n");
   return success;
 }
 

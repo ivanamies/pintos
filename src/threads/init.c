@@ -127,10 +127,8 @@ pintos_init (void)
   ide_init ();
   locate_block_devices ();
   cache_init_early();
-  printf("tagiamies 1\n");
   filesys_init (format_filesys);
-  printf("tagiamies 10\n");
-  /* cache_init_late(); */
+  // cache_init_late();
 #endif
 
   printf ("Boot complete.\n");

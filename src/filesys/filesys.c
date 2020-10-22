@@ -29,7 +29,6 @@ filesys_init (bool format)
   inode_init ();
   free_map_init ();
 
-  printf("tagiamies 2\n");
   if (format) 
     do_format ();
 
@@ -103,13 +102,10 @@ static void
 do_format (void)
 {
   printf ("Formatting file system...");
-  printf("tagiamies 3\n");
   free_map_create ();
-  printf("tagiamies 4\n");
   if (!dir_create (ROOT_DIR_SECTOR, 16))
     PANIC ("root directory creation failed");
   free_map_close ();
-  printf("tagiamies 5\n");
   printf ("done.\n");
 }
 
