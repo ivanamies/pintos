@@ -218,8 +218,6 @@ static struct hash_elem * cache_block_search(int target) {
 // 0 for read
 // 1 for write
 static void cache_block_action(block_sector_t target, void * buffer, int write) {
-  /* printf("===tagiamies cache block action target %u buffer %p write %d\n",target,buffer,write); */
-  /* print_cache(); */
   
   ASSERT(buffer != NULL);  
   struct hash_elem * hash_elem;
@@ -227,7 +225,6 @@ static void cache_block_action(block_sector_t target, void * buffer, int write) 
   cache_entry_t * cache_entry;
   cache_data_t * cache_data;
   // rw_lock_t * rw_lock;
-  cache_entry_t cache_entry_key;
   size_t to_evict;
   void * src;
   void * dst;
@@ -245,6 +242,7 @@ static void cache_block_action(block_sector_t target, void * buffer, int write) 
     if ( ((volatile block_sector_t)cache_entry->sector) == target ) {
       cache_entry->accessed = 1;
       if ( write ) {
+        cache_entry->dirty = 1;
         src = buffer;
         dst = &cache.cache_data[cache_entry->idx];
       }
@@ -278,7 +276,6 @@ static void cache_block_action(block_sector_t target, void * buffer, int write) 
       memcpy(cache_data,buffer,BLOCK_SECTOR_SIZE);
     }
     else {
-      cache_entry->dirty = 0;
       // copy filesys block into evicted cache entry
       block_read(cache.block,target,cache_data);
       memcpy(buffer,cache_data,BLOCK_SECTOR_SIZE);
@@ -290,41 +287,63 @@ static void cache_block_action(block_sector_t target, void * buffer, int write) 
     lock_release(&cache.cache_entries_map_lock);
     // rw_lock_write_release(rw_lock);
   }
+  
 }
 
 void cache_block_read(struct block * block, block_sector_t target, void * buffer) {
+  // printf("===tagiamies cache block read target %u buffer %p\n",target,buffer);
+  /* print_cache(); */
+  
   ASSERT(block == cache.block);
-  // calling this somehow corrupts threads
   cache_block_action(target,buffer,0 /*read*/);
   // block_read(block,target,buffer);
   
   /* // read ahead target + 1 */
   
-  // need to check this is sane
-  uint8_t random_buffer[BLOCK_SECTOR_SIZE];
-  cache_block_action(target+1,&random_buffer,0 /*read*/);
-  /* printf("cache block read %u result:\n",target); */
-  /* print_sum(buffer); */
+  /* // need to check this is sane */
+  // uint8_t random_buffer[BLOCK_SECTOR_SIZE];
+  /* cache_block_action(target+1,&random_buffer,0 /\*read*\/); */
+  /* /\* printf("cache block read %u result:\n",target); *\/ */
+  /* /\* print_sum(buffer); *\/ */
 
-  /* // debug code */
-  /* block_read(block,target,&random_buffer); */
+  // debug code
+  // block_read(block,target,&random_buffer);
   /* int err = memcmp(buffer,random_buffer,BLOCK_SECTOR_SIZE); */
   /* ASSERT(err == 0); */
+
+  /* size_t res = 0; */
+  /* for ( size_t i = 0; i < BLOCK_SECTOR_SIZE; ++i ) { */
+  /*   uint8_t * also_buffer = buffer; */
+  /*   res += also_buffer[i]; */
+  /* } */
+  /* printf("===tagiamies cache block read end target %u buffer %p contents %zu\n",target,buffer,res); */
 }
 
 void cache_block_write(struct block * block, block_sector_t target, const void * buffer) {
+  // printf("===tagiamies cache block write target %u buffer %p\n",target,buffer);
+  /* print_cache(); */
+  
   ASSERT(block == cache.block);
   ASSERT(buffer != NULL);
   // copy over buffer to tmp buffer to suppress warnings
+  // this is not a real operating system
+  // this shit is why templates were invented
   uint8_t tmp_buffer[BLOCK_SECTOR_SIZE];
   memcpy(&tmp_buffer,buffer,BLOCK_SECTOR_SIZE);
   
   cache_block_action(target,&tmp_buffer,1 /*write*/);
 
   /* // debug code */
-  /* block_write(block,target,buffer); */
-  /* cache_block_read(block,target,&tmp_buffer); */
+  // block_write(block,target,buffer);
+  // cache_block_read(block,target,&tmp_buffer);
   /* int err = memcmp(buffer,tmp_buffer,BLOCK_SECTOR_SIZE); */
-  /* ASSERT(err == 0); */  
-}
+  /* ASSERT(err == 0);   */
 
+  /* size_t res = 0; */
+  /* for ( size_t i = 0; i < BLOCK_SECTOR_SIZE; ++i ) { */
+  /*   uint8_t * also_buffer = buffer; */
+  /*   res += also_buffer[i]; */
+  /* } */
+  /* printf("===tagiamies cache block write end target %u buffer %p contents %zu\n",target,buffer,res); */
+
+}

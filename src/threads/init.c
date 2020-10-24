@@ -128,11 +128,12 @@ pintos_init (void)
   locate_block_devices ();
   cache_init_early();
   filesys_init (format_filesys);
+  // add this back in when I add locking
   // cache_init_late();
 #endif
 
   printf ("Boot complete.\n");
-
+  
 #ifdef USERPROG
   init_process_table();
   init_fd_table();
