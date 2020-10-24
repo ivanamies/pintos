@@ -59,6 +59,24 @@ static bool cache_less_func(const struct hash_elem * a,
   return cache_entry1->sector < cache_entry2->sector;
 }
 
+static void rw_lock_acquire_action(rw_lock_t * lock, int write ) {
+  if ( write ) {
+    rw_lock_write_acquire(lock);
+  }
+  else {
+    rw_lock_read_acquire(lock);
+  }
+}
+
+static void rw_lock_release_action(rw_lock_t * lock, int write ) {
+  if ( write ) {
+    rw_lock_write_release(lock);
+  }
+  else {
+    rw_lock_read_release(lock);
+  }
+}
+
 static size_t get_clock_hand(void) {
   lock_acquire(&cache.clock_hand_lock);
   int clock_hand = cache.clock_hand;
@@ -71,19 +89,22 @@ static size_t get_clock_hand(void) {
 
 static int get_entry_to_evict(void) {
    int clock_hand;
-   bool accessed;
-   
-   // hilariously races
-   // the access bit does nothing
-   // it doesn't even hurt the big-O complexity of the algorithm
+   cache_entry_t * cache_entry;
+   rw_lock_t * rw_lock;
+   const int rw_lock_write = 1;
    
    while ( true ) {
      clock_hand = get_clock_hand();
-     accessed = cache.cache_entries[clock_hand].accessed;
-     if ( accessed ) {
+     cache_entry = &cache.cache_entries[clock_hand];
+     rw_lock = &cache_entry->rw_lock;
+     rw_lock_acquire_action(rw_lock,rw_lock_write);
+     
+     if ( cache.cache_entries[clock_hand].accessed ) {
        cache.cache_entries[clock_hand].accessed = 0;
+       rw_lock_release_action(rw_lock,rw_lock_write);
      }
      else {
+       // rw_lock is retained
        return clock_hand;
      }
    }
@@ -215,24 +236,6 @@ static struct hash_elem * cache_block_search(int target) {
   return hash_elem;
 }
 
-static void rw_lock_acquire_action(rw_lock_t * lock, int write ) {
-  if ( write ) {
-    rw_lock_write_acquire(lock);
-  }
-  else {
-    rw_lock_read_acquire(lock);
-  }
-}
-
-static void rw_lock_release_action(rw_lock_t * lock, int write ) {
-  if ( write ) {
-    rw_lock_write_release(lock);
-  }
-  else {
-    rw_lock_read_release(lock);
-  }
-}
-
 // 0 for read
 // 1 for write
 static void cache_block_action(block_sector_t target, void * buffer, int write) {
@@ -281,11 +284,9 @@ static void cache_block_action(block_sector_t target, void * buffer, int write) 
   }
   else {
     // evict some cache entry
-    to_evict = get_entry_to_evict();
+    to_evict = get_entry_to_evict(); // rw_lock WRITE is already obtained
     cache_entry = &cache.cache_entries[to_evict];
     rw_lock = &cache_entry->rw_lock;
-    
-    rw_lock_acquire_action(rw_lock,write);
     
     evict_cache_entry(to_evict);
     // fill in the entry
@@ -307,7 +308,7 @@ static void cache_block_action(block_sector_t target, void * buffer, int write) 
     ASSERT(hash_elem == NULL);
     lock_release(&cache.cache_entries_map_lock);
     
-    rw_lock_release_action(rw_lock,write);
+    rw_lock_release_action(rw_lock,1 /*always release write lock*/);
   }
   
 }

@@ -15,8 +15,6 @@ struct block *fs_device;
 
 static void do_format (void);
 
-static struct lock filesys_lock;
-
 /* Initializes the file system module.
    If FORMAT is true, reformats the file system. */
 void
@@ -33,8 +31,6 @@ filesys_init (bool format)
     do_format ();
 
   free_map_open ();
-
-  lock_init(&filesys_lock);
 }
 
 /* Shuts down the file system module, writing any unwritten data
@@ -107,12 +103,4 @@ do_format (void)
     PANIC ("root directory creation failed");
   free_map_close ();
   printf ("done.\n");
-}
-
-void filesys_lock_acquire(void) {
-  // lock_acquire(&filesys_lock);
-}
-
-void filesys_lock_release(void) {
-  // lock_release(&filesys_lock);
 }
