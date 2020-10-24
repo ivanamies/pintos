@@ -8,7 +8,7 @@
 #include "threads/thread.h"
 #include "threads/rw_lock.h"
 
-#define MAX_CACHE_ENTRIES 16
+#define MAX_CACHE_ENTRIES 64
 
 typedef struct cache_data {
   uint8_t data[BLOCK_SECTOR_SIZE];
