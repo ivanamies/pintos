@@ -298,14 +298,10 @@ void cache_block_read(struct block * block, block_sector_t target, void * buffer
   cache_block_action(target,buffer,0 /*read*/);
   // block_read(block,target,buffer);
   
-  /* // read ahead target + 1 */
+  // read ahead target + 1
+  uint8_t random_buffer[BLOCK_SECTOR_SIZE];
+  cache_block_action(target+1,&random_buffer,0 /*read*/);
   
-  /* // need to check this is sane */
-  // uint8_t random_buffer[BLOCK_SECTOR_SIZE];
-  /* cache_block_action(target+1,&random_buffer,0 /\*read*\/); */
-  /* /\* printf("cache block read %u result:\n",target); *\/ */
-  /* /\* print_sum(buffer); *\/ */
-
   // debug code
   // block_read(block,target,&random_buffer);
   /* int err = memcmp(buffer,random_buffer,BLOCK_SECTOR_SIZE); */
