@@ -110,9 +110,9 @@ do_format (void)
 }
 
 void filesys_lock_acquire(void) {
-  lock_acquire(&filesys_lock);
+  // lock_acquire(&filesys_lock);
 }
 
 void filesys_lock_release(void) {
-  lock_release(&filesys_lock);
+  // lock_release(&filesys_lock);
 }

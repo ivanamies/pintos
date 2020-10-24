@@ -57,4 +57,3 @@ void rw_lock_write_acquire(rw_lock_t * rw_lock) {
 void rw_lock_write_release(rw_lock_t * rw_lock) {
   rw_lock_increment_num_writers(rw_lock,-1);
 }
-
