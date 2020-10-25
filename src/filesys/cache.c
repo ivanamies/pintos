@@ -150,9 +150,9 @@ static void cache_write_back(void * aux UNUSED) {
 
 static void cache_read_ahead(void * aux) {
   int target = (int)aux;
-  // read ahead target + 1
+  // read ahead to target 
   uint8_t random_buffer[BLOCK_SECTOR_SIZE];
-  cache_block_action(target+1,&random_buffer,0 /*read*/);  
+  cache_block_action(target,&random_buffer,0 /*read*/);  
 }
 
 static void cache_write_back_init(void) {
@@ -161,8 +161,9 @@ static void cache_write_back_init(void) {
 }
 
 static void cache_read_ahead_async(int target) {
-  tid_t tid = thread_create("cache_read_ahead",PRI_DEFAULT,cache_read_ahead,(void *)target);
-  ASSERT(tid != TID_ERROR);
+  /* tid_t tid = thread_create("cache_read_ahead",PRI_DEFAULT,cache_read_ahead,(void *)target); */
+  /* ASSERT(tid != TID_ERROR); */
+  cache_read_ahead((void *)target);
 }
 
 void cache_init_early() {
@@ -189,30 +190,25 @@ void cache_init_late() {
   cache_write_back_init();  
 }
 
-static void evict_cache_entry(size_t cache_entry_idx) {
+static void clear_cache_entry(size_t cache_entry_idx) {
   cache_entry_t * cache_entry = &cache.cache_entries[cache_entry_idx];
   cache_data_t * cache_data = &cache.cache_data[cache_entry_idx];
-  struct hash_elem * hash_elem;
   // ASSERT cache entry idx's write lock is held by this thread
   
-  if ( cache_entry->sector != -1 ) {
-    // write cache entry to disk
-    if ( cache_entry->dirty != 0 ) {
-      block_write(cache.block,cache_entry->sector,cache_data);
-    }
-    // remove it from the map
-    lock_acquire(&cache.cache_entries_map_lock);
-    hash_elem = hash_delete(&cache.cache_entries_map,&cache_entry->hash_elem);
-    ASSERT(hash_elem != NULL);
-    lock_release(&cache.cache_entries_map_lock);
-    
-    // clear cache fields
-    cache_entry->dirty = 0;
-    cache_entry->accessed = 0;
-    cache_entry->sector = -1;
-    // clear cache data
-    memset(cache_data,0,BLOCK_SECTOR_SIZE);
+  // cache_entry->sector already has the correct sector
+  // however all other things inside cache_entry are from the previous occupant sector
+  
+  // write cache entry to disk
+  if ( cache_entry->dirty != 0 ) {
+    block_write(cache.block,cache_entry->sector,cache_data);
   }
+    
+  // clear cache fields
+  cache_entry->dirty = 0;
+  cache_entry->accessed = 0;
+  
+  // clear cache data
+  memset(cache_data,0,BLOCK_SECTOR_SIZE);
 }
 
 static void print_sum(void * buffer) {
@@ -259,6 +255,37 @@ static struct hash_elem * cache_block_search(int target) {
   return hash_elem;
 }
 
+static bool cache_block_replace(cache_entry_t * to_replace,
+                                int replacing_sector) {
+  // rw_lock write already obtained on to_replace
+  
+  cache_entry_t cache_entry_key;
+  cache_entry_key.sector = replacing_sector;
+  struct hash_elem * hash_elem;
+  bool success = false;
+  
+  lock_acquire(&cache.cache_entries_map_lock);
+  // recheck that the replacing_sector was not already put back into map
+  hash_elem = hash_find(&cache.cache_entries_map,&cache_entry_key.hash_elem);
+  // if no, then swap the sector 
+  if ( hash_elem == NULL ) {
+    if ( to_replace->sector != -1 ) {
+      // evict to_replace from the map
+      hash_elem = hash_delete(&cache.cache_entries_map,&to_replace->hash_elem);
+      ASSERT(hash_elem != NULL);
+    }
+    
+    // change to_replace's sector and put back into map
+    to_replace->sector = replacing_sector;
+    // don't change anything else. Leave that for the clear function.
+    hash_elem = hash_insert(&cache.cache_entries_map,&to_replace->hash_elem);
+    ASSERT(hash_elem == NULL);
+    success = true;
+  }
+  lock_release(&cache.cache_entries_map_lock);
+  return success;
+}
+
 // 0 for read
 // 1 for write
 void cache_block_action(block_sector_t target, void * buffer, int write) {
@@ -272,6 +299,7 @@ void cache_block_action(block_sector_t target, void * buffer, int write) {
   size_t to_evict;
   void * src;
   void * dst;
+  bool success;
   
  cache_block_action_try_again:
   // acquire lock around hash table
@@ -314,11 +342,20 @@ void cache_block_action(block_sector_t target, void * buffer, int write) {
     to_evict = get_entry_to_evict(); // rw_lock WRITE is already obtained
     cache_entry = &cache.cache_entries[to_evict];
     rw_lock = &cache_entry->rw_lock;
+
+    // check that target entry wasn't inserted
+    // this will do cache_entry->sector = target;
+    success = cache_block_replace(cache_entry,target);
+    if ( !success ) {
+      rw_lock_release_action(rw_lock,1/*always release write lock*/);
+      goto cache_block_action_try_again; // evil goto try again ??
+    }
+    ASSERT(cache_entry->sector == (int)target);
     
-    evict_cache_entry(to_evict);
+    clear_cache_entry(to_evict);
+    
     // fill in the entry
     cache_entry->accessed = 1;
-    cache_entry->sector = target;
     cache_data = &cache.cache_data[cache_entry->idx];
     if ( write ) {
       cache_entry->dirty = 1;
@@ -329,12 +366,7 @@ void cache_block_action(block_sector_t target, void * buffer, int write) {
       block_read(cache.block,target,cache_data);
       memcpy(buffer,cache_data,BLOCK_SECTOR_SIZE);
     }
-    
-    lock_acquire(&cache.cache_entries_map_lock);
-    hash_elem = hash_insert(&cache.cache_entries_map,&cache_entry->hash_elem);
-    ASSERT(hash_elem == NULL);
-    lock_release(&cache.cache_entries_map_lock);
-    
+        
     // printf("get entry to evict try %p release %d\n",rw_lock,1);       
     rw_lock_release_action(rw_lock,1 /*always release write lock*/);
     // printf("get entry to evict success %p release %d\n",rw_lock,1);       
