@@ -33,10 +33,10 @@ typedef struct read_ahead_request {
   struct list_elem lele;
   int sector;
 
-  /* // signals that request was completed */
-  /* int signal; // 0 if unfulfilled, 1 if fulfilled */
-  /* struct lock lock; */
-  /* struct condition cond; */
+  // signals that request was completed
+  int signal; // 0 if unfulfilled, 1 if fulfilled
+  struct lock lock;
+  struct condition cond;
 } read_ahead_request_t;
 
 typedef struct read_ahead_helpers {
@@ -193,40 +193,43 @@ static void cache_read_ahead(void * aux UNUSED) {
     // get the target to read ahead
     request = list_entry(lele,read_ahead_request_t,lele);
     target = request->sector;
-    free(request);
     
     cache_block_action(target,random_buffer,read_action);
     
-    /* // signal the requesting thread to proceed */
-    /* lock_acquire(&request->lock); */
-    /* request->signal = 1; */
-    /* cond_signal(&request->cond,&request->lock); */
-    /* lock_release(&request->lock); */
+    // signal the requesting thread to proceed
+    lock_acquire(&request->lock);
+    request->signal = 1;
+    cond_signal(&request->cond,&request->lock);
+    lock_release(&request->lock);
   }
 }
 
-static void cache_request_read_ahead(int target) {
+static read_ahead_request_t * cache_request_read_ahead(int target) {
   struct list * list = &cache.read_ahead_helpers.list;
   struct lock * lock = &cache.read_ahead_helpers.lock;
   struct condition * cond = &cache.read_ahead_helpers.cond;
   
   read_ahead_request_t * request = (read_ahead_request_t *)malloc(sizeof(read_ahead_request_t));
-  memset(request,0,sizeof(read_ahead_request_t));
   request->sector = target;
-  /* request.signal = 0; */
-  /* lock_init(&request.lock); */
-  /* cond_init(&request.cond); */
+  request->signal = 0;
+  lock_init(&request->lock);
+  cond_init(&request->cond);
   
   lock_acquire(lock);
   list_push_back(list,&request->lele);
   cond_signal(cond,lock);
   lock_release(lock);
   
-  /* lock_acquire(&request.lock); */
-  /* while ( request.signal == 0 ) { */
-  /*   cond_wait(&request.cond,&request.lock); */
-  /* } */
-  /* lock_release(&request.lock); */
+  return request;
+}
+
+static void cache_request_read_ahead_wait(read_ahead_request_t * request) {
+  lock_acquire(&request->lock);
+  while ( request->signal == 0 ) {
+    cond_wait(&request->cond,&request->lock);
+  }
+  lock_release(&request->lock);
+  free(request);
 }
 
 static void cache_write_back_init(void) {
@@ -460,10 +463,12 @@ void cache_block_read(struct block * block, block_sector_t target, void * buffer
   /* print_cache(); */
   
   ASSERT(block == cache.block);
-  cache_request_read_ahead(target+1);
+  read_ahead_request_t * request = cache_request_read_ahead(target+1);
   cache_block_action(target,buffer,0 /*read*/);
   // block_read(block,target,buffer);
-    
+  
+  cache_request_read_ahead_wait(request);
+  
   // cache_read_ahead_async(target+1);
   // debug code
   // block_read(block,target,&random_buffer);
