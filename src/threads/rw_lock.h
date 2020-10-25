@@ -9,7 +9,6 @@ typedef struct rw_lock {
   
   int num_readers;
   int num_writers;
-  struct thread * owner;
   
   struct lock lock;
   
