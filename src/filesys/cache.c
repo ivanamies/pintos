@@ -8,7 +8,7 @@
 #include "threads/thread.h"
 #include "threads/rw_lock.h"
 
-#define MAX_CACHE_ENTRIES 64
+#define MAX_CACHE_ENTRIES 16
 
 typedef struct cache_data {
   uint8_t data[BLOCK_SECTOR_SIZE];
@@ -190,7 +190,7 @@ void cache_init_late() {
   cache_write_back_init();  
 }
 
-static void clear_cache_entry(size_t cache_entry_idx) {
+static void clear_cache_entry(size_t cache_entry_idx, int replaced_sector) {
   cache_entry_t * cache_entry = &cache.cache_entries[cache_entry_idx];
   cache_data_t * cache_data = &cache.cache_data[cache_entry_idx];
   // ASSERT cache entry idx's write lock is held by this thread
@@ -200,9 +200,9 @@ static void clear_cache_entry(size_t cache_entry_idx) {
   
   // write cache entry to disk
   if ( cache_entry->dirty != 0 ) {
-    block_write(cache.block,cache_entry->sector,cache_data);
+    block_write(cache.block,replaced_sector,cache_data);
   }
-    
+  
   // clear cache fields
   cache_entry->dirty = 0;
   cache_entry->accessed = 0;
@@ -300,6 +300,7 @@ void cache_block_action(block_sector_t target, void * buffer, int write) {
   void * src;
   void * dst;
   bool success;
+  int replaced_sector;
   
  cache_block_action_try_again:
   // acquire lock around hash table
@@ -342,9 +343,10 @@ void cache_block_action(block_sector_t target, void * buffer, int write) {
     to_evict = get_entry_to_evict(); // rw_lock WRITE is already obtained
     cache_entry = &cache.cache_entries[to_evict];
     rw_lock = &cache_entry->rw_lock;
-
+    
     // check that target entry wasn't inserted
     // this will do cache_entry->sector = target;
+    replaced_sector = cache_entry->sector;
     success = cache_block_replace(cache_entry,target);
     if ( !success ) {
       rw_lock_release_action(rw_lock,1/*always release write lock*/);
@@ -352,7 +354,7 @@ void cache_block_action(block_sector_t target, void * buffer, int write) {
     }
     ASSERT(cache_entry->sector == (int)target);
     
-    clear_cache_entry(to_evict);
+    clear_cache_entry(to_evict,replaced_sector);
     
     // fill in the entry
     cache_entry->accessed = 1;
@@ -381,8 +383,8 @@ void cache_block_read(struct block * block, block_sector_t target, void * buffer
   ASSERT(block == cache.block);
   cache_block_action(target,buffer,0 /*read*/);
   // block_read(block,target,buffer);
-    
-  cache_read_ahead_async(target+1);
+  
+  // cache_read_ahead_async(target+1);
   // debug code
   // block_read(block,target,&random_buffer);
   /* int err = memcmp(buffer,random_buffer,BLOCK_SECTOR_SIZE); */
@@ -393,7 +395,7 @@ void cache_block_read(struct block * block, block_sector_t target, void * buffer
   /*   uint8_t * also_buffer = buffer; */
   /*   res += also_buffer[i]; */
   /* } */
-  /* printf("===tagiamies cache_read_ahead_asynce block read end target %u buffer %p contents %zu\n",target,buffer,res); */
+  // printf("===tagiamies cache block read end target %u buffer %p contents %zu\n",target,buffer,res);
 }
 
 void cache_block_write(struct block * block, block_sector_t target, const void * buffer) {
@@ -421,6 +423,6 @@ void cache_block_write(struct block * block, block_sector_t target, const void *
   /*   uint8_t * also_buffer = buffer; */
   /*   res += also_buffer[i]; */
   /* } */
-  /* printf("===tagiamies cache block write end target %u buffer %p contents %zu\n",target,buffer,res); */
+  // printf("===tagiamies cache block write end target %u buffer %p contents %zu\n",target,buffer,res);
 
 }
