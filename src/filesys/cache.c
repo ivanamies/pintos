@@ -59,6 +59,8 @@ static bool cache_less_func(const struct hash_elem * a,
   return cache_entry1->sector < cache_entry2->sector;
 }
 
+static void cache_block_action(block_sector_t target, void * buffer, int write);
+
 static void rw_lock_acquire_action(rw_lock_t * lock, int write ) {
   if ( write ) {
     rw_lock_write_acquire(lock);
@@ -146,8 +148,20 @@ static void cache_write_back(void * aux UNUSED) {
   }
 }
 
+static void cache_read_ahead(void * aux) {
+  int target = (int)aux;
+  // read ahead target + 1
+  uint8_t random_buffer[BLOCK_SECTOR_SIZE];
+  cache_block_action(target+1,&random_buffer,0 /*read*/);  
+}
+
 static void cache_write_back_init(void) {
   tid_t tid = thread_create("cache_write_back",PRI_DEFAULT,cache_write_back,NULL);
+  ASSERT(tid != TID_ERROR);
+}
+
+static void cache_read_ahead_async(int target) {
+  tid_t tid = thread_create("cache_read_ahead",PRI_DEFAULT,cache_read_ahead,(void *)target);
   ASSERT(tid != TID_ERROR);
 }
 
@@ -247,7 +261,7 @@ static struct hash_elem * cache_block_search(int target) {
 
 // 0 for read
 // 1 for write
-static void cache_block_action(block_sector_t target, void * buffer, int write) {
+void cache_block_action(block_sector_t target, void * buffer, int write) {
   
   ASSERT(buffer != NULL);  
   struct hash_elem * hash_elem;
@@ -335,11 +349,8 @@ void cache_block_read(struct block * block, block_sector_t target, void * buffer
   ASSERT(block == cache.block);
   cache_block_action(target,buffer,0 /*read*/);
   // block_read(block,target,buffer);
-  
-  // read ahead target + 1
-  uint8_t random_buffer[BLOCK_SECTOR_SIZE];
-  cache_block_action(target+1,&random_buffer,0 /*read*/);
-  
+    
+  cache_read_ahead_async(target+1);
   // debug code
   // block_read(block,target,&random_buffer);
   /* int err = memcmp(buffer,random_buffer,BLOCK_SECTOR_SIZE); */
@@ -350,7 +361,7 @@ void cache_block_read(struct block * block, block_sector_t target, void * buffer
   /*   uint8_t * also_buffer = buffer; */
   /*   res += also_buffer[i]; */
   /* } */
-  /* printf("===tagiamies cache block read end target %u buffer %p contents %zu\n",target,buffer,res); */
+  /* printf("===tagiamies cache_read_ahead_asynce block read end target %u buffer %p contents %zu\n",target,buffer,res); */
 }
 
 void cache_block_write(struct block * block, block_sector_t target, const void * buffer) {
