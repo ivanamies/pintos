@@ -129,7 +129,7 @@ pintos_init (void)
   cache_init_early();
   filesys_init (format_filesys);
   // add this back in when I add locking
-  // cache_init_late();
+  cache_init_late();
 #endif
 
   printf ("Boot complete.\n");
