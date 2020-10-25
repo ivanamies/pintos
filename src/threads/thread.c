@@ -81,7 +81,7 @@ static tid_t allocate_tid (void);
 
 static void sleep_hack_init(void) {
   sleep_hack.ticks = 0;
-  sleep_hack.interval = 5;
+  sleep_hack.interval = 100;
   sleep_hack.waiter = NULL;
 }
 

@@ -97,15 +97,15 @@ static int get_entry_to_evict(void) {
      clock_hand = get_clock_hand();
      cache_entry = &cache.cache_entries[clock_hand];
      rw_lock = &cache_entry->rw_lock;
-     printf("get entry to evict try %p acquire %d\n",rw_lock,rw_lock_write);
+     // printf("get entry to evict try %p acquire %d\n",rw_lock,rw_lock_write);
      rw_lock_acquire_action(rw_lock,rw_lock_write);
-     printf("get entry to evict success %p acquire %d\n",rw_lock,rw_lock_write);
+     // printf("get entry to evict success %p acquire %d\n",rw_lock,rw_lock_write);
      
      if ( cache.cache_entries[clock_hand].accessed ) {
        cache.cache_entries[clock_hand].accessed = 0;
-       printf("get entry to evict try %p release %d\n",rw_lock,rw_lock_write);       
+       // printf("get entry to evict try %p release %d\n",rw_lock,rw_lock_write);       
        rw_lock_release_action(rw_lock,rw_lock_write);
-       printf("get entry to evict success %p release %d\n",rw_lock,rw_lock_write);
+       // printf("get entry to evict success %p release %d\n",rw_lock,rw_lock_write);
      }
      else {
        // rw_lock is retained
@@ -130,18 +130,18 @@ static void cache_write_back(void * aux UNUSED) {
     // write all sectors to cache
     for ( i = 0; i < MAX_CACHE_ENTRIES; ++i ) {
       rw_lock = &cache.cache_entries[i].rw_lock;
-      printf("cache_write_back try acqire rw_lock %p\n",rw_lock);
+      // printf("cache_write_back try acqire rw_lock %p\n",rw_lock);
       rw_lock_acquire_action(rw_lock,rw_lock_write);
-      printf("cache_write_back success acqire rw_lock %p\n",rw_lock);
+      // printf("cache_write_back success acqire rw_lock %p\n",rw_lock);
       sector = cache.cache_entries[i].sector;
       if ( sector != -1 && cache.cache_entries[i].dirty ) { // skip if unwritten or clean
         // writes inode_disk inside cache_entry[i] to designated filesys sector
         block_write(cache.block,sector,&cache.cache_data[i]);
         cache.cache_entries[i].dirty = 0;
       }
-      printf("cache_write_back try release rw_lock %p\n",rw_lock);
+      // printf("cache_write_back try release rw_lock %p\n",rw_lock);
       rw_lock_release_action(rw_lock,rw_lock_write);
-      printf("cache_write_back success release rw_lock %p\n",rw_lock);
+      // printf("cache_write_back success release rw_lock %p\n",rw_lock);
     }
   }
 }
@@ -268,9 +268,9 @@ static void cache_block_action(block_sector_t target, void * buffer, int write) 
     cache_entry = hash_entry(hash_elem,cache_entry_t,hash_elem);
     rw_lock = &cache_entry->rw_lock;
 
-    printf("cache block action try %p acquire %d\n",rw_lock,write);
+    // printf("cache block action try %p acquire %d\n",rw_lock,write);
     rw_lock_acquire_action(rw_lock,write);
-    printf("cache block action success %p acquire %d\n",rw_lock,write);
+    // printf("cache block action success %p acquire %d\n",rw_lock,write);
     
     // check if we did find the entry we're looking for
     ASSERT(cache_entry->sector != -1);
@@ -286,9 +286,9 @@ static void cache_block_action(block_sector_t target, void * buffer, int write) 
         dst = buffer;
       }
       memcpy(dst,src,BLOCK_SECTOR_SIZE);
-      printf("cache block action try %p release %d\n",rw_lock,write);
+      // printf("cache block action try %p release %d\n",rw_lock,write);
       rw_lock_release_action(rw_lock,write);
-      printf("cache block action success %p release %d\n",rw_lock,write);
+      // printf("cache block action success %p release %d\n",rw_lock,write);
     }
     else {
       rw_lock_release_action(rw_lock,write);
@@ -321,9 +321,9 @@ static void cache_block_action(block_sector_t target, void * buffer, int write) 
     ASSERT(hash_elem == NULL);
     lock_release(&cache.cache_entries_map_lock);
     
-    printf("get entry to evict try %p release %d\n",rw_lock,1);       
+    // printf("get entry to evict try %p release %d\n",rw_lock,1);       
     rw_lock_release_action(rw_lock,1 /*always release write lock*/);
-    printf("get entry to evict success %p release %d\n",rw_lock,1);       
+    // printf("get entry to evict success %p release %d\n",rw_lock,1);       
   }
   
 }
