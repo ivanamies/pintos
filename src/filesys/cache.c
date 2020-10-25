@@ -7,6 +7,7 @@
 
 #include "threads/thread.h"
 #include "threads/rw_lock.h"
+#include "threads/malloc.h"
 
 #define MAX_CACHE_ENTRIES 16
 
@@ -28,6 +29,22 @@ typedef struct cache_entry {
   
 } cache_entry_t;
 
+typedef struct read_ahead_request {
+  struct list_elem lele;
+  int sector;
+
+  /* // signals that request was completed */
+  /* int signal; // 0 if unfulfilled, 1 if fulfilled */
+  /* struct lock lock; */
+  /* struct condition cond; */
+} read_ahead_request_t;
+
+typedef struct read_ahead_helpers {
+  struct list list;
+  struct lock lock;
+  struct condition cond;
+} read_ahead_helpers_t;
+
 typedef struct cache {
   
   struct block * block;
@@ -40,6 +57,9 @@ typedef struct cache {
   // clock hand
   struct lock clock_hand_lock;
   size_t clock_hand;
+
+  read_ahead_helpers_t read_ahead_helpers;
+  // and this is where I would put my write_behind_helpers... IF I WROTE IT!!
   
 } cache_t;
 
@@ -127,8 +147,10 @@ static void cache_write_back(void * aux UNUSED) {
   while ( true ) {
     // sleep until the scheduler wakes us up again
     // when we wake up depends on the scheduler
+    //...
+    // wait, this is stupid it should be based on number of cache hits or disk requests.
     thread_sleep_hack();
-    
+
     // write all sectors to cache
     for ( i = 0; i < MAX_CACHE_ENTRIES; ++i ) {
       rw_lock = &cache.cache_entries[i].rw_lock;
@@ -148,11 +170,63 @@ static void cache_write_back(void * aux UNUSED) {
   }
 }
 
-static void cache_read_ahead(void * aux) {
-  int target = (int)aux;
-  // read ahead to target 
+static void cache_read_ahead(void * aux UNUSED) {
   uint8_t random_buffer[BLOCK_SECTOR_SIZE];
-  cache_block_action(target,&random_buffer,0 /*read*/);  
+  int target = -1;
+  const int read_action = 0;
+  read_ahead_request_t * request = NULL;
+  struct list_elem * lele = NULL;
+  struct list * list = &cache.read_ahead_helpers.list;
+  struct lock * lock = &cache.read_ahead_helpers.lock;
+  struct condition * cond = &cache.read_ahead_helpers.cond;
+  
+  while ( true ) {
+    // condition block until list is not empty
+    lock_acquire(lock);
+    while ( list_empty(list) ) {
+      cond_wait(cond,lock);
+    }
+    // pop a request off the list
+    lele = list_pop_front(list);
+    lock_release(lock);
+    
+    // get the target to read ahead
+    request = list_entry(lele,read_ahead_request_t,lele);
+    target = request->sector;
+    free(request);
+    
+    cache_block_action(target,random_buffer,read_action);
+    
+    /* // signal the requesting thread to proceed */
+    /* lock_acquire(&request->lock); */
+    /* request->signal = 1; */
+    /* cond_signal(&request->cond,&request->lock); */
+    /* lock_release(&request->lock); */
+  }
+}
+
+static void cache_request_read_ahead(int target) {
+  struct list * list = &cache.read_ahead_helpers.list;
+  struct lock * lock = &cache.read_ahead_helpers.lock;
+  struct condition * cond = &cache.read_ahead_helpers.cond;
+  
+  read_ahead_request_t * request = (read_ahead_request_t *)malloc(sizeof(read_ahead_request_t));
+  memset(request,0,sizeof(read_ahead_request_t));
+  request->sector = target;
+  /* request.signal = 0; */
+  /* lock_init(&request.lock); */
+  /* cond_init(&request.cond); */
+  
+  lock_acquire(lock);
+  list_push_back(list,&request->lele);
+  cond_signal(cond,lock);
+  lock_release(lock);
+  
+  /* lock_acquire(&request.lock); */
+  /* while ( request.signal == 0 ) { */
+  /*   cond_wait(&request.cond,&request.lock); */
+  /* } */
+  /* lock_release(&request.lock); */
 }
 
 static void cache_write_back_init(void) {
@@ -160,10 +234,14 @@ static void cache_write_back_init(void) {
   ASSERT(tid != TID_ERROR);
 }
 
-static void cache_read_ahead_async(int target) {
-  /* tid_t tid = thread_create("cache_read_ahead",PRI_DEFAULT,cache_read_ahead,(void *)target); */
-  /* ASSERT(tid != TID_ERROR); */
-  cache_read_ahead((void *)target);
+static void cache_read_ahead_init(void) {
+  printf("what\n");
+  list_init(&cache.read_ahead_helpers.list);
+  lock_init(&cache.read_ahead_helpers.lock);
+  cond_init(&cache.read_ahead_helpers.cond);
+
+  tid_t tid = thread_create("cache_read_ahead",PRI_DEFAULT,cache_read_ahead,NULL);
+  ASSERT(tid != TID_ERROR);  
 }
 
 void cache_init_early() {
@@ -184,10 +262,11 @@ void cache_init_early() {
     cache.cache_entries[i].idx = i;
   }
   
+  cache_read_ahead_init();
 }
 
 void cache_init_late() {
-  cache_write_back_init();  
+  cache_write_back_init();
 }
 
 static void clear_cache_entry(size_t cache_entry_idx, int replaced_sector) {
@@ -381,9 +460,10 @@ void cache_block_read(struct block * block, block_sector_t target, void * buffer
   /* print_cache(); */
   
   ASSERT(block == cache.block);
+  cache_request_read_ahead(target+1);
   cache_block_action(target,buffer,0 /*read*/);
   // block_read(block,target,buffer);
-  
+    
   // cache_read_ahead_async(target+1);
   // debug code
   // block_read(block,target,&random_buffer);
