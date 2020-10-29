@@ -206,7 +206,7 @@ static void cache_read_ahead(void * aux UNUSED) {
   }
 }
 
-static read_ahead_request_t * cache_request_read_ahead(int target) {
+static void cache_request_read_ahead(int target) {
   struct list * list = &cache.read_ahead_helpers.list;
   struct lock * lock = &cache.read_ahead_helpers.lock;
   struct condition * cond = &cache.read_ahead_helpers.cond;
@@ -221,17 +221,6 @@ static read_ahead_request_t * cache_request_read_ahead(int target) {
   list_push_back(list,&request->lele);
   cond_signal(cond,lock);
   lock_release(lock);
-  
-  return request;
-}
-
-static void cache_request_read_ahead_wait(read_ahead_request_t * request) {
-  /* lock_acquire(&request->lock); */
-  /* while ( request->signal == 0 ) { */
-  /*   cond_wait(&request->cond,&request->lock); */
-  /* } */
-  /* lock_release(&request->lock); */
-  /* free(request); */
 }
 
 static void cache_write_back_init(void) {
@@ -389,7 +378,6 @@ void cache_block_action(block_sector_t target, void * buffer, int write) {
   void * src;
   void * dst;
   bool success;
-  int replaced_sector;
   
  cache_block_action_try_again:
   // acquire lock around hash table
@@ -435,7 +423,6 @@ void cache_block_action(block_sector_t target, void * buffer, int write) {
     
     // check that target entry wasn't inserted
     // this will do cache_entry->sector = target;
-    replaced_sector = cache_entry->sector;
     success = cache_block_replace(to_evict,target);
     if ( !success ) {
       rw_lock_release_action(rw_lock,1/*always release write lock*/);
@@ -468,7 +455,7 @@ void cache_block_read(struct block * block, block_sector_t target, void * buffer
   /* print_cache(); */
   
   ASSERT(block == cache.block);
-  read_ahead_request_t * request = cache_request_read_ahead(target+1);
+  cache_request_read_ahead(target+1);
   cache_block_action(target,buffer,0 /*read*/);
   // block_read(block,target,buffer);
   // cache_request_read_ahead_wait(request);
@@ -487,7 +474,7 @@ void cache_block_read(struct block * block, block_sector_t target, void * buffer
   // printf("thread %p cache block read end target %u buffer %p contents %zu\n",thread_current(),target,buffer,res);
 }
 
-void cache_block_write(struct block * block, block_sector_t target, const void * buffer) {
+void cache_block_write(struct block * block, block_sector_t target, void * buffer) {
   // printf("thread %p cache block write target %u buffer %p\n",thread_current(),target,buffer);
   /* print_cache(); */
   
@@ -496,18 +483,16 @@ void cache_block_write(struct block * block, block_sector_t target, const void *
   // copy over buffer to tmp buffer to suppress warnings
   // this is not a real operating system
   // this shit is why templates were invented
-  uint8_t tmp_buffer[BLOCK_SECTOR_SIZE];
-  memcpy(&tmp_buffer,buffer,BLOCK_SECTOR_SIZE);
   
-  cache_block_action(target,&tmp_buffer,1 /*write*/);
+  cache_block_action(target,buffer,1 /*write*/);
 
   /* // debug code */
   // block_write(block,target,buffer);
 
-  size_t res = 0;
-  for ( size_t i = 0; i < BLOCK_SECTOR_SIZE; ++i ) {
-    uint8_t * also_buffer = buffer;
-    res += also_buffer[i];
-  }
+  /* size_t res = 0; */
+  /* for ( size_t i = 0; i < BLOCK_SECTOR_SIZE; ++i ) { */
+  /*   uint8_t * also_buffer = buffer; */
+  /*   res += also_buffer[i]; */
+  /* } */
   // printf("thread %p cache block write end target %u buffer %p contents %zu\n",thread_current(),target,buffer,res);
 }
