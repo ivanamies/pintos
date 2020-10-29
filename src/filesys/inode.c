@@ -94,7 +94,7 @@ inode_create (block_sector_t sector, off_t length)
       if (free_map_allocate (sectors, &disk_inode->start)) 
         {
           /* block_write (fs_device, sector, disk_inode); */
-          cache_block_write (fs_device, sector, disk_inode);
+          cache_block_write (fs_device, sector, disk_inode, BLOCK_SECTOR_SIZE);
           
           if (sectors > 0) 
             {
@@ -103,7 +103,8 @@ inode_create (block_sector_t sector, off_t length)
               
               for (i = 0; i < sectors; i++) {
                 /* block_write (fs_device, disk_inode->start + i, zeros); */
-                cache_block_write (fs_device, disk_inode->start + i, zeros);
+                cache_block_write (fs_device, disk_inode->start + i, zeros, BLOCK_SECTOR_SIZE);
+                /* printf("tagiamies 3.3 inode create\n"); */
               }
             }
           success = true; 
@@ -146,7 +147,7 @@ inode_open (block_sector_t sector)
   inode->deny_write_cnt = 0;
   inode->removed = false;
   /* block_read (fs_device, inode->sector, &inode->data); */
-  cache_block_read (fs_device, inode->sector, &inode->data);
+  cache_block_read (fs_device, inode->sector, &inode->data, BLOCK_SECTOR_SIZE);
   return inode;
 }
 
@@ -233,7 +234,7 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
         {
           /* Read full sector directly into caller's buffer. */
           /* block_read (fs_device, sector_idx, buffer + bytes_read); */
-          cache_block_read (fs_device, sector_idx, buffer + bytes_read);
+          cache_block_read (fs_device, sector_idx, buffer + bytes_read, chunk_size);
         }
       else 
         {
@@ -246,7 +247,7 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
                 break;
             }
           /* block_read (fs_device, sector_idx, bounce); */
-          cache_block_read (fs_device, sector_idx, bounce);
+          cache_block_read (fs_device, sector_idx, bounce, chunk_size);
           memcpy (buffer + bytes_read, bounce + sector_ofs, chunk_size);
         }
       
@@ -296,7 +297,7 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
         {
           /* Write full sector directly to disk. */
           /* block_write (fs_device, sector_idx, buffer + bytes_written); */
-          cache_block_write (fs_device, sector_idx, buffer + bytes_written);
+          cache_block_write (fs_device, sector_idx, buffer + bytes_written, chunk_size);
         }
       else 
         {
@@ -313,15 +314,15 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
              first.  Otherwise we start with a sector of all zeros. */
           if (sector_ofs > 0 || chunk_size < sector_left) {
             /* block_read (fs_device, sector_idx, bounce); */
-            cache_block_read (fs_device, sector_idx, bounce);
+            cache_block_read (fs_device, sector_idx, bounce, chunk_size);
           }
           else
             memset (bounce, 0, BLOCK_SECTOR_SIZE);
           memcpy (bounce + sector_ofs, buffer + bytes_written, chunk_size);
           /* block_write (fs_device, sector_idx, bounce); */
-          cache_block_write (fs_device, sector_idx, bounce);
+          cache_block_write (fs_device, sector_idx, bounce, chunk_size);
         }
-
+      
       /* Advance. */
       size -= chunk_size;
       offset += chunk_size;
