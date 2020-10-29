@@ -338,10 +338,10 @@ static struct hash_elem * cache_block_search(int target) {
   return hash_elem;
 }
 
-static bool cache_block_replace(cache_entry_t * to_replace,
+static bool cache_block_replace(int to_replace_idx,
                                 int replacing_sector) {
   // rw_lock write already obtained on to_replace
-  
+  cache_entry_t * to_replace = &cache.cache_entries[to_replace_idx];
   cache_entry_t cache_entry_key;
   cache_entry_key.sector = replacing_sector;
   struct hash_elem * hash_elem;
@@ -360,7 +360,7 @@ static bool cache_block_replace(cache_entry_t * to_replace,
       ASSERT(hash_elem != NULL);
     }
     
-    clear_cache_entry(to_replace->idx,to_replace->sector);
+    clear_cache_entry(to_replace_idx,to_replace->sector);
     // change to_replace's sector and put back into map
     to_replace->sector = replacing_sector;
 
@@ -436,7 +436,7 @@ void cache_block_action(block_sector_t target, void * buffer, int write) {
     // check that target entry wasn't inserted
     // this will do cache_entry->sector = target;
     replaced_sector = cache_entry->sector;
-    success = cache_block_replace(cache_entry,target);
+    success = cache_block_replace(to_evict,target);
     if ( !success ) {
       rw_lock_release_action(rw_lock,1/*always release write lock*/);
       goto cache_block_action_try_again; // evil goto try again ??
