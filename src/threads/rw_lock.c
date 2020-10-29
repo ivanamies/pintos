@@ -4,9 +4,6 @@
 
 #include "threads/thread.h"
 
-// duplicate code because generalizing it makes it harder to understand
-// the locking sucks already, rolling some weird runtime templating won't add to it
-
 static void rw_lock_increment_num_readers(rw_lock_t * rw_lock) {
   struct lock * lock = &rw_lock->lock;
   struct condition * cvar_read = &rw_lock->cvar_read;
@@ -48,7 +45,6 @@ static void rw_lock_decrement_num_readers(rw_lock_t * rw_lock) {
   ASSERT(rw_lock->num_readers > 0); // 1 (myself) or more readers hold rw_lock
   --rw_lock->num_readers;
   cond_signal(cvar_write, lock); // wake writers
-  cond_signal(cvar_read, lock); // then wake readers
   lock_release(lock);
 }
 

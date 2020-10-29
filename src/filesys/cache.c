@@ -197,11 +197,7 @@ static void cache_read_ahead(void * aux UNUSED) {
     free(request);
     
     cache_block_action(target,random_buffer,read_action);
-    
-    /* for ( int i = 0; i < 1000; ++i ) { */
-    /*   barrier(); */
-    /* } */
-    
+        
     /* // signal the requesting thread to proceed */
     /* lock_acquire(&request->lock); */
     /* request->signal = 1; */
@@ -283,8 +279,8 @@ static void clear_cache_entry(size_t cache_entry_idx, int replaced_sector) {
   // ASSERT cache entry idx's write lock is held by this thread
   
   // cache_entry->sector already has the correct sector
-  // however all other things inside cache_entry are from the previous occupant sector
-  
+  // however all other things inside cache_entry are from the previous occupant sector    
+
   // write cache entry to disk
   if ( cache_entry->dirty != 0 ) {
     block_write(cache.block,replaced_sector,cache_data);
@@ -364,8 +360,10 @@ static bool cache_block_replace(cache_entry_t * to_replace,
       ASSERT(hash_elem != NULL);
     }
     
+    clear_cache_entry(to_replace->idx,to_replace->sector);
     // change to_replace's sector and put back into map
     to_replace->sector = replacing_sector;
+
     // don't change anything else. Leave that for the clear function.
     hash_elem = hash_insert(&cache.cache_entries_map,&to_replace->hash_elem);
     ASSERT(hash_elem == NULL);
@@ -445,8 +443,6 @@ void cache_block_action(block_sector_t target, void * buffer, int write) {
     }
     ASSERT(cache_entry->sector == (int)target);
     
-    clear_cache_entry(to_evict,replaced_sector);
-    
     // fill in the entry
     cache_entry->accessed = 1;
     cache_data = &cache.cache_data[cache_entry->idx];
@@ -464,7 +460,7 @@ void cache_block_action(block_sector_t target, void * buffer, int write) {
     rw_lock_release_action(rw_lock,1 /*always release write lock*/);
     // printf("thread %p get entry to evict success %p release %d\n",thread_current(),rw_lock,1);       
   }
-  
+
 }
 
 void cache_block_read(struct block * block, block_sector_t target, void * buffer) {
@@ -483,11 +479,11 @@ void cache_block_read(struct block * block, block_sector_t target, void * buffer
   /* int err = memcmp(buffer,random_buffer,BLOCK_SECTOR_SIZE); */
   /* ASSERT(err == 0); */
 
-  size_t res = 0;
-  for ( size_t i = 0; i < BLOCK_SECTOR_SIZE; ++i ) {
-    uint8_t * also_buffer = buffer;
-    res += also_buffer[i];
-  }
+  /* size_t res = 0; */
+  /* for ( size_t i = 0; i < BLOCK_SECTOR_SIZE; ++i ) { */
+  /*   uint8_t * also_buffer = buffer; */
+  /*   res += also_buffer[i]; */
+  /* } */
   // printf("thread %p cache block read end target %u buffer %p contents %zu\n",thread_current(),target,buffer,res);
 }
 
@@ -514,5 +510,4 @@ void cache_block_write(struct block * block, block_sector_t target, const void *
     res += also_buffer[i];
   }
   // printf("thread %p cache block write end target %u buffer %p contents %zu\n",thread_current(),target,buffer,res);
-
 }
