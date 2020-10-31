@@ -79,7 +79,7 @@ static bool cache_less_func(const struct hash_elem * a,
   return cache_entry1->sector < cache_entry2->sector;
 }
 
-static void cache_block_action(block_sector_t target, void * buffer, int write);
+static void cache_block_action(block_sector_t target, void * buffer, size_t sector_ofs, size_t chunk_size, int write);
 
 static void rw_lock_acquire_action(rw_lock_t * lock, int write ) {
   if ( write ) {
@@ -179,6 +179,8 @@ static void cache_read_ahead(void * aux UNUSED) {
   struct list * list = &cache.read_ahead_helpers.list;
   struct lock * lock = &cache.read_ahead_helpers.lock;
   struct condition * cond = &cache.read_ahead_helpers.cond;
+  const size_t sector_ofs = 0;
+  const size_t chunk_size = BLOCK_SECTOR_SIZE;
   
   while ( true ) {
     // condition block until list is not empty
@@ -196,7 +198,7 @@ static void cache_read_ahead(void * aux UNUSED) {
     target = request->sector;
     free(request);
     
-    cache_block_action(target,random_buffer,read_action);
+    cache_block_action(target,random_buffer,sector_ofs,chunk_size,read_action);
         
     /* // signal the requesting thread to proceed */
     /* lock_acquire(&request->lock); */
@@ -366,9 +368,13 @@ static bool cache_block_replace(int to_replace_idx,
 
 // 0 for read
 // 1 for write
-void cache_block_action(block_sector_t target, void * buffer, int write) {
+void cache_block_action(block_sector_t target, void * buffer,
+                        size_t sector_ofs, size_t chunk_size, int write) {
   
   ASSERT(buffer != NULL);  
+  ASSERT(chunk_size <= BLOCK_SECTOR_SIZE);
+  ASSERT(write <= 1);
+  
   struct hash_elem * hash_elem;
   // marked volatile for usage with double-checked locking
   cache_entry_t * cache_entry;
@@ -399,13 +405,14 @@ void cache_block_action(block_sector_t target, void * buffer, int write) {
       if ( write ) {
         cache_entry->dirty = 1;
         src = buffer;
-        dst = &cache.cache_data[cache_entry->idx];
+        dst = &cache.cache_data[cache_entry->idx] + sector_ofs;
+        memset(dst + chunk_size,0,BLOCK_SECTOR_SIZE-chunk_size); // 0 the end of the cache entry data
       }
       else {
-        src = &cache.cache_data[cache_entry->idx];
+        src = &cache.cache_data[cache_entry->idx] + sector_ofs;
         dst = buffer;
       }
-      memcpy(dst,src,BLOCK_SECTOR_SIZE);
+      memcpy(dst,src,chunk_size);
       // printf("thread %p cache block action try %p release %d\n",thread_current(),rw_lock,write);
       rw_lock_release_action(rw_lock,write);
       // printf("thread %p cache block action success %p release %d\n",thread_current(),rw_lock,write);
@@ -435,14 +442,17 @@ void cache_block_action(block_sector_t target, void * buffer, int write) {
     cache_data = &cache.cache_data[cache_entry->idx];
     if ( write ) {
       cache_entry->dirty = 1;
-      memcpy(cache_data,buffer,BLOCK_SECTOR_SIZE);
+      dst = cache_data + sector_ofs;
+      src = buffer;
+      memset(dst + chunk_size,0,BLOCK_SECTOR_SIZE-chunk_size);
     }
     else {
       // copy filesys block into evicted cache entry
       block_read(cache.block,target,cache_data);
-      memcpy(buffer,cache_data,BLOCK_SECTOR_SIZE);
+      dst = buffer;
+      src = cache_data + sector_ofs;
     }
-        
+    memcpy(dst,src,chunk_size);
     // printf("thread %p get entry to evict try %p release %d\n",thread_current(),rw_lock,1);       
     rw_lock_release_action(rw_lock,1 /*always release write lock*/);
     // printf("thread %p get entry to evict success %p release %d\n",thread_current(),rw_lock,1);       
@@ -450,13 +460,12 @@ void cache_block_action(block_sector_t target, void * buffer, int write) {
 
 }
 
-void cache_block_read(struct block * block, block_sector_t target, void * buffer) {
+void cache_block_read(struct block * block, block_sector_t target, void * buffer, size_t sector_ofs, size_t chunk_size) {
   // printf("thread %p cache block read target %u buffer %p\n",thread_current(),target,buffer);
   /* print_cache(); */
-  
   ASSERT(block == cache.block);
   cache_request_read_ahead(target+1);
-  cache_block_action(target,buffer,0 /*read*/);
+  cache_block_action(target,buffer,sector_ofs,chunk_size,0 /*read*/);
   // block_read(block,target,buffer);
   // cache_request_read_ahead_wait(request);
   
@@ -474,17 +483,14 @@ void cache_block_read(struct block * block, block_sector_t target, void * buffer
   // printf("thread %p cache block read end target %u buffer %p contents %zu\n",thread_current(),target,buffer,res);
 }
 
-void cache_block_write(struct block * block, block_sector_t target, void * buffer) {
+void cache_block_write(struct block * block, block_sector_t target, void * buffer, size_t sector_ofs, size_t chunk_size) {
   // printf("thread %p cache block write target %u buffer %p\n",thread_current(),target,buffer);
   /* print_cache(); */
   
   ASSERT(block == cache.block);
   ASSERT(buffer != NULL);
-  // copy over buffer to tmp buffer to suppress warnings
-  // this is not a real operating system
-  // this shit is why templates were invented
   
-  cache_block_action(target,buffer,1 /*write*/);
+  cache_block_action(target,buffer,sector_ofs,chunk_size,1 /*write*/);
 
   /* // debug code */
   // block_write(block,target,buffer);
