@@ -227,29 +227,11 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
 
       /* Number of bytes to actually copy out of this sector. */
       int chunk_size = size < min_left ? size : min_left;
-      if (chunk_size <= 0)
+      if (chunk_size <= 0) {
         break;
-
-      if (sector_ofs == 0 && chunk_size == BLOCK_SECTOR_SIZE)
-        {
-          /* Read full sector directly into caller's buffer. */
-          /* block_read (fs_device, sector_idx, buffer + bytes_read); */
-          cache_block_read (fs_device, sector_idx, buffer + bytes_read, 0, BLOCK_SECTOR_SIZE);
-        }
-      else 
-        {
-          /* Read sector into bounce buffer, then partially copy
-             into caller's buffer. */
-          if (bounce == NULL) 
-            {
-              bounce = malloc (BLOCK_SECTOR_SIZE);
-              if (bounce == NULL)
-                break;
-            }
-          /* block_read (fs_device, sector_idx, bounce); */
-          cache_block_read (fs_device, sector_idx, bounce, 0, BLOCK_SECTOR_SIZE);
-          memcpy (buffer + bytes_read, bounce + sector_ofs, chunk_size);
-        }
+      }
+      
+      cache_block_read (fs_device, sector_idx, buffer + bytes_read, sector_ofs, chunk_size);
       
       /* Advance. */
       size -= chunk_size;
