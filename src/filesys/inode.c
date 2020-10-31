@@ -255,6 +255,9 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
   const uint8_t *buffer = buffer_;
   off_t bytes_written = 0;
   uint8_t *bounce = NULL;
+  uint8_t * tmp_buffer1 = NULL;
+  uint8_t * tmp_buffer2 = NULL;
+  uint8_t * tmp_buffer3 = NULL;
 
   if (inode->deny_write_cnt)
     return 0;
@@ -283,6 +286,17 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
         }
       else 
         {
+
+          /////////////
+          if ( tmp_buffer1 == NULL ) {
+              tmp_buffer1 = malloc(BLOCK_SECTOR_SIZE);
+              tmp_buffer3 = malloc(BLOCK_SECTOR_SIZE);
+          }
+          tmp_buffer2 = buffer + bytes_written;
+          cache_block_write (fs_device, sector_idx, tmp_buffer2, sector_ofs, chunk_size);
+          cache_block_read (fs_device, sector_idx, tmp_buffer1, sector_ofs, chunk_size);
+          //////////////
+          
           /* We need a bounce buffer. */
           if (bounce == NULL) 
             {
@@ -304,6 +318,15 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
           memcpy (bounce + sector_ofs, buffer + bytes_written, chunk_size);
           /* block_write (fs_device, sector_idx, bounce); */
           cache_block_write (fs_device, sector_idx, bounce, 0, BLOCK_SECTOR_SIZE);
+
+          /////////////////////
+          cache_block_read(fs_device, sector_idx, tmp_buffer3, sector_ofs, chunk_size);
+          if ( memcmp(tmp_buffer1, tmp_buffer2, chunk_size) != 0 ) {
+            printf("write sector %zu sector_ofs %zu wrong\n",sector_idx,sector_ofs);
+            ASSERT(false);
+          }
+          /////////////////////
+
         }
       
       /* Advance. */

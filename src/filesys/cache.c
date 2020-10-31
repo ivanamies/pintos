@@ -54,6 +54,8 @@ typedef struct cache {
   cache_entry_t cache_entries[MAX_CACHE_ENTRIES];
   cache_data_t cache_data[MAX_CACHE_ENTRIES];
   
+  uint8_t bad_access_buffer[1024];
+  
   // clock hand
   struct lock clock_hand_lock;
   size_t clock_hand;
@@ -100,11 +102,16 @@ static void rw_lock_release_action(rw_lock_t * lock, int write ) {
 }
 
 static size_t get_clock_hand(void) {
+  // printf("thread %p acquire clock hand lock %p\n",thread_current(),&cache.clock_hand_lock);
+  for ( size_t i = 0; i < sizeof(cache.bad_access_buffer); ++i ) {
+    ASSERT(cache.bad_access_buffer[i] == 0xC );
+  }
   lock_acquire(&cache.clock_hand_lock);
   int clock_hand = cache.clock_hand;
   ++cache.clock_hand;
   // static_assert(__builtin_popcount(MAX_CACHE_ENTRIES)==1); // should be a power of 2.
   cache.clock_hand &= (MAX_CACHE_ENTRIES-1); // modulo 64
+  // printf("thread %p release clock hand lock %p\n",thread_current(),&cache.clock_hand_lock);
   lock_release(&cache.clock_hand_lock);
   return clock_hand;
 }
@@ -214,7 +221,13 @@ static void cache_request_read_ahead(int target) {
   struct condition * cond = &cache.read_ahead_helpers.cond;
   
   read_ahead_request_t * request = (read_ahead_request_t *)malloc(sizeof(read_ahead_request_t));
+  ////////////////////////////
   request->sector = target;
+  // hmmm............
+  // hmm.....................
+  // HHMMMMMMMMMMMMMMMMMMMMMMM..............
+  /////////////////
+  
   /* request->signal = 0; */
   /* lock_init(&request->lock); */
   /* cond_init(&request->cond); */
@@ -256,6 +269,8 @@ void cache_init_early() {
     cache.cache_entries[i].sector = -1;
     cache.cache_entries[i].idx = i;
   }
+
+  memset(&cache.bad_access_buffer,0xC,sizeof(cache.bad_access_buffer));
   
   cache_read_ahead_init();
 }
@@ -318,14 +333,18 @@ static void print_cache(void) {
 }
 
 static struct hash_elem * cache_block_search(int target) {
-  /* printf("===tagiamies cache block search target %d\n",target); */
+  // printf("thread %p cache block search target %d\n",thread_current(),target);
   ASSERT(target != -1);
   cache_entry_t cache_entry_key;
   struct hash_elem * hash_elem;
   cache_entry_key.sector = target;
+  // printf("thread %p cache block replace try %p acquire\n",thread_current(),&cache.cache_entries_map_lock);
   lock_acquire(&cache.cache_entries_map_lock);
+  // printf("thread %p cache block replace success %p acquire\n",thread_current(),&cache.cache_entries_map_lock);
   hash_elem = hash_find(&cache.cache_entries_map,&cache_entry_key.hash_elem);
+  // printf("thread %p cache block replace try %p release\n",thread_current(),&cache.cache_entries_map_lock);
   lock_release(&cache.cache_entries_map_lock);
+  // printf("thread %p cache block replace sucess %p release\n",thread_current(),&cache.cache_entries_map_lock);
   return hash_elem;
 }
 
@@ -337,8 +356,10 @@ static bool cache_block_replace(int to_replace_idx,
   cache_entry_key.sector = replacing_sector;
   struct hash_elem * hash_elem;
   bool success = false;
-  
+
+  // printf("thread %p cache block replace try %p acquire\n",thread_current(),&cache.cache_entries_map_lock);
   lock_acquire(&cache.cache_entries_map_lock);
+  // printf("thread %p cache block replace success %p acquire\n",thread_current(),&cache.cache_entries_map_lock);
   // recheck that the replacing_sector was not already put back into map
   // printf("thread %p cache block replace try %p acquire\n",thread_current(),&cache.cache_entries_map_lock);
   hash_elem = hash_find(&cache.cache_entries_map,&cache_entry_key.hash_elem);
@@ -407,7 +428,7 @@ void cache_block_action(block_sector_t target, void * buffer,
         src = buffer;
         dst = &cache.cache_data[cache_entry->idx];
         dst += sector_ofs;
-        memset(dst + chunk_size,0,BLOCK_SECTOR_SIZE-chunk_size); // 0 the end of the cache entry data
+        // memset(dst + chunk_size,0,BLOCK_SECTOR_SIZE-chunk_size); // 0 the end of the cache entry data
       }
       else {
         src = &cache.cache_data[cache_entry->idx];
@@ -447,7 +468,7 @@ void cache_block_action(block_sector_t target, void * buffer,
       dst = cache_data;
       dst += sector_ofs;
       src = buffer;
-      memset(dst + chunk_size,0,BLOCK_SECTOR_SIZE-chunk_size);
+      // memset(dst + chunk_size,0,BLOCK_SECTOR_SIZE-chunk_size);
     }
     else {
       // copy filesys block into evicted cache entry
@@ -468,7 +489,7 @@ void cache_block_read(struct block * block, block_sector_t target, void * buffer
   // printf("thread %p cache block read target %u buffer %p\n",thread_current(),target,buffer);
   /* print_cache(); */
   ASSERT(block == cache.block);
-  cache_request_read_ahead(target+1);
+  // cache_request_read_ahead(target+1);
   cache_block_action(target,buffer,sector_ofs,chunk_size,0 /*read*/);
   // block_read(block,target,buffer);
   // cache_request_read_ahead_wait(request);
@@ -479,11 +500,11 @@ void cache_block_read(struct block * block, block_sector_t target, void * buffer
   /* int err = memcmp(buffer,random_buffer,BLOCK_SECTOR_SIZE); */
   /* ASSERT(err == 0); */
 
-  /* size_t res = 0; */
-  /* for ( size_t i = 0; i < BLOCK_SECTOR_SIZE; ++i ) { */
-  /*   uint8_t * also_buffer = buffer; */
-  /*   res += also_buffer[i]; */
-  /* } */
+  size_t res = 0;
+  for ( size_t i = 0; i < chunk_size; ++i ) {
+    uint8_t * also_buffer = buffer;
+    res += also_buffer[i];
+  }
   // printf("thread %p cache block read end target %u buffer %p contents %zu\n",thread_current(),target,buffer,res);
 }
 
@@ -499,10 +520,10 @@ void cache_block_write(struct block * block, block_sector_t target, void * buffe
   /* // debug code */
   // block_write(block,target,buffer);
 
-  /* size_t res = 0; */
-  /* for ( size_t i = 0; i < BLOCK_SECTOR_SIZE; ++i ) { */
-  /*   uint8_t * also_buffer = buffer; */
-  /*   res += also_buffer[i]; */
-  /* } */
+  size_t res = 0;
+  for ( size_t i = 0; i < chunk_size; ++i ) {
+    uint8_t * also_buffer = buffer;
+    res += also_buffer[i];
+  }
   // printf("thread %p cache block write end target %u buffer %p contents %zu\n",thread_current(),target,buffer,res);
 }
