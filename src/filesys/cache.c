@@ -405,11 +405,13 @@ void cache_block_action(block_sector_t target, void * buffer,
       if ( write ) {
         cache_entry->dirty = 1;
         src = buffer;
-        dst = &cache.cache_data[cache_entry->idx] + sector_ofs;
+        dst = &cache.cache_data[cache_entry->idx];
+        dst += sector_ofs;
         memset(dst + chunk_size,0,BLOCK_SECTOR_SIZE-chunk_size); // 0 the end of the cache entry data
       }
       else {
-        src = &cache.cache_data[cache_entry->idx] + sector_ofs;
+        src = &cache.cache_data[cache_entry->idx];
+        src += sector_ofs;
         dst = buffer;
       }
       memcpy(dst,src,chunk_size);
@@ -442,7 +444,8 @@ void cache_block_action(block_sector_t target, void * buffer,
     cache_data = &cache.cache_data[cache_entry->idx];
     if ( write ) {
       cache_entry->dirty = 1;
-      dst = cache_data + sector_ofs;
+      dst = cache_data;
+      dst += sector_ofs;
       src = buffer;
       memset(dst + chunk_size,0,BLOCK_SECTOR_SIZE-chunk_size);
     }
@@ -450,7 +453,8 @@ void cache_block_action(block_sector_t target, void * buffer,
       // copy filesys block into evicted cache entry
       block_read(cache.block,target,cache_data);
       dst = buffer;
-      src = cache_data + sector_ofs;
+      src = cache_data;
+      src += sector_ofs;
     }
     memcpy(dst,src,chunk_size);
     // printf("thread %p get entry to evict try %p release %d\n",thread_current(),rw_lock,1);       
@@ -464,7 +468,7 @@ void cache_block_read(struct block * block, block_sector_t target, void * buffer
   // printf("thread %p cache block read target %u buffer %p\n",thread_current(),target,buffer);
   /* print_cache(); */
   ASSERT(block == cache.block);
-  cache_request_read_ahead(target+1);
+  // cache_request_read_ahead(target+1);
   cache_block_action(target,buffer,sector_ofs,chunk_size,0 /*read*/);
   // block_read(block,target,buffer);
   // cache_request_read_ahead_wait(request);
