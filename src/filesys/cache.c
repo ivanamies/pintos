@@ -468,7 +468,7 @@ void cache_block_read(struct block * block, block_sector_t target, void * buffer
   // printf("thread %p cache block read target %u buffer %p\n",thread_current(),target,buffer);
   /* print_cache(); */
   ASSERT(block == cache.block);
-  // cache_request_read_ahead(target+1);
+  cache_request_read_ahead(target+1);
   cache_block_action(target,buffer,sector_ofs,chunk_size,0 /*read*/);
   // block_read(block,target,buffer);
   // cache_request_read_ahead_wait(request);
