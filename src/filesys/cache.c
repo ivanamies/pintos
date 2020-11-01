@@ -126,15 +126,15 @@ static int get_entry_to_evict(void) {
      clock_hand = get_clock_hand();
      cache_entry = &cache.cache_entries[clock_hand];
      rw_lock = &cache_entry->rw_lock;
-     // printf("get entry to evict try %p acquire %d\n",rw_lock,rw_lock_write);
+     // printf("thread %p get entry to evict try %p acquire %d\n",thread_current(),rw_lock,rw_lock_write);
      rw_lock_acquire_action(rw_lock,rw_lock_write);
-     // printf("get entry to evict success %p acquire %d\n",rw_lock,rw_lock_write);
+     // printf("thread %p get entry to evict success %p acquire %d\n",thread_current(),rw_lock,rw_lock_write);
      
      if ( cache.cache_entries[clock_hand].accessed ) {
        cache.cache_entries[clock_hand].accessed = 0;
-       // printf("get entry to evict try %p release %d\n",rw_lock,rw_lock_write);       
+       // printf("thread %p get entry to evict try %p release %d\n",thread_current(),rw_lock,rw_lock_write);       
        rw_lock_release_action(rw_lock,rw_lock_write);
-       // printf("get entry to evict success %p release %d\n",rw_lock,rw_lock_write);
+       // printf("thread %p get entry to evict success %p release %d\n",thread_current(),rw_lock,rw_lock_write);
      }
      else {
        // rw_lock is retained
@@ -352,7 +352,7 @@ static bool cache_block_replace(int to_replace_idx,
   cache_entry_key.sector = replacing_sector;
   struct hash_elem * hash_elem;
   bool success = false;
-
+  // printf("thread %p cache block replace enter\n",thread_current());
   // printf("thread %p cache block replace try %p acquire\n",thread_current(),&cache.cache_entries_map_lock);
   lock_acquire(&cache.cache_entries_map_lock);
   // printf("thread %p cache block replace success %p acquire\n",thread_current(),&cache.cache_entries_map_lock);
@@ -380,6 +380,7 @@ static bool cache_block_replace(int to_replace_idx,
   // printf("thread %p cache block replace try %p release\n",thread_current(),&cache.cache_entries_map_lock);
   lock_release(&cache.cache_entries_map_lock);
   // printf("thread %p cache block replace success %p release\n",thread_current(),&cache.cache_entries_map_lock);
+  // printf("thread %p cache block replace exit\n",thread_current());
   return success;
 }
 
@@ -401,6 +402,8 @@ void cache_block_action(block_sector_t target, void * buffer,
   void * src;
   void * dst;
   bool success;
+
+  // printf("thread %p target %zu cache block action enter\n",thread_current(),target);
   
  cache_block_action_try_again:
   // acquire lock around hash table
@@ -411,9 +414,9 @@ void cache_block_action(block_sector_t target, void * buffer,
     cache_entry = hash_entry(hash_elem,cache_entry_t,hash_elem);
     rw_lock = &cache_entry->rw_lock;
 
-    // printf("thread %p cache block action try %p acquire %d\n",thread_current(),rw_lock,write);
+    // printf("thread %p cache block action 1 try %p acquire %d\n",thread_current(),rw_lock,write);
     rw_lock_acquire_action(rw_lock,write);
-    // printf("thread %p cache block action success %p acquire %d\n",thread_current(),rw_lock,write);
+    // printf("thread %p cache block action 1 success %p acquire %d\n",thread_current(),rw_lock,write);
     
     // check if we did find the entry we're looking for
     ASSERT(cache_entry->sector != -1);
@@ -432,9 +435,9 @@ void cache_block_action(block_sector_t target, void * buffer,
         dst = buffer;
       }
       memcpy(dst,src,chunk_size);
-      // printf("thread %p cache block action try %p release %d\n",thread_current(),rw_lock,write);
+      // printf("thread %p cache block action 2 try %p release %d\n",thread_current(),rw_lock,write);
       rw_lock_release_action(rw_lock,write);
-      // printf("thread %p cache block action success %p release %d\n",thread_current(),rw_lock,write);
+      // printf("thread %p cache block action 2 success %p release %d\n",thread_current(),rw_lock,write);
     }
     else {
       rw_lock_release_action(rw_lock,write);
@@ -478,6 +481,8 @@ void cache_block_action(block_sector_t target, void * buffer,
     rw_lock_release_action(rw_lock,1 /*always release write lock*/);
     // printf("thread %p get entry to evict success %p release %d\n",thread_current(),rw_lock,1);       
   }
+  
+  // printf("thread %p target %zu cache block action exit\n",thread_current(),target);
 
 }
 

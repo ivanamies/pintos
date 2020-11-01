@@ -45,6 +45,7 @@ static void rw_lock_decrement_num_readers(rw_lock_t * rw_lock) {
   ASSERT(rw_lock->num_readers > 0); // 1 (myself) or more readers hold rw_lock
   --rw_lock->num_readers;
   cond_signal(cvar_write, lock); // wake writers
+  cond_signal(cvar_read, lock); // wake readers
   lock_release(lock);
 }
 
