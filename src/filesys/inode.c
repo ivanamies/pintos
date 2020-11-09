@@ -6,6 +6,7 @@
 #include <stdio.h>
 
 #include "threads/malloc.h"
+#include "threads/rwlock.h"
 
 #include "filesys/cache.h"
 #include "filesys/filesys.h"
