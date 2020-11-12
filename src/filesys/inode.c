@@ -98,46 +98,44 @@ static void inode_indirect_block_disk_get(inode_indirect_block_disk_t * block, i
       block->blocks[i] = -1;
     }
     block->magic = INODE_MAGIC;
-    // stack somehow gets corrupted...
-    // cache_block_write(fs_device, *sector, block, 0, BLOCK_SECTOR_SIZE);
     
-    // the below don't work, perhaps because of some compiler bug on stack unwinding
+    // the below don't work if the block lives on the stack:
     // cache_block_write(fs_device, 3, block, 0, BLOCK_SECTOR_SIZE);
     // cache_block_read(fs_device, 3, block, 0, BLOCK_SECTOR_SIZE);
-    /* block_write(fs_device, 3, block); */
-    /* block_read(fs_device, 3, block); */
+    // block_write(fs_device, 3, block);
+    // block_read(fs_device, 3, block);
+    // it's probably because of a compiler bug corrupting the stack on unwinding
     //
-    // this DOES work though
-    // it explains why the code mallocs, operates on, then frees its 512 size blocks
-    void * thing = malloc(512);
-    block_read(fs_device, 3, thing);
-    free(thing);
+    // this a malloc'd buffer DOES work though
+    // it explains why the old code mallocs, operates on, then frees its 512 size blocks
+    // like, old "bounce" buffer implementation
+    cache_block_write(fs_device, *sector, block, 0, BLOCK_SECTOR_SIZE);
   }
   else {
-    // cache_block_read(fs_device, *sector, block, 0, BLOCK_SECTOR_SIZE);
+    cache_block_read(fs_device, *sector, block, 0, BLOCK_SECTOR_SIZE);
   }
 }
 
-static inode_direct_block_disk_t inode_disk_offset_to_block(struct inode_disk * inode_disk, size_t offset) {
+static void inode_disk_offset_to_block(struct inode_disk * inode_disk, inode_direct_block_disk_t * res, size_t offset) {
   ASSERT(offset <= (8 << 20)); // offset must be less than 8 megabytes
 
-  inode_direct_block_disk_t res;
-  inode_indirect_block_disk_t indirect_block;
-  inode_indirect_block_disk_t double_indirect_block;
+  inode_indirect_block_disk_t * indirect_block = (inode_indirect_block_disk_t *)malloc(sizeof(inode_indirect_block_disk_t));
+  inode_indirect_block_disk_t * double_indirect_block = (inode_indirect_block_disk_t *)malloc(sizeof(inode_indirect_block_disk_t));
   int old_sector;
   
-  res.magic = INODE_MAGIC;
-  res.length = DIRECT_BLOCK_DISK_MAX_MANAGED_LENGTH;
-
   // offset / ( 8 * 512 )
   // want which direct block this offset points to
   int idx = offset / ( DIRECT_BLOCK_DISK_MAX_MANAGED_LENGTH * BLOCK_SECTOR_SIZE);  
   if ( idx < INDIRECT_BLOCK_DISK_IDX ) {
     int sector_to_direct_block = inode_disk->blocks[idx];
-    inode_direct_block_disk_get(&res,&sector_to_direct_block);
+    inode_direct_block_disk_get(res,&sector_to_direct_block);
     ASSERT(sector_to_direct_block != -1);
     inode_disk->blocks[idx] = sector_to_direct_block;
-    return res;
+
+    // cleanup
+    free(indirect_block);
+    free(double_indirect_block);
+    return;
   }
   
   // go into indirect blocks
@@ -152,25 +150,26 @@ static inode_direct_block_disk_t inode_disk_offset_to_block(struct inode_disk * 
     ASSERT(indirect_block_idx == 10);
     // get indirect block in blocks[10];
     int sector_to_indirect_block = inode_disk->blocks[indirect_block_idx];
-    inode_indirect_block_disk_get(&indirect_block,&sector_to_indirect_block);
-    return res;
+    inode_indirect_block_disk_get(indirect_block,&sector_to_indirect_block);
     ASSERT(sector_to_indirect_block != -1);
     inode_disk->blocks[indirect_block_idx] = sector_to_indirect_block;
     
     // idx % 127 to get which direct block inside indirect_block
     const int direct_block_idx = idx % blocks_managed1;
-    int sector_to_direct_block = indirect_block.blocks[direct_block_idx];
+    int sector_to_direct_block = indirect_block->blocks[direct_block_idx];
     old_sector = sector_to_direct_block;
-    inode_direct_block_disk_get(&res,&sector_to_direct_block);
+    inode_direct_block_disk_get(res,&sector_to_direct_block);
     // this doesn't need to be written every time
     if ( old_sector != sector_to_direct_block ) {
-      indirect_block.blocks[direct_block_idx] = sector_to_direct_block;
+      indirect_block->blocks[direct_block_idx] = sector_to_direct_block;
       cache_block_write(fs_device, sector_to_indirect_block, &indirect_block, 0, BLOCK_SECTOR_SIZE);
     }
-    
-    return res;
+
+    // cleanup
+    free(indirect_block);
+    free(double_indirect_block);
+    return;
   }
-  return res;
   
   // go into double indirect blocks
   idx -= max_blocks_managed1;
@@ -184,33 +183,37 @@ static inode_direct_block_disk_t inode_disk_offset_to_block(struct inode_disk * 
   int double_indirect_block_idx = idx / blocks_managed2 + DOUBLE_INDIRECT_BLOCK_DISK_IDX;
   ASSERT(double_indirect_block_idx == 11);
   int sector_to_double_indirect_block = inode_disk->blocks[double_indirect_block_idx];
-  inode_indirect_block_disk_get(&double_indirect_block,&sector_to_double_indirect_block);
+  inode_indirect_block_disk_get(double_indirect_block,&sector_to_double_indirect_block);
   inode_disk->blocks[double_indirect_block_idx] = sector_to_double_indirect_block;
 
   // idx % (127 * 127). There's only one double indirect block but pretend there's more
   idx %= blocks_managed2;
   // idx / 127. Find which indirect block to go to in the doubly indirect block
   const int indirect_block_idx = idx / blocks_managed1;
-  int sector_to_indirect_block = double_indirect_block.blocks[indirect_block_idx];
+  int sector_to_indirect_block = double_indirect_block->blocks[indirect_block_idx];
   old_sector = sector_to_indirect_block;
-  inode_indirect_block_disk_get(&indirect_block,&sector_to_indirect_block);
+  inode_indirect_block_disk_get(indirect_block,&sector_to_indirect_block);
   if ( old_sector != sector_to_indirect_block ) {
     // write changed double indirect node back to disk
-    double_indirect_block.blocks[indirect_block_idx] = sector_to_indirect_block;
+    double_indirect_block->blocks[indirect_block_idx] = sector_to_indirect_block;
     cache_block_write(fs_device, sector_to_double_indirect_block, &double_indirect_block, 0, BLOCK_SECTOR_SIZE);
   }
 
   // idx % 127 to find which direct block to go to
   const int direct_block_idx = idx % blocks_managed1;
-  int sector_to_direct_block = indirect_block.blocks[direct_block_idx];
+  int sector_to_direct_block = indirect_block->blocks[direct_block_idx];
   old_sector = sector_to_direct_block;
-  inode_direct_block_disk_get(&res,&sector_to_direct_block);
+  inode_direct_block_disk_get(res,&sector_to_direct_block);
   if ( old_sector != sector_to_direct_block ) {
     // write changed indirect node back to disk
-    indirect_block.blocks[direct_block_idx] = sector_to_direct_block;
+    indirect_block->blocks[direct_block_idx] = sector_to_direct_block;
     cache_block_write(fs_device, sector_to_indirect_block, &indirect_block, 0, BLOCK_SECTOR_SIZE);
   }
-  return res;
+
+  // cleanup
+  free(indirect_block);
+  free(double_indirect_block);
+  return;
 }
 
 /* Returns the number of sectors to allocate for an inode SIZE
@@ -246,17 +249,19 @@ byte_to_sector_new (struct inode *inode, off_t pos)
     return -1; // if pos is over 8 mb, give up
   }
 
-  const inode_direct_block_disk_t direct_block = inode_disk_offset_to_block(&inode->data,pos);
+  inode_direct_block_disk_t * direct_block = (inode_direct_block_disk_t *)malloc(sizeof(inode_direct_block_disk_t));
+  inode_disk_offset_to_block(&inode->data,direct_block,pos);
   // pos %= (8 * 512), each direct block manages 4096
   pos %= (DIRECT_BLOCK_DISK_MAX_MANAGED_LENGTH * BLOCK_SECTOR_SIZE);
   // pos /= 512, find which block inside the managed 4096 to go to
   pos /= BLOCK_SECTOR_SIZE;
-  ASSERT ( pos < direct_block.length );
+  ASSERT ( pos < direct_block->length );
   
-  const size_t sector = direct_block.start;
+  const size_t sector = direct_block->start;
   const block_sector_t res = sector + pos;
+  
+  free(direct_block);
   return res;
-  return 0;
 }
 
 /* Returns the block device sector that contains byte offset POS
@@ -513,11 +518,15 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
 
 static void inode_touch_direct_block(struct inode_disk * disk_inode, off_t target) {
   // inode_disk_offset_to_block does all the memory management
-  inode_direct_block_disk_t direct_block = inode_disk_offset_to_block(disk_inode, target);
+  inode_direct_block_disk_t * direct_block = (inode_direct_block_disk_t *)malloc(sizeof(inode_direct_block_disk_t));
+  inode_disk_offset_to_block(disk_inode,direct_block,target);
+  
   // it has to be properly initialized
-  ASSERT(direct_block.magic == INODE_MAGIC);
-  ASSERT(direct_block.length == DIRECT_BLOCK_DISK_MAX_MANAGED_LENGTH);
+  ASSERT(direct_block->magic == INODE_MAGIC);
+  ASSERT(direct_block->length == DIRECT_BLOCK_DISK_MAX_MANAGED_LENGTH);
   // actually this is already zero'd for you
+  
+  free(direct_block);
 }
 
 static void inode_disk_extend(struct inode_disk * disk_inode, size_t curr_length, off_t end) {

@@ -78,7 +78,7 @@ int
 pintos_init (void)
 {
   char **argv;
-
+  
   /* Clear BSS. */  
   bss_init ();
 
@@ -100,7 +100,7 @@ pintos_init (void)
   stack_allocator_init(); // custom stack allocator because palloc appears broken...
   malloc_init ();
   paging_init ();
-  
+    
   /* Segmentation. */
 #ifdef USERPROG
   tss_init ();
@@ -121,14 +121,14 @@ pintos_init (void)
   thread_start ();
   serial_init_queue ();
   timer_calibrate ();
-
+  
 #ifdef FILESYS
   /* Initialize file system. */
   ide_init ();
   locate_block_devices ();
+  
   cache_init_early();
   filesys_init (format_filesys);
-  // add this back in when I add locking
   cache_init_late();
 #endif
 

@@ -388,7 +388,6 @@ static bool cache_block_replace(int to_replace_idx,
 // 1 for write
 void cache_block_action(block_sector_t target, void * buffer,
                         size_t sector_ofs, size_t chunk_size, int write) {
-  
   ASSERT(buffer != NULL);  
   ASSERT(chunk_size <= BLOCK_SECTOR_SIZE);
   ASSERT(write <= 1);
@@ -501,11 +500,6 @@ void cache_block_read(struct block * block, block_sector_t target, void * buffer
   /* int err = memcmp(buffer,random_buffer,BLOCK_SECTOR_SIZE); */
   /* ASSERT(err == 0); */
 
-  size_t res = 0;
-  for ( size_t i = 0; i < chunk_size; ++i ) {
-    uint8_t * also_buffer = buffer;
-    res += also_buffer[i];
-  }
   // printf("thread %p cache block read end target %u buffer %p contents %zu\n",thread_current(),target,buffer,res);
 }
 
@@ -520,11 +514,4 @@ void cache_block_write(struct block * block, block_sector_t target, void * buffe
 
   /* // debug code */
   // block_write(block,target,buffer);
-
-  size_t res = 0;
-  for ( size_t i = 0; i < chunk_size; ++i ) {
-    uint8_t * also_buffer = buffer;
-    res += also_buffer[i];
-  }
-  // printf("thread %p cache block write end target %u buffer %p contents %zu\n",thread_current(),target,buffer,res);
 }
