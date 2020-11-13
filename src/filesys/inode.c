@@ -298,54 +298,28 @@ inode_init (void)
 bool
 inode_create (block_sector_t sector, off_t length)
 {
-  struct inode_disk *disk_inode = NULL;
-  bool success = false;
-
+    bool success = false;
+  
   ASSERT (length >= 0);
-
-  /* If this assertion fails, the inode structure is not exactly
-     one sector in size, and you should fix that. */
-  ASSERT (sizeof(struct inode_disk) == BLOCK_SECTOR_SIZE);
-  ASSERT (sizeof(inode_direct_block_disk_t) == BLOCK_SECTOR_SIZE);
-  ASSERT (sizeof(inode_indirect_block_disk_t) == BLOCK_SECTOR_SIZE);
-
-  disk_inode = calloc (1, sizeof *disk_inode);
-  if (disk_inode != NULL)
-    {
-      size_t sectors = bytes_to_sectors (length);
-      disk_inode->length = length;
-      disk_inode->magic = INODE_MAGIC;
-            
-      // special inode disk
-      // zero the disk_inode
-      for ( size_t i = 0; i < MAX_RECORDKEEPING_BLOCKS; ++i ) {
-        disk_inode->blocks[i] = -1;
-      }
-      //
-      inode_disk_extend(disk_inode,0,length);
-      //
-
-      if (free_map_allocate (sectors, &disk_inode->start)) 
-        {
-          /* block_write (fs_device, sector, disk_inode); */
-          cache_block_write (fs_device, sector, disk_inode, 0, BLOCK_SECTOR_SIZE);
-          
-          if (sectors > 0) 
-            {
-              static char zeros[BLOCK_SECTOR_SIZE];
-              size_t i;
-              
-              for (i = 0; i < sectors; i++) {
-                /* block_write (fs_device, disk_inode->start + i, zeros); */
-                cache_block_write (fs_device, disk_inode->start + i, zeros, 0, BLOCK_SECTOR_SIZE);
-                /* printf("tagiamies 3.3 inode create\n"); */
-              }
-            }
-          
-          success = true; 
-        } 
-      free (disk_inode);
-    }
+  
+  // If this assertion fails, the inode structure is not exactly
+  //     one sector in size, and you should fix that.
+  ASSERT(sizeof(struct inode_disk) == BLOCK_SECTOR_SIZE);
+  ASSERT(sizeof(inode_direct_block_disk_t) == BLOCK_SECTOR_SIZE);
+  ASSERT(sizeof(inode_indirect_block_disk_t) == BLOCK_SECTOR_SIZE);
+  
+  struct inode_disk disk_inode;
+  memset(&disk_inode,0,sizeof(struct inode_disk));
+  for ( size_t i = 0; i < MAX_RECORDKEEPING_BLOCKS; ++i ) {
+    disk_inode.blocks[i] = -1;
+  }
+  disk_inode.length = length;
+  disk_inode.magic = INODE_MAGIC;
+  // have to extend the disk inode
+  inode_disk_extend(&disk_inode,0,length);
+  cache_block_write(fs_device, sector, &disk_inode, 0, BLOCK_SECTOR_SIZE);
+  success = true;
+  
   return success;
 }
 
