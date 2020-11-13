@@ -405,7 +405,7 @@ static void inode_indirect_block_disk_dealloc(inode_indirect_block_disk_t * indi
 }
 
 static void inode_disk_dealloc(struct inode_disk * disk_inode, size_t length) {
-  uint8_t block[BLOCK_SECTOR_SIZE];
+  void * block = malloc(BLOCK_SECTOR_SIZE);
   const size_t max_blocks = MAX_RECORDKEEPING_BLOCKS;
   const size_t indirect_blocks_start = INDIRECT_BLOCK_DISK_IDX;
   const size_t double_indirect_blocks_start = DOUBLE_INDIRECT_BLOCK_DISK_IDX;
@@ -425,6 +425,7 @@ static void inode_disk_dealloc(struct inode_disk * disk_inode, size_t length) {
       free_map_release((block_sector_t)sector,1);
     }
   }
+  free(block);
 }
 
 static void inode_dealloc(struct inode * inode) {
