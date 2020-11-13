@@ -315,13 +315,13 @@ inode_create (block_sector_t sector, off_t length)
       disk_inode->length = length;
       disk_inode->magic = INODE_MAGIC;
             
-      // special inode disk 
+      // special inode disk
       // zero the disk_inode
       for ( size_t i = 0; i < MAX_RECORDKEEPING_BLOCKS; ++i ) {
         disk_inode->blocks[i] = -1;
       }
       //
-      inode_disk_extend(disk_inode,0,length);
+      // inode_disk_extend(disk_inode,0,length);
       //
 
       if (free_map_allocate (sectors, &disk_inode->start)) 
