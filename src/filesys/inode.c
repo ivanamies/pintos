@@ -385,7 +385,7 @@ static void inode_direct_block_disk_dealloc(inode_direct_block_disk_t * direct_b
 
 static void inode_indirect_block_disk_dealloc(inode_indirect_block_disk_t * indirect_block, bool is_double_indirect) {
   int sector;
-  uint8_t block[BLOCK_SECTOR_SIZE];
+  void * block = malloc(BLOCK_SECTOR_SIZE);
   const size_t max_blocks = MAX_RECORDKEEPING_BLOCKS_INDIRECT_INODE;
   for ( size_t i = 0; i < max_blocks; ++i ) {
     sector = indirect_block->blocks[i];
@@ -400,6 +400,7 @@ static void inode_indirect_block_disk_dealloc(inode_indirect_block_disk_t * indi
       free_map_release((block_sector_t)sector,1);
     }
   }
+  free(block);
   memset(indirect_block,0,BLOCK_SECTOR_SIZE);
 }
 
@@ -418,11 +419,11 @@ static void inode_disk_dealloc(struct inode_disk * disk_inode, size_t length) {
         inode_direct_block_disk_dealloc((inode_direct_block_disk_t *)block);
       }
       else {
-        is_double_indirect = i < double_indirect_blocks_start;
+        is_double_indirect = i >= double_indirect_blocks_start;
         inode_indirect_block_disk_dealloc((inode_indirect_block_disk_t *)block,is_double_indirect);
       }
+      free_map_release((block_sector_t)sector,1);
     }
-    free_map_release((block_sector_t)sector,1);
   }
 }
 
