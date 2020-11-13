@@ -442,13 +442,9 @@ inode_remove (struct inode *inode)
 /* Reads SIZE bytes from INODE into BUFFER, starting at position OFFSET.
    Returns the number of bytes actually read, which may be less
    than SIZE if an error occurs or end of file is reached. */
-static off_t
-inode_read_at_new (struct inode *inode, void *buffer_, off_t size, off_t offset) 
-{
-
-  size_t orig_size = size;
-  size_t orig_offset = offset;
-  
+off_t
+inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset) 
+{  
   uint8_t *buffer = (uint8_t *)buffer_;
   off_t bytes_read = 0;
   
@@ -471,95 +467,11 @@ inode_read_at_new (struct inode *inode, void *buffer_, off_t size, off_t offset)
       
       cache_block_read (fs_device, sector_idx, buffer + bytes_read, sector_ofs, chunk_size);
 
-      
-      //
-      size_t thing = 0;
-      for ( size_t i = 0; i < chunk_size; ++i ) {
-        thing += (buffer + bytes_read)[i];
-      }
-      printf("new read buffer %zu from sector %zu with size %zu offset %zu\n",thing,sector_idx,orig_size,orig_offset);
-      //
-
       /* Advance. */
       size -= chunk_size;
       offset += chunk_size;
       bytes_read += chunk_size;
     }
-
-  return bytes_read;
-}
-
-/* Reads SIZE bytes from INODE into BUFFER, starting at position OFFSET.
-   Returns the number of bytes actually read, which may be less
-   than SIZE if an error occurs or end of file is reached. */
-off_t
-inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset) 
-{
-  printf("inode %p read\n",inode);
-  //
-  size_t orig_size = size;
-  size_t orig_offset = offset;
-  off_t unused = inode_read_at_new(inode, buffer_, orig_size, orig_offset);
-  return unused;
-  //
-  
-  uint8_t *buffer = buffer_;
-  off_t bytes_read = 0;
-
-  while (size > 0) 
-    {
-      /* Disk sector to read, starting byte offset within sector. */
-      block_sector_t sector_idx = byte_to_sector (inode, offset);
-      int sector_ofs = offset % BLOCK_SECTOR_SIZE;
-
-      /* Bytes left in inode, bytes left in sector, lesser of the two. */
-      off_t inode_left = inode_length (inode) - offset;
-      int sector_left = BLOCK_SECTOR_SIZE - sector_ofs;
-      int min_left = inode_left < sector_left ? inode_left : sector_left;
-
-      /* Number of bytes to actually copy out of this sector. */
-      int chunk_size = size < min_left ? size : min_left;
-      if (chunk_size <= 0) {
-        break;
-      }
-      
-      cache_block_read (fs_device, sector_idx, buffer + bytes_read, sector_ofs, chunk_size);
-      
-      //
-      size_t thing = 0;
-      for ( size_t i = 0; i < chunk_size; ++i ) {
-        thing += (buffer + bytes_read)[i];
-      }
-      printf("old read buffer %zu from sector %zu with size %zu offset %zu\n",thing,sector_idx,orig_size,orig_offset);
-      //
-      
-      /* Advance. */
-      size -= chunk_size;
-      offset += chunk_size;
-      bytes_read += chunk_size;
-    }
-
-  /* uint8_t * tmp_buffer = (uint8_t *)malloc(size); */
-  /* memset(tmp_buffer,0,size); */
-  /* off_t unused = inode_read_at_new(inode, tmp_buffer, orig_size, orig_offset); */
-  /* int err = memcmp(tmp_buffer,buffer,size); */
-  /* if ( err != 0  ) { */
-  /*   // */
-  /*   size_t thing1 = 0; */
-  /*   for ( size_t i = 0; i < size; ++i ) { */
-  /*     thing1 += tmp_buffer[i]; */
-  /*   } */
-  /*   size_t thing2 = 0; */
-  /*   for ( size_t i = 0; i < size; ++i ) { */
-  /*     thing2 += buffer[i]; */
-  /*   } */
-  /*   printf("thing1 %zu thing2 %zu\n",thing1,thing2); */
-  /*   // */
-  /* } */
-  
-  /* ASSERT(err == 0); */
-  /* ASSERT(unused == bytes_read); */
-  /* free(tmp_buffer); */
 
   return bytes_read;
 }
@@ -608,14 +520,10 @@ static void inode_extend(struct inode * inode, off_t end) {
    less than SIZE if end of file is reached or an error occurs.
    (Normally a write at end of file would extend the inode, but
    growth is not yet implemented.) */
-static off_t
-inode_write_at_new(struct inode *inode, const void *buffer_, off_t size,
-                   off_t offset) 
-{
-
-  size_t orig_size = size;
-  size_t orig_offset = offset;
-  
+off_t
+inode_write_at(struct inode *inode, const void *buffer_, off_t size,
+               off_t offset) 
+{  
   const uint8_t *buffer = (const uint8_t *)buffer_;
   off_t bytes_written = 0;
 
@@ -646,14 +554,6 @@ inode_write_at_new(struct inode *inode, const void *buffer_, off_t size,
       break;
     }
 
-    //
-    size_t thing = 0;
-    for ( size_t i = 0; i < chunk_size; ++i ) {
-      thing += (buffer + bytes_written)[i];
-    }
-    printf("new write buffer %zu into sector %zu size %zu offset %zu\n",thing,sector_idx,orig_size,orig_offset);
-    //
-
     cache_block_write (fs_device, sector_idx, (void *)(buffer + bytes_written), sector_ofs, chunk_size);
     
     /* Advance. */
@@ -662,68 +562,6 @@ inode_write_at_new(struct inode *inode, const void *buffer_, off_t size,
     bytes_written += chunk_size;
   }
 
-  return bytes_written;
-}
-
-/* Writes SIZE bytes from BUFFER into INODE, starting at OFFSET.
-   Returns the number of bytes actually written, which may be
-   less than SIZE if end of file is reached or an error occurs.
-   (Normally a write at end of file would extend the inode, but
-   growth is not yet implemented.) */
-off_t
-inode_write_at (struct inode *inode, const void *buffer_, off_t size,
-                off_t offset) 
-{
-  //
-  size_t orig_size = size;
-  size_t orig_offset = offset;
-  off_t unused = inode_write_at_new(inode,buffer_,orig_size,orig_offset);
-  return unused;
-  //
-  
-  const uint8_t *buffer = buffer_;
-  off_t bytes_written = 0;
-
-  if (inode->deny_write_cnt)
-    return 0;
-
-  while (size > 0) 
-    {
-      /* Sector to write, starting byte offset within sector. */
-      block_sector_t sector_idx = byte_to_sector (inode, offset);
-      int sector_ofs = offset % BLOCK_SECTOR_SIZE;
-
-      /* Bytes left in inode, bytes left in sector, lesser of the two. */
-      off_t inode_left = inode_length (inode) - offset;
-      int sector_left = BLOCK_SECTOR_SIZE - sector_ofs;
-      int min_left = inode_left < sector_left ? inode_left : sector_left;
-
-      /* Number of bytes to actually write into this sector. */
-      int chunk_size = size < min_left ? size : min_left;
-      if (chunk_size <= 0) {
-        break;
-      }
-
-      //
-      size_t thing = 0;
-      for ( size_t i = 0; i < chunk_size; ++i ) {
-        thing += (buffer + bytes_written)[i];
-      }
-      printf("old write buffer %zu into sector %zu size %zu offset %zu\n",thing,sector_idx,orig_size,orig_offset);
-      //
-
-      cache_block_write (fs_device, sector_idx, buffer + bytes_written, sector_ofs, chunk_size);
-      
-      /* Advance. */
-      size -= chunk_size;
-      offset += chunk_size;
-      bytes_written += chunk_size;
-    }
-
-  /* void * tmp_buffer = malloc(size); */
-  /* off_t unused = inode_write_at_new(inode,buffer_,orig_size,orig_offset); */
-  ASSERT(bytes_written == unused);
-  
   return bytes_written;
 }
 
