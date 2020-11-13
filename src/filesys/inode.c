@@ -125,7 +125,7 @@ static void inode_disk_offset_to_block(struct inode_disk * inode_disk, inode_dir
   
   // offset / ( 8 * 512 )
   // want which direct block this offset points to
-  int idx = offset / ( DIRECT_BLOCK_DISK_MAX_MANAGED_LENGTH * BLOCK_SECTOR_SIZE);  
+  int idx = offset / ( DIRECT_BLOCK_DISK_MAX_MANAGED_LENGTH * BLOCK_SECTOR_SIZE);
   if ( idx < INDIRECT_BLOCK_DISK_IDX ) {
     int sector_to_direct_block = inode_disk->blocks[idx];
     inode_direct_block_disk_get(res,&sector_to_direct_block);
@@ -144,7 +144,7 @@ static void inode_disk_offset_to_block(struct inode_disk * inode_disk, inode_dir
   const int blocks_managed1 = MAX_RECORDKEEPING_BLOCKS_INDIRECT_INODE;
   // total number of blocks managed by ALL indirect inodes, 1 * 127
   const int max_blocks_managed1 = NUM_INDIRECT_BLOCK_DISK_MANAGED * blocks_managed1;
-  if (idx < max_blocks_managed1 ) {
+  if (idx < max_blocks_managed1 ) {    
     // idx / 127 + 10 == 10
     int indirect_block_idx = idx / blocks_managed1 + INDIRECT_BLOCK_DISK_IDX;
     ASSERT(indirect_block_idx == 10);
@@ -153,18 +153,19 @@ static void inode_disk_offset_to_block(struct inode_disk * inode_disk, inode_dir
     inode_indirect_block_disk_get(indirect_block,&sector_to_indirect_block);
     ASSERT(sector_to_indirect_block != -1);
     inode_disk->blocks[indirect_block_idx] = sector_to_indirect_block;
-    
+        
     // idx % 127 to get which direct block inside indirect_block
     const int direct_block_idx = idx % blocks_managed1;
     int sector_to_direct_block = indirect_block->blocks[direct_block_idx];
     old_sector = sector_to_direct_block;
     inode_direct_block_disk_get(res,&sector_to_direct_block);
+    ASSERT(sector_to_direct_block != -1);
     // this doesn't need to be written every time
     if ( old_sector != sector_to_direct_block ) {
       indirect_block->blocks[direct_block_idx] = sector_to_direct_block;
-      cache_block_write(fs_device, sector_to_indirect_block, &indirect_block, 0, BLOCK_SECTOR_SIZE);
+      cache_block_write(fs_device, sector_to_indirect_block, indirect_block, 0, BLOCK_SECTOR_SIZE);
     }
-
+    
     // cleanup
     free(indirect_block);
     free(double_indirect_block);
@@ -196,7 +197,7 @@ static void inode_disk_offset_to_block(struct inode_disk * inode_disk, inode_dir
   if ( old_sector != sector_to_indirect_block ) {
     // write changed double indirect node back to disk
     double_indirect_block->blocks[indirect_block_idx] = sector_to_indirect_block;
-    cache_block_write(fs_device, sector_to_double_indirect_block, &double_indirect_block, 0, BLOCK_SECTOR_SIZE);
+    cache_block_write(fs_device, sector_to_double_indirect_block, double_indirect_block, 0, BLOCK_SECTOR_SIZE);
   }
 
   // idx % 127 to find which direct block to go to
@@ -207,7 +208,7 @@ static void inode_disk_offset_to_block(struct inode_disk * inode_disk, inode_dir
   if ( old_sector != sector_to_direct_block ) {
     // write changed indirect node back to disk
     indirect_block->blocks[direct_block_idx] = sector_to_direct_block;
-    cache_block_write(fs_device, sector_to_indirect_block, &indirect_block, 0, BLOCK_SECTOR_SIZE);
+    cache_block_write(fs_device, sector_to_indirect_block, indirect_block, 0, BLOCK_SECTOR_SIZE);
   }
 
   // cleanup
@@ -321,7 +322,7 @@ inode_create (block_sector_t sector, off_t length)
         disk_inode->blocks[i] = -1;
       }
       //
-      // inode_disk_extend(disk_inode,0,length);
+      inode_disk_extend(disk_inode,0,length);
       //
 
       if (free_map_allocate (sectors, &disk_inode->start)) 
@@ -481,9 +482,9 @@ inode_read_at_new (struct inode *inode, void *buffer_, off_t size, off_t offset)
 off_t
 inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset) 
 {
-  /* // */
-  /* off_t unused = inode_read_at_new(inode, buffer_, size, offset); */
-  /* // */
+  //
+  off_t unused = inode_read_at_new(inode, buffer_, size, offset);
+  //
   
   uint8_t *buffer = buffer_;
   off_t bytes_read = 0;
@@ -574,13 +575,13 @@ inode_write_at_new(struct inode *inode, const void *buffer_, off_t size,
   const off_t max_size = 8 << 20; // 8 MB
   const off_t clamped_size = offset + size < max_size ? offset + size : max_size;
   
-  /* if ( inode_length(inode) < clamped_size ) { */
-  /*   inode_extend(inode, clamped_size); */
-  /* } */
+  if ( inode_length(inode) < clamped_size ) {
+    inode_extend(inode, clamped_size);
+  }
   
   while (size > 0) {    
     /* Sector to write, starting byte offset within sector. */
-    // block_sector_t sector_idx = byte_to_sector_new (inode, offset);
+    block_sector_t sector_idx = byte_to_sector_new (inode, offset);
     int sector_ofs = offset % BLOCK_SECTOR_SIZE;
         
     /* Bytes left in inode, bytes left in sector, lesser of the two. */
@@ -594,7 +595,7 @@ inode_write_at_new(struct inode *inode, const void *buffer_, off_t size,
       break;
     }
     
-    // cache_block_write (fs_device, sector_idx, (void *)(buffer + bytes_written), sector_ofs, chunk_size);
+    cache_block_write (fs_device, sector_idx, (void *)(buffer + bytes_written), sector_ofs, chunk_size);
     
     /* Advance. */
     size -= chunk_size;
@@ -615,7 +616,7 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
                 off_t offset) 
 {
 
-  // off_t unused = inode_write_at_new(inode,buffer_,size,offset);
+  off_t unused = inode_write_at_new(inode,buffer_,size,offset);
   
   const uint8_t *buffer = buffer_;
   off_t bytes_written = 0;
