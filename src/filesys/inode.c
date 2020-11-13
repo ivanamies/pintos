@@ -450,7 +450,7 @@ inode_read_at_new (struct inode *inode, void *buffer_, off_t size, off_t offset)
   while (size > 0) 
     {
       /* Disk sector to read, starting byte offset within sector. */
-      block_sector_t sector_idx = byte_to_sector_new (inode, offset);
+      // block_sector_t sector_idx = byte_to_sector_new (inode, offset);
       int sector_ofs = offset % BLOCK_SECTOR_SIZE;
 
       /* Bytes left in inode, bytes left in sector, lesser of the two. */
@@ -464,7 +464,7 @@ inode_read_at_new (struct inode *inode, void *buffer_, off_t size, off_t offset)
         break;
       }
       
-      cache_block_read (fs_device, sector_idx, buffer + bytes_read, sector_ofs, chunk_size);
+      // cache_block_read (fs_device, sector_idx, buffer + bytes_read, sector_ofs, chunk_size);
       
       /* Advance. */
       size -= chunk_size;
@@ -573,22 +573,14 @@ inode_write_at_new(struct inode *inode, const void *buffer_, off_t size,
   
   const off_t max_size = 8 << 20; // 8 MB
   const off_t clamped_size = offset + size < max_size ? offset + size : max_size;
-
-  /* printf("inode write at new\n"); */
-  /* for ( size_t i = 0; i < MAX_RECORDKEEPING_BLOCKS; ++i ) { */
-  /*   printf("inode->data.blocks[%zu] %d\n",i,inode->data.blocks[i]); */
+  
+  /* if ( inode_length(inode) < clamped_size ) { */
+  /*   inode_extend(inode, clamped_size); */
   /* } */
-  
-  /* printf("inode write at new inode_length(inode) %zu\n",inode_length(inode)); */
-  /* printf("inode write at new clamped size %zu\n",clamped_size); */
-  
-  if ( inode_length(inode) < clamped_size ) {
-    inode_extend(inode, clamped_size);
-  }
   
   while (size > 0) {    
     /* Sector to write, starting byte offset within sector. */
-    block_sector_t sector_idx = byte_to_sector_new (inode, offset);
+    // block_sector_t sector_idx = byte_to_sector_new (inode, offset);
     int sector_ofs = offset % BLOCK_SECTOR_SIZE;
         
     /* Bytes left in inode, bytes left in sector, lesser of the two. */
@@ -623,7 +615,7 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
                 off_t offset) 
 {
 
-  off_t unused = inode_write_at_new(inode,buffer_,size,offset);
+  // off_t unused = inode_write_at_new(inode,buffer_,size,offset);
   
   const uint8_t *buffer = buffer_;
   off_t bytes_written = 0;
