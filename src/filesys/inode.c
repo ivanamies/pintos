@@ -376,6 +376,61 @@ inode_get_inumber (const struct inode *inode)
   return inode->sector;
 }
 
+static void inode_direct_block_disk_dealloc(inode_direct_block_disk_t * direct_block) {
+  block_sector_t sector = direct_block->start;
+  size_t length = direct_block->length;
+  free_map_release(sector, length);
+  memset(direct_block,0,BLOCK_SECTOR_SIZE);
+}
+
+static void inode_indirect_block_disk_dealloc(inode_indirect_block_disk_t * indirect_block, bool is_double_indirect) {
+  int sector;
+  uint8_t block[BLOCK_SECTOR_SIZE];
+  const size_t max_blocks = MAX_RECORDKEEPING_BLOCKS_INDIRECT_INODE;
+  for ( size_t i = 0; i < max_blocks; ++i ) {
+    sector = indirect_block->blocks[i];
+    if (sector != -1 ) {
+      cache_block_read(fs_device, sector, block, 0, BLOCK_SECTOR_SIZE);
+      if ( is_double_indirect ) {
+        inode_indirect_block_disk_dealloc((inode_indirect_block_disk_t *)block,false /*not double indirect*/);
+      }
+      else {
+        inode_direct_block_disk_dealloc((inode_direct_block_disk_t *)block);
+      }
+      free_map_release((block_sector_t)sector,1);
+    }
+  }
+  memset(indirect_block,0,BLOCK_SECTOR_SIZE);
+}
+
+static void inode_disk_dealloc(struct inode_disk * disk_inode, size_t length) {
+  uint8_t block[BLOCK_SECTOR_SIZE];
+  const size_t max_blocks = MAX_RECORDKEEPING_BLOCKS;
+  const size_t indirect_blocks_start = INDIRECT_BLOCK_DISK_IDX;
+  const size_t double_indirect_blocks_start = DOUBLE_INDIRECT_BLOCK_DISK_IDX;
+  int sector;
+  bool is_double_indirect;
+  for ( size_t i = 0; i < max_blocks; ++i ) {
+    sector = disk_inode->blocks[i];
+    if ( sector != -1 ) {
+      cache_block_read(fs_device, sector, block, 0, BLOCK_SECTOR_SIZE);
+      if ( i < indirect_blocks_start ) {
+        inode_direct_block_disk_dealloc((inode_direct_block_disk_t *)block);
+      }
+      else {
+        is_double_indirect = i < double_indirect_blocks_start;
+        inode_indirect_block_disk_dealloc((inode_indirect_block_disk_t *)block,is_double_indirect);
+      }
+    }
+    free_map_release((block_sector_t)sector,1);
+  }
+}
+
+static void inode_dealloc(struct inode * inode) {
+  inode_disk_dealloc(&inode->data,inode_length(inode));
+  free_map_release(inode->sector,1);
+}
+
 /* Closes INODE and writes it to disk.
    If this was the last reference to INODE, frees its memory.
    If INODE was also a removed inode, frees its blocks. */
@@ -395,9 +450,7 @@ inode_close (struct inode *inode)
       /* Deallocate blocks if removed. */
       if (inode->removed) 
         {
-          free_map_release (inode->sector, 1);
-          free_map_release (inode->data.start,
-                            bytes_to_sectors (inode->data.length)); 
+          inode_dealloc(inode);
         }
 
       free (inode); 
