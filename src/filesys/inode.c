@@ -48,19 +48,14 @@ typedef struct inode_indirect_block_disk {
 /* On-disk inode.
    Must be exactly BLOCK_SECTOR_SIZE bytes long. */
 struct inode_disk
-{
-  /// to remove
-  block_sector_t start;               /* First data sector. */
-  
-  //
+{  
   // DIRECT_BLOCK_DISK_IDX for direct block start index
   // INDIRECT_BLOCK_DISK_IDX for indirect block start index
   // DOUBLE_INDIRECT_BLOCK_DISK_IDX for double indirect block start index
-  int blocks[MAX_RECORDKEEPING_BLOCKS]; // should be block_sector_t type
-  
+  int blocks[MAX_RECORDKEEPING_BLOCKS]; // should be block_sector_t type  
   off_t length;                       /* File size in bytes. */
   unsigned magic;                     /* Magic number. */
-  uint32_t unused[113];               /* Not used. */
+  uint32_t unused[114];               /* Not used. */
 };
 
 // always zeros in pintos bss segment set up
@@ -229,6 +224,7 @@ bytes_to_sectors (off_t size)
 struct inode 
   {
     struct list_elem elem;              /* Element in inode list. */
+    rw_lock_t rw_lock;
     block_sector_t sector;              /* Sector number of disk location. */
     int open_cnt;                       /* Number of openers. */
     bool removed;                       /* True if deleted, false otherwise. */
@@ -244,7 +240,7 @@ static void inode_disk_extend(struct inode_disk * disk_inode, size_t length, off
    Returns -1 if INODE does not contain data for a byte at offset
    POS. */
 static block_sector_t
-byte_to_sector_new (struct inode *inode, off_t pos)
+byte_to_sector (struct inode *inode, off_t pos)
 {
   if (pos >= (8 << 20)) {
     return -1; // if pos is over 8 mb, give up
@@ -263,20 +259,6 @@ byte_to_sector_new (struct inode *inode, off_t pos)
   
   free(direct_block);
   return res;
-}
-
-/* Returns the block device sector that contains byte offset POS
-   within INODE.
-   Returns -1 if INODE does not contain data for a byte at offset
-   POS. */
-static block_sector_t
-byte_to_sector (const struct inode *inode, off_t pos) 
-{
-  ASSERT (inode != NULL);
-  if (pos < inode->data.length)
-    return inode->data.start + pos / BLOCK_SECTOR_SIZE;
-  else
-    return -1;
 }
 
 /* List of open inodes, so that opening a single inode twice
@@ -298,7 +280,7 @@ inode_init (void)
 bool
 inode_create (block_sector_t sector, off_t length)
 {
-    bool success = false;
+  bool success = false;
   
   ASSERT (length >= 0);
   
@@ -351,11 +333,11 @@ inode_open (block_sector_t sector)
 
   /* Initialize. */
   list_push_front (&open_inodes, &inode->elem);
+  rw_lock_init(&inode->rw_lock);
   inode->sector = sector;
   inode->open_cnt = 1;
-  inode->deny_write_cnt = 0;
   inode->removed = false;
-  /* block_read (fs_device, inode->sector, &inode->data); */
+  inode->deny_write_cnt = 0;
   cache_block_read (fs_device, inode->sector, &inode->data, 0, BLOCK_SECTOR_SIZE);
   return inode;
 }
@@ -364,16 +346,22 @@ inode_open (block_sector_t sector)
 struct inode *
 inode_reopen (struct inode *inode)
 {
-  if (inode != NULL)
+  if (inode != NULL) {
+    rw_lock_write_acquire(&inode->rw_lock);
     inode->open_cnt++;
+    rw_lock_write_release(&inode->rw_lock);
+  }
   return inode;
 }
 
 /* Returns INODE's inode number. */
 block_sector_t
-inode_get_inumber (const struct inode *inode)
+inode_get_inumber (struct inode *inode)
 {
-  return inode->sector;
+  rw_lock_write_acquire(&inode->rw_lock);
+  block_sector_t res = inode->sector;
+  rw_lock_write_release(&inode->rw_lock);
+  return res;
 }
 
 static void inode_direct_block_disk_dealloc(inode_direct_block_disk_t * direct_block) {
@@ -404,7 +392,7 @@ static void inode_indirect_block_disk_dealloc(inode_indirect_block_disk_t * indi
   memset(indirect_block,0,BLOCK_SECTOR_SIZE);
 }
 
-static void inode_disk_dealloc(struct inode_disk * disk_inode, size_t length) {
+static void inode_disk_dealloc(struct inode_disk * disk_inode) {
   void * block = malloc(BLOCK_SECTOR_SIZE);
   const size_t max_blocks = MAX_RECORDKEEPING_BLOCKS;
   const size_t indirect_blocks_start = INDIRECT_BLOCK_DISK_IDX;
@@ -429,7 +417,7 @@ static void inode_disk_dealloc(struct inode_disk * disk_inode, size_t length) {
 }
 
 static void inode_dealloc(struct inode * inode) {
-  inode_disk_dealloc(&inode->data,inode_length(inode));
+  inode_disk_dealloc(&inode->data);
   free_map_release(inode->sector,1);
 }
 
@@ -443,6 +431,7 @@ inode_close (struct inode *inode)
   if (inode == NULL)
     return;
 
+  rw_lock_write_acquire(&inode->rw_lock);
   /* Release resources if this was the last opener. */
   if (--inode->open_cnt == 0)
     {
@@ -454,9 +443,12 @@ inode_close (struct inode *inode)
         {
           inode_dealloc(inode);
         }
-
+      rw_lock_write_release(&inode->rw_lock);
       free (inode); 
     }
+  else {
+    rw_lock_write_release(&inode->rw_lock);
+  }
 }
 
 /* Marks INODE to be deleted when it is closed by the last caller who
@@ -480,7 +472,7 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
   while (size > 0) 
     {
       /* Disk sector to read, starting byte offset within sector. */
-      block_sector_t sector_idx = byte_to_sector_new (inode, offset);
+      block_sector_t sector_idx = byte_to_sector (inode, offset);
       int sector_ofs = offset % BLOCK_SECTOR_SIZE;
 
       /* Bytes left in inode, bytes left in sector, lesser of the two. */
@@ -569,7 +561,7 @@ inode_write_at(struct inode *inode, const void *buffer_, off_t size,
   
   while (size > 0) {    
     /* Sector to write, starting byte offset within sector. */
-    block_sector_t sector_idx = byte_to_sector_new (inode, offset);
+    block_sector_t sector_idx = byte_to_sector (inode, offset);
     int sector_ofs = offset % BLOCK_SECTOR_SIZE;
         
     /* Bytes left in inode, bytes left in sector, lesser of the two. */
