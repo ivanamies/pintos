@@ -234,6 +234,7 @@ struct inode
 
 static void inode_extend(struct inode * inode, off_t end);
 static void inode_disk_extend(struct inode_disk * disk_inode, size_t length, off_t end);
+static off_t inode_length_no_lock (struct inode *inode);
 
 /* Returns the block device sector that contains byte offset POS
    within INODE.
@@ -457,7 +458,9 @@ void
 inode_remove (struct inode *inode) 
 {
   ASSERT (inode != NULL);
+  rw_lock_write_acquire(&inode->rw_lock);
   inode->removed = true;
+  rw_lock_write_release(&inode->rw_lock);
 }
 
 /* Reads SIZE bytes from INODE into BUFFER, starting at position OFFSET.
@@ -466,6 +469,7 @@ inode_remove (struct inode *inode)
 off_t
 inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset) 
 {  
+  rw_lock_read_acquire(&inode->rw_lock);
   uint8_t *buffer = (uint8_t *)buffer_;
   off_t bytes_read = 0;
   
@@ -476,7 +480,7 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
       int sector_ofs = offset % BLOCK_SECTOR_SIZE;
 
       /* Bytes left in inode, bytes left in sector, lesser of the two. */
-      off_t inode_left = inode_length (inode) - offset;
+      off_t inode_left = inode_length_no_lock (inode) - offset;
       int sector_left = BLOCK_SECTOR_SIZE - sector_ofs;
       int min_left = inode_left < sector_left ? inode_left : sector_left;
 
@@ -493,6 +497,7 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
       offset += chunk_size;
       bytes_read += chunk_size;
     }
+  rw_lock_read_release(&inode->rw_lock);
 
   return bytes_read;
 }
@@ -532,7 +537,7 @@ static void inode_disk_extend(struct inode_disk * disk_inode, size_t curr_length
 }
 
 static void inode_extend(struct inode * inode, off_t end) {
-  inode_disk_extend(&inode->data, inode_length(inode), end);
+  inode_disk_extend(&inode->data, inode_length_no_lock(inode), end);
   inode->data.length = end;
 }
 
@@ -542,20 +547,22 @@ static void inode_extend(struct inode * inode, off_t end) {
    (Normally a write at end of file would extend the inode, but
    growth is not yet implemented.) */
 off_t
-inode_write_at(struct inode *inode, const void *buffer_, off_t size,
+inode_write_at(struct inode *inode, void *buffer_, off_t size,
                off_t offset) 
 {  
   const uint8_t *buffer = (const uint8_t *)buffer_;
   off_t bytes_written = 0;
 
+  rw_lock_write_acquire(&inode->rw_lock);
   if (inode->deny_write_cnt) {
+    rw_lock_write_release(&inode->rw_lock);
     return 0;
   }
   
   const off_t max_size = 8 << 20; // 8 MB
   const off_t clamped_size = offset + size < max_size ? offset + size : max_size;
   
-  if ( inode_length(inode) < clamped_size ) {
+  if ( inode_length_no_lock(inode) < clamped_size ) {
     inode_extend(inode, clamped_size);
   }
   
@@ -565,7 +572,7 @@ inode_write_at(struct inode *inode, const void *buffer_, off_t size,
     int sector_ofs = offset % BLOCK_SECTOR_SIZE;
         
     /* Bytes left in inode, bytes left in sector, lesser of the two. */
-    off_t inode_left = inode_length (inode) - offset;
+    off_t inode_left = inode_length_no_lock (inode) - offset;
     int sector_left = BLOCK_SECTOR_SIZE - sector_ofs;
     int min_left = inode_left < sector_left ? inode_left : sector_left;
     
@@ -583,6 +590,7 @@ inode_write_at(struct inode *inode, const void *buffer_, off_t size,
     bytes_written += chunk_size;
   }
 
+  rw_lock_write_release(&inode->rw_lock);
   return bytes_written;
 }
 
@@ -591,8 +599,10 @@ inode_write_at(struct inode *inode, const void *buffer_, off_t size,
 void
 inode_deny_write (struct inode *inode) 
 {
+  rw_lock_write_acquire(&inode->rw_lock);
   inode->deny_write_cnt++;
   ASSERT (inode->deny_write_cnt <= inode->open_cnt);
+  rw_lock_write_release(&inode->rw_lock);
 }
 
 /* Re-enables writes to INODE.
@@ -601,14 +611,26 @@ inode_deny_write (struct inode *inode)
 void
 inode_allow_write (struct inode *inode) 
 {
+  rw_lock_write_acquire(&inode->rw_lock);
   ASSERT (inode->deny_write_cnt > 0);
   ASSERT (inode->deny_write_cnt <= inode->open_cnt);
   inode->deny_write_cnt--;
+  rw_lock_write_release(&inode->rw_lock);
+}
+
+static off_t
+inode_length_no_lock (struct inode *inode)
+{
+  off_t res = inode->data.length;
+  return res;
 }
 
 /* Returns the length, in bytes, of INODE's data. */
 off_t
-inode_length (const struct inode *inode)
+inode_length (struct inode *inode)
 {
-  return inode->data.length;
+  rw_lock_read_acquire(&inode->rw_lock);
+  off_t res = inode->data.length;
+  rw_lock_read_release(&inode->rw_lock);
+  return res;
 }
