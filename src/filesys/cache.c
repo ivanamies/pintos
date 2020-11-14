@@ -145,11 +145,30 @@ static int get_entry_to_evict(void) {
    return -1; // submit your findings for a field medal
 }
 
-static void cache_write_back(void * aux UNUSED) {
+void cache_write_all_entries(void) {
   size_t i = 0;
   struct rw_lock * rw_lock;
   int sector;
   const int rw_lock_write = 0;
+  // write all sectors to cache
+  for ( i = 0; i < MAX_CACHE_ENTRIES; ++i ) {
+    rw_lock = &cache.cache_entries[i].rw_lock;
+    // printf("cache_write_back try acqire rw_lock %p\n",rw_lock);
+    rw_lock_acquire_action(rw_lock,rw_lock_write);
+    // printf("cache_write_back success acqire rw_lock %p\n",rw_lock);
+    sector = cache.cache_entries[i].sector;
+    if ( sector != -1 && cache.cache_entries[i].dirty ) { // skip if unwritten or clean
+      // writes inode_disk inside cache_entry[i] to designated filesys sector
+      block_write(cache.block,sector,&cache.cache_data[i]);
+      cache.cache_entries[i].dirty = 0;
+    }
+    // printf("cache_write_back try release rw_lock %p\n",rw_lock);
+    rw_lock_release_action(rw_lock,rw_lock_write);
+    // printf("cache_write_back success release rw_lock %p\n",rw_lock);
+  }  
+}
+
+static void cache_write_back(void * aux UNUSED) {
   
   while ( true ) {
     // sleep until the scheduler wakes us up again
@@ -157,23 +176,7 @@ static void cache_write_back(void * aux UNUSED) {
     //...
     // wait, this is stupid it should be based on number of cache hits or disk requests.
     thread_sleep_hack();
-
-    // write all sectors to cache
-    for ( i = 0; i < MAX_CACHE_ENTRIES; ++i ) {
-      rw_lock = &cache.cache_entries[i].rw_lock;
-      // printf("cache_write_back try acqire rw_lock %p\n",rw_lock);
-      rw_lock_acquire_action(rw_lock,rw_lock_write);
-      // printf("cache_write_back success acqire rw_lock %p\n",rw_lock);
-      sector = cache.cache_entries[i].sector;
-      if ( sector != -1 && cache.cache_entries[i].dirty ) { // skip if unwritten or clean
-        // writes inode_disk inside cache_entry[i] to designated filesys sector
-        block_write(cache.block,sector,&cache.cache_data[i]);
-        cache.cache_entries[i].dirty = 0;
-      }
-      // printf("cache_write_back try release rw_lock %p\n",rw_lock);
-      rw_lock_release_action(rw_lock,rw_lock_write);
-      // printf("cache_write_back success release rw_lock %p\n",rw_lock);
-    }
+    cache_write_all_entries();
   }
 }
 
