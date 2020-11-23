@@ -29,7 +29,8 @@ struct dir_entry
 bool
 dir_create (block_sector_t sector, size_t entry_cnt)
 {
-  int aux = dir_inumber(thread_get_cwd());
+  // int aux = dir_inumber(thread_get_cwd());
+  int aux = 0;
   return inode_create (sector, entry_cnt * sizeof (struct dir_entry), aux);
 }
 
@@ -241,5 +242,6 @@ dir_readdir (struct dir *dir, char name[NAME_MAX + 1])
 }
 
 int dir_inumber(struct dir * dir) {
+  ASSERT(dir != NULL);
   return inode_get_sector(dir->inode);
 }

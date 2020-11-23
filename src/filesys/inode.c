@@ -638,5 +638,6 @@ inode_length (struct inode *inode)
 }
 
 int inode_get_sector(struct inode * inode ) {
+  ASSERT(inode != NULL);
   return inode->sector;
 }

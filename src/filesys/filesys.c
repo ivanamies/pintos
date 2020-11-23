@@ -53,7 +53,8 @@ filesys_create (const char *name, off_t initial_size)
 {
   block_sector_t inode_sector = 0;
   struct dir *dir = dir_open_root ();
-  int aux = dir_inumber(thread_get_cwd());
+  /* int aux = dir_inumber(thread_get_cwd()); */
+  int aux = 0;
   bool success = (dir != NULL
                   && free_map_allocate (1, &inode_sector)
                   && inode_create (inode_sector, initial_size, aux)
