@@ -5,13 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "userprog/gdt.h"
-#include "userprog/pagedir.h"
-#include "userprog/tss.h"
-#include "userprog/syscall.h"
-#include "filesys/directory.h"
-#include "filesys/file.h"
-#include "filesys/filesys.h"
+
 #include "threads/flags.h"
 #include "threads/init.h"
 #include "threads/interrupt.h"
@@ -19,6 +13,16 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "threads/synch.h"
+
+#include "userprog/gdt.h"
+#include "userprog/pagedir.h"
+#include "userprog/tss.h"
+#include "userprog/syscall.h"
+
+#include "filesys/directory.h"
+#include "filesys/file.h"
+#include "filesys/filesys.h"
+
 
 #define INPUT_ARGS_MAX_ARGS 60
 #define INPUT_ARGS_MAX_ARG_LENGTH 64
@@ -409,6 +413,8 @@ process_activate (void)
   /* Activate thread's page tables. */
   pagedir_activate (t->pagedir);
 
+  thread_set_cwd(dir_open_root());
+  
   /* Set thread's kernel stack for use in processing
      interrupts. */
   tss_update ();

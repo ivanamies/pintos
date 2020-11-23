@@ -28,6 +28,8 @@ typedef tid_t pid_t;
 
 #define PROCESS_NAME_MAX_LENGTH 64
 
+struct dir;
+
 /* A kernel thread or user process.
 
    Each thread structure is stored in its own 4 kB page.  The
@@ -105,6 +107,10 @@ struct thread
     char process_name[PROCESS_NAME_MAX_LENGTH];
 #endif
 
+#ifdef FILESYS
+    struct dir * cwd;
+#endif
+
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };
@@ -148,5 +154,8 @@ int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
 void thread_sleep_hack(void);
+
+struct dir * thread_get_cwd(void);
+void thread_set_cwd(struct dir *);
 
 #endif /* threads/thread.h */

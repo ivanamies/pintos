@@ -14,6 +14,9 @@
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
+#ifdef FILESYS
+#include "filesys/directory.h"
+#endif
 
 /* Random value for struct thread's `magic' member.
    Used to detect stack overflow.  See the big comment at the top
@@ -627,4 +630,16 @@ void thread_sleep_hack(void) {
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 
+// gets the process's current working directory (cwd)
+struct dir * thread_get_cwd(void) {
+  struct thread * cur = thread_current();
+  return cur->cwd;
+}
 
+void thread_set_cwd(struct dir * dir) {
+  if ( thread_get_cwd() != NULL ) {
+    dir_close(thread_get_cwd());
+  }
+  struct thread * cur = thread_current();
+  cur->cwd = dir;
+}
