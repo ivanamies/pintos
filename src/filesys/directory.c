@@ -318,8 +318,8 @@ static struct dir * dir_get(tokenization_t * tokens) {
       dir = dir_open(inode);
     }
     else {
-      printf("===========\n");
-      printf("tokens->names[i] %s\n",tokens->names[i]);
+      /* printf("===========\n"); */
+      /* printf("tokens->names[i] %s\n",tokens->names[i]); */
       bool success = dir_lookup(dir,tokens->names[i],&inode);
       if ( success ) {
         if ( i > 0  ) { // do not close the cwd we enter with

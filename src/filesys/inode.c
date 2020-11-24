@@ -116,7 +116,9 @@ static void inode_disk_offset_to_block(struct inode_disk * inode_disk, inode_dir
   ASSERT(offset <= (8 << 20)); // offset must be less than 8 megabytes
 
   inode_indirect_block_disk_t * indirect_block = (inode_indirect_block_disk_t *)malloc(sizeof(inode_indirect_block_disk_t));
+  memset(indirect_block,0,sizeof(inode_indirect_block_disk_t));
   inode_indirect_block_disk_t * double_indirect_block = (inode_indirect_block_disk_t *)malloc(sizeof(inode_indirect_block_disk_t));
+  memset(double_indirect_block,0,sizeof(inode_indirect_block_disk_t));
   int old_sector;
   
   // offset / ( 8 * 512 )
@@ -249,6 +251,7 @@ byte_to_sector (struct inode *inode, off_t pos)
   }
 
   inode_direct_block_disk_t * direct_block = (inode_direct_block_disk_t *)malloc(sizeof(inode_direct_block_disk_t));
+  memset(direct_block,0,sizeof(inode_direct_block_disk_t));
   inode_disk_offset_to_block(&inode->data,direct_block,pos);
   // pos %= (8 * 512), each direct block manages 4096
   pos %= (DIRECT_BLOCK_DISK_MAX_MANAGED_LENGTH * BLOCK_SECTOR_SIZE);
