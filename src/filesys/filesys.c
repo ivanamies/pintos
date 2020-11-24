@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "threads/synch.h"
+#include "threads/thread.h"
 
 #include "filesys/file.h"
 #include "filesys/free-map.h"
@@ -52,7 +53,10 @@ filesys_create (const char *name, off_t initial_size)
 {
   block_sector_t inode_sector = 0;
   struct dir *dir = dir_open_root ();
-  int aux = 0;
+  int aux = ROOT_DIR_SECTOR;
+  if ( thread_get_cwd() != NULL ) {
+    aux = dir_inumber(thread_get_cwd());
+  }
   bool success = (dir != NULL
                   && free_map_allocate (1, &inode_sector)
                   && inode_create (inode_sector, initial_size, aux)

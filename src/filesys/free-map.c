@@ -1,6 +1,10 @@
 #include "filesys/free-map.h"
 #include <bitmap.h>
 #include <debug.h>
+
+#include "threads/thread.h"
+
+#include "filesys/directory.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
 #include "filesys/inode.h"
@@ -72,7 +76,10 @@ free_map_close (void)
 void
 free_map_create (void) 
 {
-  int aux = 0;
+  int aux = ROOT_DIR_SECTOR;
+  if ( thread_get_cwd() != NULL ) {
+    aux = dir_inumber(thread_get_cwd());
+  }
   /* Create inode. */
   if (!inode_create (FREE_MAP_SECTOR, bitmap_file_size (free_map), aux))
     PANIC ("free map creation failed");

@@ -408,7 +408,7 @@ process_activate (void)
 
   /* Activate thread's page tables. */
   pagedir_activate (t->pagedir);
-
+    
   /* Set thread's kernel stack for use in processing
      interrupts. */
   tss_update ();
@@ -504,8 +504,11 @@ load (struct input_args * ia, void (**eip) (void), void **esp)
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
   strlcpy(t->process_name,file_name,PROCESS_NAME_MAX_LENGTH);
-  if (t->pagedir == NULL) 
+  // set working directory to root
+  thread_set_cwd(dir_open_root());
+  if (t->pagedir == NULL) {
     goto done;
+  }
   process_activate ();
 
   /* Open executable file. */

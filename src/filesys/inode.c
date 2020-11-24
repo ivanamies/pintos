@@ -636,3 +636,8 @@ inode_length (struct inode *inode)
   rw_lock_read_release(&inode->rw_lock);
   return res;
 }
+
+int inode_get_sector(struct inode * inode) {
+  ASSERT(inode != NULL);
+  return inode->sector;
+}

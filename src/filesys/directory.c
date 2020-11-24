@@ -1,10 +1,14 @@
 #include "filesys/directory.h"
+
 #include <stdio.h>
 #include <string.h>
 #include <list.h>
+
+#include "threads/thread.h"
+#include "threads/malloc.h"
+
 #include "filesys/filesys.h"
 #include "filesys/inode.h"
-#include "threads/malloc.h"
 
 /* A directory. */
 struct dir 
@@ -26,9 +30,10 @@ struct dir_entry
 bool
 dir_create (block_sector_t sector, size_t entry_cnt)
 {
-  //
-  int aux = 0;
-  //
+  int aux = ROOT_DIR_SECTOR;
+  if ( thread_get_cwd() != NULL ) {
+    aux = dir_inumber(thread_get_cwd());
+  }
   return inode_create (sector, entry_cnt * sizeof (struct dir_entry), aux);
 }
 
@@ -236,4 +241,10 @@ dir_readdir (struct dir *dir, char name[NAME_MAX + 1])
         } 
     }
   return false;
+}
+
+// 
+int dir_inumber(struct dir * dir) {
+  ASSERT(dir != NULL);
+  return inode_get_sector(dir_get_inode(dir));
 }
