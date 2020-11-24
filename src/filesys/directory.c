@@ -336,8 +336,15 @@ static struct dir * dir_get(tokenization_t * tokens) {
 }
 
 bool dir_chdir(const char * name) {
-  printf("name: %s\n",name);
-  return false;
+  tokenization_t tokens = tokenize_dir_name(name);
+  struct dir * dir = dir_get(&tokens);
+  if ( dir == NULL ) {
+    return false;
+  }
+  else {
+    thread_set_cwd(dir);
+    return true;
+  }
 }
 
 bool dir_mkdir(const char * name) {
@@ -354,7 +361,7 @@ bool dir_mkdir(const char * name) {
   struct inode * inode;
   if ( dir != NULL ) {
     bool success = dir_lookup(dir,tokens.names[num_names-1],&inode);
-    if ( success ) { // fail is we find the dir in the current dir
+    if ( success ) { // fail if we find the dir in the current dir
       return false;
     }
     block_sector_t sector;
@@ -362,7 +369,6 @@ bool dir_mkdir(const char * name) {
     const uint32_t some_sector_size = 16;
     block_sector_t prev_sector = inode_get_aux(dir->inode);
     success = dir_create(sector,some_sector_size,prev_sector);
-    printf("dir create finish\n");
     ASSERT(success);
     success = dir_add(dir,name,sector);
     if ( success ) {
