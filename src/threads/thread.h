@@ -156,6 +156,6 @@ int thread_get_load_avg (void);
 void thread_sleep_hack(void);
 
 struct dir * thread_get_cwd(void);
-void thread_set_cwd(struct dir *);
+void thread_set_cwd(struct dir * cwd);
 
 #endif /* threads/thread.h */

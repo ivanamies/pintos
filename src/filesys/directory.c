@@ -2,12 +2,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <list.h>
-
-#include "threads/malloc.h"
-#include "threads/thread.h"
-
 #include "filesys/filesys.h"
 #include "filesys/inode.h"
+#include "threads/malloc.h"
 
 /* A directory. */
 struct dir 
@@ -29,9 +26,7 @@ struct dir_entry
 bool
 dir_create (block_sector_t sector, size_t entry_cnt)
 {
-  // int aux = dir_inumber(thread_get_cwd());
-  int aux = 0;
-  return inode_create (sector, entry_cnt * sizeof (struct dir_entry), aux);
+  return inode_create (sector, entry_cnt * sizeof (struct dir_entry));
 }
 
 /* Opens and returns the directory for the given INODE, of which
@@ -59,7 +54,6 @@ dir_open (struct inode *inode)
 struct dir *
 dir_open_root (void)
 {
-  // where is inode_create called for ROOT_DIR_SECTOR?
   return dir_open (inode_open (ROOT_DIR_SECTOR));
 }
 
@@ -239,9 +233,4 @@ dir_readdir (struct dir *dir, char name[NAME_MAX + 1])
         } 
     }
   return false;
-}
-
-int dir_inumber(struct dir * dir) {
-  ASSERT(dir != NULL);
-  return inode_get_sector(dir->inode);
 }

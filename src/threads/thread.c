@@ -494,9 +494,8 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
-
   t->cwd = NULL;
-  
+
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
   intr_set_level (old_level);
@@ -632,16 +631,13 @@ void thread_sleep_hack(void) {
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 
-// gets the process's current working directory (cwd)
 struct dir * thread_get_cwd(void) {
-  struct thread * cur = thread_current();
-  return cur->cwd;
+  return thread_current()->cwd;
 }
 
-void thread_set_cwd(struct dir * dir) {
-  if ( thread_get_cwd() != NULL ) {
-    dir_close(thread_get_cwd());
+void thread_set_cwd(struct dir * cwd) {
+  if ( thread_current()->cwd != NULL ) {
+    dir_close(thread_current()->cwd);
   }
-  struct thread * cur = thread_current();
-  cur->cwd = dir;
+  thread_current()->cwd = cwd;
 }
