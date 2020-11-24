@@ -55,7 +55,8 @@ struct inode_disk
   int blocks[MAX_RECORDKEEPING_BLOCKS]; // should be block_sector_t type  
   off_t length;                       /* File size in bytes. */
   unsigned magic;                     /* Magic number. */
-  uint32_t unused[114];               /* Not used. */
+  int aux;
+  uint32_t unused[113];               /* Not used. */
 };
 
 // always zeros in pintos bss segment set up
@@ -279,7 +280,7 @@ inode_init (void)
    Returns true if successful.
    Returns false if memory or disk allocation fails. */
 bool
-inode_create (block_sector_t sector, off_t length)
+inode_create (block_sector_t sector, off_t length, int aux)
 {
   bool success = false;
   
@@ -297,6 +298,7 @@ inode_create (block_sector_t sector, off_t length)
     disk_inode.blocks[i] = -1;
   }
   disk_inode.length = length;
+  disk_inode.aux = aux;
   disk_inode.magic = INODE_MAGIC;
   // have to extend the disk inode
   inode_disk_extend(&disk_inode,0,length);

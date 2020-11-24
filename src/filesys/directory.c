@@ -26,7 +26,10 @@ struct dir_entry
 bool
 dir_create (block_sector_t sector, size_t entry_cnt)
 {
-  return inode_create (sector, entry_cnt * sizeof (struct dir_entry));
+  //
+  int aux = 0;
+  //
+  return inode_create (sector, entry_cnt * sizeof (struct dir_entry), aux);
 }
 
 /* Opens and returns the directory for the given INODE, of which
