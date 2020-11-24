@@ -641,3 +641,7 @@ int inode_get_sector(struct inode * inode) {
   ASSERT(inode != NULL);
   return inode->sector;
 }
+
+int inode_get_aux(struct inode * inode) {
+  return inode->data.aux;
+}

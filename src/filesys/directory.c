@@ -7,9 +7,11 @@
 #include "threads/thread.h"
 #include "threads/malloc.h"
 
+#include "filesys/free-map.h"
 #include "filesys/filesys.h"
 #include "filesys/inode.h"
 
+#define DIR_MAX_SUBNAME 14
 #define DIR_MAX_NAMES 16
 
 /* A directory. */
@@ -17,6 +19,7 @@ struct dir
   {
     struct inode *inode;                /* Backing store. */
     off_t pos;                          /* Current position. */
+    block_sector_t prev_dir;
   };
 
 /* A single directory entry. */
@@ -30,13 +33,9 @@ struct dir_entry
 /* Creates a directory with space for ENTRY_CNT entries in the
    given SECTOR.  Returns true if successful, false on failure. */
 bool
-dir_create (block_sector_t sector, size_t entry_cnt)
+dir_create (block_sector_t sector, size_t entry_cnt, int prev_dir_inode)
 {
-  int aux = ROOT_DIR_SECTOR;
-  if ( thread_get_cwd() != NULL ) {
-    aux = dir_inumber(thread_get_cwd());
-  }
-  return inode_create (sector, entry_cnt * sizeof (struct dir_entry), aux);
+  return inode_create (sector, entry_cnt * sizeof (struct dir_entry), prev_dir_inode);
 }
 
 /* Opens and returns the directory for the given INODE, of which
@@ -248,7 +247,7 @@ dir_readdir (struct dir *dir, char name[NAME_MAX + 1])
 // tokenize
 typedef struct tokenization {
   uint32_t num_names;
-  char names[DIR_MAX_NAMES][NAME_MAX + 1];
+  char names[DIR_MAX_NAMES][DIR_MAX_SUBNAME + 1];
   int is_absolute_path;
 } tokenization_t;
 
@@ -269,7 +268,7 @@ static tokenization_t tokenize_dir_name(const char * name) {
   for ( token = strtok_r(name_copy, "/", &save_ptr); token != NULL;
         token = strtok_r(NULL, "/", &save_ptr) ) {
     ASSERT(tokens.num_names < DIR_MAX_NAMES);
-    ASSERT(strlen(token) < NAME_MAX);
+    ASSERT(strlen(token) < DIR_MAX_SUBNAME);
     strlcpy(tokens.names[tokens.num_names],token,strlen(token)+1);
     ++tokens.num_names;
   }
@@ -277,7 +276,7 @@ static tokenization_t tokenize_dir_name(const char * name) {
   return tokens;
 }
 
-void print_tokenization(tokenization_t * tokens) {
+static void print_tokenization(tokenization_t * tokens) {
   printf("=====\n");
   printf("tokens %p\n",tokens);
   printf("num names %u\n",tokens->num_names);
@@ -286,12 +285,97 @@ void print_tokenization(tokenization_t * tokens) {
   }
 }
 
+// to test
+// /
+// //
+// /thing
+// /thing/
+// ../
+// ../thing
+// /thing/../other
+// /thing/../thing
+// .
+// ../.
+// assume everything is a dir
+// NULL if fail
+static struct dir * dir_get(tokenization_t * tokens) {
+  struct dir * dir = thread_get_cwd();
+
+  if ( tokens->is_absolute_path ) {
+    dir = dir_open_root();
+  }
+  uint32_t num_names = tokens->num_names;
+  struct inode * inode;
+  for ( uint32_t i = 0; i < num_names; ++i ) {
+    if (strcmp(tokens->names[i],".") == 0 ) { // not interesting
+      continue;
+    }
+    else if (strcmp(tokens->names[i],"..") == 0) {
+      block_sector_t prev_sector = dir->prev_dir;
+      inode = inode_open(prev_sector);
+      // the other dir should be closed?
+      // but what to do if in root directory?
+      dir = dir_open(inode);
+    }
+    else {
+      printf("===========\n");
+      printf("tokens->names[i] %s\n",tokens->names[i]);
+      bool success = dir_lookup(dir,tokens->names[i],&inode);
+      if ( success ) {
+        if ( i > 0  ) { // do not close the cwd we enter with
+          dir_close(dir); // you may close the tmp dirs we opened, i > 0
+        }
+        dir = dir_open(inode);
+      }
+      else {
+        return NULL;
+      }
+    }
+  }
+  return dir;
+}
+
 bool dir_chdir(const char * name) {
+  printf("name: %s\n",name);
   return false;
 }
 
 bool dir_mkdir(const char * name) {
-  return false;
+  if ( strcmp(name,"") == 0 ) {
+    return false;
+  }
+  else if ( strcmp(name,"/") == 0 ) {
+    return false;
+  }
+  tokenization_t tokens = tokenize_dir_name(name);
+  int num_names = tokens.num_names;
+  tokens.num_names--;
+  struct dir * dir = dir_get(&tokens);
+  struct inode * inode;
+  if ( dir != NULL ) {
+    bool success = dir_lookup(dir,tokens.names[num_names-1],&inode);
+    if ( success ) { // fail is we find the dir in the current dir
+      return false;
+    }
+    block_sector_t sector;
+    free_map_allocate(1,&sector);
+    const uint32_t some_sector_size = 16;
+    block_sector_t prev_sector = inode_get_aux(dir->inode);
+    success = dir_create(sector,some_sector_size,prev_sector);
+    printf("dir create finish\n");
+    ASSERT(success);
+    success = dir_add(dir,name,sector);
+    if ( success ) {
+      return true;
+    }
+    else {
+      free_map_release(sector,1);
+      return false;
+    }
+  }
+  else {
+    return false;
+  }
 }
 
 int dir_inumber(struct dir * dir) {
