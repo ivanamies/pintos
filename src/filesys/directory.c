@@ -10,6 +10,8 @@
 #include "filesys/filesys.h"
 #include "filesys/inode.h"
 
+#define DIR_MAX_NAMES 16
+
 /* A directory. */
 struct dir 
   {
@@ -243,7 +245,55 @@ dir_readdir (struct dir *dir, char name[NAME_MAX + 1])
   return false;
 }
 
-// 
+// tokenize
+typedef struct tokenization {
+  uint32_t num_names;
+  char names[DIR_MAX_NAMES][NAME_MAX + 1];
+  int is_absolute_path;
+} tokenization_t;
+
+static tokenization_t tokenize_dir_name(const char * name) {
+  tokenization_t tokens = { 0 };
+  
+  if ( name[0] == '/' ) {
+    tokens.is_absolute_path = 1;
+  }
+  // asumme null terminated
+  const uint32_t name_len = strlen(name)+1;
+  char * name_copy = (char *)malloc(name_len);
+  strlcpy(name_copy,name,name_len);
+  
+  char * token = NULL;
+  char * save_ptr = NULL;
+  
+  for ( token = strtok_r(name_copy, "/", &save_ptr); token != NULL;
+        token = strtok_r(NULL, "/", &save_ptr) ) {
+    ASSERT(tokens.num_names < DIR_MAX_NAMES);
+    ASSERT(strlen(token) < NAME_MAX);
+    strlcpy(tokens.names[tokens.num_names],token,strlen(token)+1);
+    ++tokens.num_names;
+  }
+  free(name_copy);
+  return tokens;
+}
+
+void print_tokenization(tokenization_t * tokens) {
+  printf("=====\n");
+  printf("tokens %p\n",tokens);
+  printf("num names %u\n",tokens->num_names);
+  for ( uint32_t i = 0; i < tokens->num_names; ++i ) {
+    printf("tokens[%u]: %s\n",i,tokens->names[i]);
+  }
+}
+
+bool dir_chdir(const char * name) {
+  return false;
+}
+
+bool dir_mkdir(const char * name) {
+  return false;
+}
+
 int dir_inumber(struct dir * dir) {
   ASSERT(dir != NULL);
   return inode_get_sector(dir_get_inode(dir));

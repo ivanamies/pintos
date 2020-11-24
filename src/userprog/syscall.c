@@ -1,17 +1,21 @@
 #include "userprog/syscall.h"
 #include <stdio.h>
 #include <syscall-nr.h>
-#include "threads/interrupt.h"
-#include "threads/thread.h"
 
-#include "threads/vaddr.h"
-#include "userprog/pagedir.h"
-#include "userprog/process.h"
 #include "devices/shutdown.h"
 #include "devices/input.h"
+
+#include "threads/interrupt.h"
+#include "threads/thread.h"
+#include "threads/vaddr.h"
 #include "threads/synch.h"
 #include "threads/palloc.h"
+
+#include "userprog/pagedir.h"
+#include "userprog/process.h"
+
 #include "filesys/inode.h"
+#include "filesys/directory.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
 
@@ -341,6 +345,21 @@ static int get_num_args(int syscall_no) {
   else if ( syscall_no == SYS_CLOSE ) {
     num_args = 1;
   }
+  else if ( syscall_no == SYS_CHDIR ) {
+    num_args = 1;
+  }
+  else if ( syscall_no == SYS_MKDIR ) {
+    num_args = 1;
+  }
+  else if ( syscall_no == SYS_READDIR ) {
+    num_args = 2;
+  }
+  else if ( syscall_no == SYS_ISDIR ) {
+    num_args = 1;
+  }
+  else if ( syscall_no == SYS_INUMBER ) {
+    num_args = 1;
+  }
   else {
     ASSERT(false);
     num_args = 0;
@@ -485,6 +504,26 @@ syscall_handler (struct intr_frame *f UNUSED)
   else if ( syscall_no == SYS_CLOSE ) {
     int fd = (int)user_args[0];
     close_fd(fd);
+  }
+  else if ( syscall_no == SYS_CHDIR ) {
+    tmp_char_ptr = (char *)user_args[0];    
+    if ( check_user_ptr_with_terminate((void *)tmp_char_ptr /*name*/) ) {
+      return;
+    }
+    f->eax = dir_chdir(tmp_char_ptr);
+  }
+  else if ( syscall_no == SYS_MKDIR ) {
+    tmp_char_ptr = (char *)user_args[0];    
+    if ( check_user_ptr_with_terminate((void *)tmp_char_ptr /*name*/) ) {
+      return;
+    }
+    f->eax = dir_mkdir(tmp_char_ptr);
+  }
+  else if ( syscall_no == SYS_READDIR ) {
+  }
+  else if ( syscall_no == SYS_ISDIR ) {
+  }
+  else if ( syscall_no == SYS_INUMBER ) {
   }
   else {
     printf("didn't get a project 2 sys call\n");

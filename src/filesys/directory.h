@@ -28,6 +28,8 @@ bool dir_remove (struct dir *, const char *name);
 bool dir_readdir (struct dir *, char name[NAME_MAX + 1]);
 
 // functions I added
+bool dir_chdir(const char * name);
+bool dir_mkdir(const char * name);
 int dir_inumber(struct dir *);
 
 #endif /* filesys/directory.h */
