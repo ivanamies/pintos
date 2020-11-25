@@ -372,7 +372,7 @@ inode_get_inumber (struct inode *inode)
 
 static void write_zeroes_to_disk(block_sector_t sector) {
   void * zeroes = malloc(BLOCK_SECTOR_SIZE);
-  memset(zeros,0,BLOCK_SECTOR_SIZE);
+  memset(zeroes,0,BLOCK_SECTOR_SIZE);
   cache_block_write(fs_device, sector, zeroes, 0, BLOCK_SECTOR_SIZE);
   free(zeroes);  
 }
