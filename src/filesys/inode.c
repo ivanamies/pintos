@@ -59,6 +59,18 @@ struct inode_disk
   uint32_t unused[113];               /* Not used. */
 };
 
+void print_inode_disk(struct inode_disk * inode_disk) {
+  printf("inode disk %p length %d magic %d aux %d\n",inode_disk,
+         inode_disk->length,inode_disk->magic,
+         inode_disk->aux);
+  for ( int i = 0; i < MAX_RECORDKEEPING_BLOCKS; ++i ) {
+    printf("inode disk_blocks[%d] %d\n",i,inode_disk->blocks[i]);
+  }
+  for ( int i = 0; i < 113; ++i ) {
+    ASSERT(inode_disk->unused[i] == 0);
+  }
+}
+
 // always zeros in pintos bss segment set up
 // DO NOT MOVE. MOVING THIS zeros INTO THE FUNCTION CAUSES WEIRD CRASHES
 uint8_t zeros[BLOCK_SECTOR_SIZE];
@@ -451,7 +463,7 @@ inode_close (struct inode *inode)
     return;
 
   rw_lock_write_acquire(&inode->rw_lock);
-  
+      
   // writes it to cache
   // does not actually write to disk
   cache_block_write(fs_device, inode->sector,&inode->data,0, BLOCK_SECTOR_SIZE);

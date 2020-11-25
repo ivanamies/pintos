@@ -48,6 +48,7 @@ dir_open (struct inode *inode)
     {
       dir->inode = inode;
       dir->pos = 0;
+      dir->prev_dir = inode_get_aux(inode);
       return dir;
     }
   else
@@ -313,8 +314,9 @@ static struct dir * dir_get(tokenization_t * tokens) {
     else if (strcmp(tokens->names[i],"..") == 0) {
       block_sector_t prev_sector = dir->prev_dir;
       inode = inode_open(prev_sector);
-      // the other dir should be closed?
-      // but what to do if in root directory?
+      if ( i > 0  ) { // do not close the cwd we enter with
+        dir_close(dir); // you may close the tmp dirs we opened, i > 0
+      }
       dir = dir_open(inode);
     }
     else {
