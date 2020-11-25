@@ -370,9 +370,19 @@ inode_get_inumber (struct inode *inode)
   return res;
 }
 
+static void write_zeroes_to_disk(block_sector_t sector) {
+  void * zeroes = malloc(BLOCK_SECTOR_SIZE);
+  memset(zeros,0,BLOCK_SECTOR_SIZE);
+  cache_block_write(fs_device, sector, zeroes, 0, BLOCK_SECTOR_SIZE);
+  free(zeroes);  
+}
+
 static void inode_direct_block_disk_dealloc(inode_direct_block_disk_t * direct_block) {
   block_sector_t sector = direct_block->start;
   size_t length = direct_block->length;
+  for ( size_t i = 0; i < length; ++i ) {
+    write_zeroes_to_disk(sector+i);
+  }
   free_map_release(sector, length);
   memset(direct_block,0,BLOCK_SECTOR_SIZE);
 }
@@ -391,6 +401,7 @@ static void inode_indirect_block_disk_dealloc(inode_indirect_block_disk_t * indi
       else {
         inode_direct_block_disk_dealloc((inode_direct_block_disk_t *)block);
       }
+      write_zeroes_to_disk(sector);
       free_map_release((block_sector_t)sector,1);
     }
   }
@@ -416,6 +427,7 @@ static void inode_disk_dealloc(struct inode_disk * disk_inode) {
         is_double_indirect = i >= double_indirect_blocks_start;
         inode_indirect_block_disk_dealloc((inode_indirect_block_disk_t *)block,is_double_indirect);
       }
+      write_zeroes_to_disk(sector);
       free_map_release((block_sector_t)sector,1);
     }
   }
@@ -424,6 +436,7 @@ static void inode_disk_dealloc(struct inode_disk * disk_inode) {
 
 static void inode_dealloc(struct inode * inode) {
   inode_disk_dealloc(&inode->data);
+  write_zeroes_to_disk(inode->sector);
   free_map_release(inode->sector,1);
 }
 
@@ -442,8 +455,12 @@ inode_close (struct inode *inode)
   if (--inode->open_cnt == 0)
     {
       /* Remove from inode list and release lock. */
+      //
+      // ... where is the lock that's needed here?
+      //
       list_remove (&inode->elem);
- 
+      //
+      
       /* Deallocate blocks if removed. */
       if (inode->removed) 
         {
@@ -539,11 +556,11 @@ static void inode_disk_extend(struct inode_disk * disk_inode, size_t curr_length
     inode_touch_direct_block(disk_inode,(curr_block_length)*BLOCK_SECTOR_SIZE);
     ++curr_block_length;
   }
+  disk_inode->length = end;
 }
 
 static void inode_extend(struct inode * inode, off_t end) {
   inode_disk_extend(&inode->data, inode_length_no_lock(inode), end);
-  inode->data.length = end;
 }
 
 /* Writes SIZE bytes from BUFFER into INODE, starting at OFFSET.
