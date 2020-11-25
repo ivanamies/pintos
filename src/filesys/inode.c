@@ -451,6 +451,11 @@ inode_close (struct inode *inode)
     return;
 
   rw_lock_write_acquire(&inode->rw_lock);
+  
+  // writes it to cache
+  // does not actually write to disk
+  cache_block_write(fs_device, inode->sector,&inode->data,0, BLOCK_SECTOR_SIZE);
+
   /* Release resources if this was the last opener. */
   if (--inode->open_cnt == 0)
     {
