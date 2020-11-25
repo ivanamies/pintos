@@ -35,7 +35,8 @@ struct dir_entry
 bool
 dir_create (block_sector_t sector, size_t entry_cnt, int prev_dir_inode)
 {
-  return inode_create (sector, entry_cnt * sizeof (struct dir_entry), prev_dir_inode);
+  int is_dir = 1;
+  return inode_create (sector, entry_cnt * sizeof (struct dir_entry), prev_dir_inode, is_dir);
 }
 
 /* Opens and returns the directory for the given INODE, of which
@@ -48,7 +49,7 @@ dir_open (struct inode *inode)
     {
       dir->inode = inode;
       dir->pos = 0;
-      dir->prev_dir = inode_get_aux(inode);
+      dir->prev_dir = inode_get_aux1(inode);
       return dir;
     }
   else
@@ -369,7 +370,7 @@ bool dir_mkdir(const char * name) {
     block_sector_t sector;
     free_map_allocate(1,&sector);
     const uint32_t some_sector_size = 16;
-    block_sector_t prev_sector = inode_get_aux(dir->inode);
+    block_sector_t prev_sector = inode_get_aux1(dir->inode);
     success = dir_create(sector,some_sector_size,prev_sector);
     ASSERT(success);
     success = dir_add(dir,name,sector);

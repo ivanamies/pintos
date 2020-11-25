@@ -31,8 +31,9 @@ static int check_user_ptr (void * p);
 
 typedef struct fd_file {
   int fd;
-  char file_name[MAX_FILE_NAME_LEN];
+  char name[MAX_FILE_NAME_LEN];
   struct file * file;
+  struct dir * dir;
   int is_open; // 0 if this fd is closed, 1 if this fd is open
   int pid; // pid of owning process
 } fd_file_t;
@@ -45,8 +46,8 @@ static int empty_fd_idx;
 void debug_fd_table(int aux) {
   printf("===tag iamies debug fd table %d\n",aux);
   for ( int i = 0; i < MAX_FILES; ++i ) {
-    if ( fd_table[i].file_name[0] != 0 ) {
-      printf("fd_table[%d] filename: %s\n",i,fd_table[i].file_name);
+    if ( fd_table[i].name[0] != 0 ) {
+      printf("fd_table[%d] filename: %s\n",i,fd_table[i].name);
     }
   }
 }
@@ -66,8 +67,9 @@ void init_fd_table(void) {
   ASSERT (fd_table != NULL);
   for ( i = 0; i < MAX_FILES; ++i ) {
     fd_table[i].fd = -1;
-    fd_table[i].file_name[0] = 0;
+    fd_table[i].name[0] = 0;
     fd_table[i].file = NULL;
+    fd_table[i].dir = NULL;
     fd_table[i].is_open = 0;
     fd_table[i].pid = -1;
   }
@@ -80,7 +82,7 @@ void init_fd_table(void) {
 
 static void clear_fd(struct fd_file * fd_file) {
   fd_file->fd = -1;
-  fd_file->file_name[0] = 0;
+  fd_file->name[0] = 0;
   if ( fd_file->file != NULL ) {
     if ( fd_file->is_open == 1 ) {
       file_close(fd_file->file);
@@ -103,15 +105,15 @@ void destroy_fd(int pid) {
   lock_release(&fd_table_lock);
 }
 
-static int create_fd(const char * file_name, struct file * file) {
+static int create_fd(const char * name, struct file * file) {
   int fd;
   int fd_idx;
 
-  ASSERT ( file_name != NULL );
-  if ( strcmp(file_name,"") == 0 ) {
+  ASSERT ( name != NULL );
+  if ( strcmp(name,"") == 0 ) {
     return -1;
   }
-  else if ( strlen(file_name)+1 >= MAX_FILE_NAME_LEN) {
+  else if ( strlen(name)+1 >= MAX_FILE_NAME_LEN) {
     return -1;
   }
   
@@ -126,7 +128,7 @@ static int create_fd(const char * file_name, struct file * file) {
   fd = fd_idx; // must start at 2
   
   fd_table[fd_idx].fd = fd;
-  strlcpy(fd_table[fd_idx].file_name,file_name,MAX_FILE_NAME_LEN);
+  strlcpy(fd_table[fd_idx].name,name,MAX_FILE_NAME_LEN);
   fd_table[fd_idx].file = file;
   fd_table[fd_idx].is_open = 1; // ONLY call from open_fd
   fd_table[fd_idx].pid = thread_pid();
@@ -136,15 +138,15 @@ static int create_fd(const char * file_name, struct file * file) {
   return fd;
 }
 
-int open_fd(const char * const file_name) {
+int open_fd(const char * const name) {
   int fd;
-  struct file * file = filesys_open(file_name); // I assume this is thread safe?
+  struct file * file = filesys_open(name); // I assume this is thread safe?
   if ( file == NULL ) {
     fd = -1;
     return fd;
   }
   
-  fd = create_fd(file_name,file);
+  fd = create_fd(name,file);
   
   return fd;
 }

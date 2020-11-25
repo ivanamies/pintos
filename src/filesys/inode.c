@@ -14,6 +14,7 @@
 
 /* Identifies an inode. */
 #define INODE_MAGIC 0x494e4f44
+#define INODE_IS_DIR_MAGIC ((int)0xABCD1234)
 
 #define NUM_DIRECT_BLOCKS_DISK_MANAGED 10
 #define NUM_INDIRECT_BLOCK_DISK_MANAGED 1
@@ -55,18 +56,19 @@ struct inode_disk
   int blocks[MAX_RECORDKEEPING_BLOCKS]; // should be block_sector_t type  
   off_t length;                       /* File size in bytes. */
   unsigned magic;                     /* Magic number. */
-  int aux;
-  uint32_t unused[113];               /* Not used. */
+  int aux1;
+  int aux2;
+  uint32_t unused[112];               /* Not used. */
 };
 
-void print_inode_disk(struct inode_disk * inode_disk) {
-  printf("inode disk %p length %d magic %d aux %d\n",inode_disk,
+static void print_inode_disk(struct inode_disk * inode_disk) {
+  printf("inode disk %p length %d magic %d aux1 %d aux2 %d\n",inode_disk,
          inode_disk->length,inode_disk->magic,
-         inode_disk->aux);
+         inode_disk->aux1,inode_disk->aux2);
   for ( int i = 0; i < MAX_RECORDKEEPING_BLOCKS; ++i ) {
     printf("inode disk_blocks[%d] %d\n",i,inode_disk->blocks[i]);
   }
-  for ( int i = 0; i < 113; ++i ) {
+  for ( int i = 0; i < 112; ++i ) {
     ASSERT(inode_disk->unused[i] == 0);
   }
 }
@@ -295,7 +297,7 @@ inode_init (void)
    Returns true if successful.
    Returns false if memory or disk allocation fails. */
 bool
-inode_create (block_sector_t sector, off_t length, int aux)
+inode_create (block_sector_t sector, off_t length, int aux1, int aux2)
 {
   bool success = false;
   
@@ -313,7 +315,10 @@ inode_create (block_sector_t sector, off_t length, int aux)
     disk_inode.blocks[i] = -1;
   }
   disk_inode.length = length;
-  disk_inode.aux = aux;
+  disk_inode.aux1 = aux1;
+  if ( aux2 ) {
+    disk_inode.aux2 = INODE_IS_DIR_MAGIC;
+  }
   disk_inode.magic = INODE_MAGIC;
   // have to extend the disk inode
   inode_disk_extend(&disk_inode,0,length);
@@ -679,6 +684,14 @@ int inode_get_sector(struct inode * inode) {
   return inode->sector;
 }
 
-int inode_get_aux(struct inode * inode) {
-  return inode->data.aux;
+int inode_get_aux1(struct inode * inode) {
+  return inode->data.aux1;
+}
+
+int inode_get_aux2(struct inode * inode) {
+  return inode->data.aux2;
+}
+
+bool inode_is_dir(struct inode * inode) {
+  return inode->data.aux2 == INODE_IS_DIR_MAGIC;
 }

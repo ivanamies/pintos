@@ -76,12 +76,13 @@ free_map_close (void)
 void
 free_map_create (void) 
 {
-  int aux = ROOT_DIR_SECTOR;
+  int aux1 = ROOT_DIR_SECTOR;
   if ( thread_get_cwd() != NULL ) {
-    aux = dir_inumber(thread_get_cwd());
+    aux1 = dir_inumber(thread_get_cwd());
   }
+  int aux2 = 0;
   /* Create inode. */
-  if (!inode_create (FREE_MAP_SECTOR, bitmap_file_size (free_map), aux))
+  if (!inode_create (FREE_MAP_SECTOR, bitmap_file_size (free_map), aux1, aux2))
     PANIC ("free map creation failed");
 
   /* Write bitmap to file. */
