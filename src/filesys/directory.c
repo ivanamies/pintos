@@ -331,6 +331,9 @@ static struct dir * dir_get(tokenization_t * tokens) {
         dir = dir_open(inode);
       }
       else {
+        if ( i > 0  ) { // do not close the cwd we enter with
+          dir_close(dir); // you may close the tmp dirs we opened, i > 0
+        }
         return NULL;
       }
     }
@@ -373,7 +376,7 @@ bool dir_mkdir(const char * name) {
     block_sector_t prev_sector = inode_get_aux1(dir->inode);
     success = dir_create(sector,some_sector_size,prev_sector);
     ASSERT(success);
-    success = dir_add(dir,name,sector);
+    success = dir_add(dir,tokens.names[num_names-1],sector);
     if ( success ) {
       return true;
     }
