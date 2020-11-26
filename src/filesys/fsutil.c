@@ -4,12 +4,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ustar.h>
-#include "filesys/directory.h"
-#include "filesys/file.h"
-#include "filesys/filesys.h"
+
 #include "threads/malloc.h"
 #include "threads/palloc.h"
 #include "threads/vaddr.h"
+
+#include "filesys/directory.h"
+#include "filesys/file.h"
+#include "filesys/filesys.h"
 
 /* List files in the root directory. */
 void
@@ -39,7 +41,9 @@ fsutil_cat (char **argv)
   char *buffer;
 
   printf ("Printing '%s' to the console...\n", file_name);
-  file = filesys_open (file_name);
+  struct dir * dir = dir_open_root();
+  file = filesys_open (dir,file_name);
+  dir_close(dir);
   if (file == NULL)
     PANIC ("%s: open failed", file_name);
   buffer = palloc_get_page (PAL_ASSERT);
@@ -63,7 +67,10 @@ fsutil_rm (char **argv)
   const char *file_name = argv[1];
   
   printf ("Deleting '%s'...\n", file_name);
-  if (!filesys_remove (file_name))
+  struct dir * dir = dir_open_root();
+  bool success = filesys_remove (dir, file_name);
+  dir_close(dir);
+  if (!success)
     PANIC ("%s: delete failed\n", file_name);
 }
 
@@ -118,9 +125,15 @@ fsutil_extract (char **argv UNUSED)
           printf ("Putting '%s' into the file system...\n", file_name);
 
           /* Create destination file. */
-          if (!filesys_create (file_name, size))
+          struct dir * dir = dir_open_root();
+          bool success = filesys_create (dir, file_name, size);
+          dir_close(dir);
+          if (!success) {
             PANIC ("%s: create failed", file_name);
-          dst = filesys_open (file_name);
+          }
+          dir = dir_open_root();
+          dst = filesys_open (dir, file_name);
+          dir_close(dir);
           if (dst == NULL)
             PANIC ("%s: open failed", file_name);
 
@@ -182,7 +195,9 @@ fsutil_append (char **argv)
     PANIC ("couldn't allocate buffer");
 
   /* Open source file. */
-  src = filesys_open (file_name);
+  struct dir * dir = dir_open_root();
+  src = filesys_open (dir, file_name);
+  dir_close(dir);
   if (src == NULL)
     PANIC ("%s: open failed", file_name);
   size = file_length (src);

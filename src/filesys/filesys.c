@@ -49,14 +49,11 @@ filesys_done (void)
    Fails if a file named NAME already exists,
    or if internal memory allocation fails. */
 bool
-filesys_create (const char *name, off_t initial_size) 
+filesys_create (struct dir * dir, const char *name, off_t initial_size) 
 {
   block_sector_t inode_sector = 0;
-  struct dir *dir = dir_open_root ();
-  int aux1 = ROOT_DIR_SECTOR;
-  if ( thread_get_cwd() != NULL ) {
-    aux1 = dir_inumber(thread_get_cwd());
-  }
+  
+  int aux1 = dir_inumber(dir);
   int aux2 = 0;
   bool success = (dir != NULL
                   && free_map_allocate (1, &inode_sector)
@@ -64,7 +61,6 @@ filesys_create (const char *name, off_t initial_size)
                   && dir_add (dir, name, inode_sector));
   if (!success && inode_sector != 0) 
     free_map_release (inode_sector, 1);
-  dir_close (dir);
 
   return success;
 }
@@ -75,14 +71,12 @@ filesys_create (const char *name, off_t initial_size)
    Fails if no file named NAME exists,
    or if an internal memory allocation fails. */
 struct file *
-filesys_open (const char *name)
+filesys_open (struct dir * dir, const char *name)
 {
-  struct dir *dir = dir_open_root ();
   struct inode *inode = NULL;
 
   if (dir != NULL)
     dir_lookup (dir, name, &inode);
-  dir_close (dir);
 
   return file_open (inode);
 }
@@ -92,12 +86,9 @@ filesys_open (const char *name)
    Fails if no file named NAME exists,
    or if an internal memory allocation fails. */
 bool
-filesys_remove (const char *name) 
+filesys_remove (struct dir * dir, const char *name) 
 {
-  struct dir *dir = dir_open_root ();
-  bool success = dir != NULL && dir_remove (dir, name);
-  dir_close (dir); 
-  
+  bool success = dir != NULL && dir_remove (dir, name);  
   return success;
 }
 
@@ -111,7 +102,7 @@ do_format (void)
   if ( thread_get_cwd() != NULL ) {
     prev_dir_inode = dir_inumber(thread_get_cwd());
   }
-
+  
   free_map_create ();
   if (!dir_create (ROOT_DIR_SECTOR, 16, prev_dir_inode))
     PANIC ("root directory creation failed");

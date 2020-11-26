@@ -140,7 +140,8 @@ static int create_fd(const char * name, struct file * file) {
 
 int open_fd(const char * const name) {
   int fd;
-  struct file * file = filesys_open(name); // I assume this is thread safe?
+  struct dir * dir = thread_get_cwd();
+  struct file * file = filesys_open(dir,name); // I assume this is thread safe?
   if ( file == NULL ) {
     fd = -1;
     return fd;
@@ -407,6 +408,8 @@ syscall_handler (struct intr_frame *f UNUSED)
     esp += word_size;
   }
   
+  struct dir * cwd = thread_get_cwd();
+  
   if ( syscall_no == SYS_HALT ) {
     shutdown_power_off();
   }
@@ -433,8 +436,7 @@ syscall_handler (struct intr_frame *f UNUSED)
     if ( check_user_ptr_with_terminate((void *)tmp_char_ptr /*file_name*/) ) {
       return;
     }
-
-    success = filesys_create(tmp_char_ptr,tmp_int);
+    success = filesys_create(cwd,tmp_char_ptr,tmp_int);
     f->eax = success;
   }
   else if ( syscall_no == SYS_REMOVE ) {
@@ -442,7 +444,7 @@ syscall_handler (struct intr_frame *f UNUSED)
     if ( check_user_ptr_with_terminate((void *)tmp_char_ptr /*file_name*/) ) {
       return;
     }
-    f->eax = filesys_remove(tmp_char_ptr);
+    f->eax = filesys_remove(cwd,tmp_char_ptr);
   }
   else if ( syscall_no == SYS_OPEN ) {
     tmp_char_ptr = (char *)user_args[0];    

@@ -8,13 +8,16 @@
 #define FREE_MAP_SECTOR 0       /* Free map file inode sector. */
 #define ROOT_DIR_SECTOR 1       /* Root directory file inode sector. */
 
+// forward declare directory
+struct dir;
+
 /* Block device that contains the file system. */
 struct block *fs_device;
 
 void filesys_init (bool format);
 void filesys_done (void);
-bool filesys_create (const char *name, off_t initial_size);
-struct file *filesys_open (const char *name);
-bool filesys_remove (const char *name);
+bool filesys_create (struct dir *, const char *name, off_t initial_size);
+struct file *filesys_open (struct dir *, const char *name);
+bool filesys_remove (struct dir *, const char *name);
 
 #endif /* filesys/filesys.h */
