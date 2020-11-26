@@ -11,9 +11,6 @@
 #include "filesys/filesys.h"
 #include "filesys/inode.h"
 
-#define DIR_MAX_SUBNAME 14
-#define DIR_MAX_NAMES 16
-
 /* A directory. */
 struct dir 
   {
@@ -246,14 +243,7 @@ dir_readdir (struct dir *dir, char name[NAME_MAX + 1])
   return false;
 }
 
-// tokenize
-typedef struct tokenization {
-  uint32_t num_names;
-  char names[DIR_MAX_NAMES][DIR_MAX_SUBNAME + 1];
-  int is_absolute_path;
-} tokenization_t;
-
-static tokenization_t tokenize_dir_name(const char * name) {
+tokenization_t tokenize_dir_name(const char * name) {
   tokenization_t tokens = { 0 };
   
   if ( name[0] == '/' ) {
@@ -294,13 +284,14 @@ static void print_tokenization(tokenization_t * tokens) {
 // /thing/
 // ../
 // ../thing
+// ../curr_dir/curr_file // this should break actually
 // /thing/../other
 // /thing/../thing
 // .
 // ../.
 // assume everything is a dir
 // NULL if fail
-static struct dir * dir_get(tokenization_t * tokens) {
+struct dir * dir_get(tokenization_t * tokens) {
   struct dir * dir = thread_get_cwd();
 
   if ( tokens->is_absolute_path ) {
