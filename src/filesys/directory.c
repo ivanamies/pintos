@@ -377,6 +377,13 @@ bool dir_mkdir(const char * name) {
     success = dir_create(sector,some_sector_size,prev_sector);
     ASSERT(success);
     success = dir_add(dir,tokens.names[num_names-1],sector);
+    // close any intermediate folders
+    // notice how this breaks on:
+    // ../cur_folder/cur_file
+    // replace with a check if should close function later
+    if ( num_names != 1 ) {
+      dir_close(dir);
+    }
     if ( success ) {
       return true;
     }
