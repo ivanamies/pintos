@@ -92,17 +92,8 @@ filesys_open (struct dir * dir, const char *name)
 bool
 filesys_remove (struct dir * dir, const char *name) 
 {
-  bool dir_needs_close = false;
-  if ( dir == NULL ) {
-    dir_needs_close = true;
-    dir = dir_open_root ();
-  }
-  
+  ASSERT(dir != NULL);
   bool success = dir != NULL && dir_remove (dir, name);
-  
-  if ( dir_needs_close ) {
-    dir_close (dir);
-  }
   
   return success;
 }

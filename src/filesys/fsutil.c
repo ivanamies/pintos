@@ -65,8 +65,12 @@ fsutil_rm (char **argv)
   const char *file_name = argv[1];
   
   printf ("Deleting '%s'...\n", file_name);
-  if (!filesys_remove (NULL, file_name))
+  struct dir * dir = dir_open_root();
+  if (!filesys_remove (NULL, file_name)) {
+    dir_close(dir);
     PANIC ("%s: delete failed\n", file_name);
+  }
+  dir_close(dir);
 }
 
 /* Extracts a ustar-format tar archive from the scratch block
