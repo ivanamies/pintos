@@ -146,8 +146,10 @@ int open_fd(const char * full_name) {
   char name[DIR_MAX_SUBNAME + 1];
   int needs_close = 0;
   memset(name,0,sizeof(name));
+  printf("full_name %s\n",full_name);
   struct dir * dir = get_dir_from_name(full_name,&needs_close,name);
   struct file * file = filesys_open(dir,name); // I assume this is thread safe?
+  printf("open_fd dir %p name %s file %p\n",dir,name,file);
   if ( needs_close ) {
     dir_close(dir);
   }
@@ -278,7 +280,7 @@ struct dir * get_dir_from_name(const char * full_name, int * needs_close,
                                char * name) {
   tokenization_t tokens = tokenize_dir_name(full_name);
   ASSERT(tokens.num_names != 0);
-  strlcpy(tokens.names[tokens.num_names-1],name,DIR_MAX_SUBNAME);
+  strlcpy(name,tokens.names[tokens.num_names-1],DIR_MAX_SUBNAME);
   if ( tokens.num_names == 1 ) {
     *needs_close = 0;
   }
