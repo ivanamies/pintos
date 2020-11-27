@@ -140,7 +140,9 @@ static int create_fd(const char * name, struct file * file) {
 
 int open_fd(const char * const name) {
   int fd;
-  struct file * file = filesys_open(NULL, name); // I assume this is thread safe?
+  struct dir * dir = dir_open_root();
+  struct file * file = filesys_open(dir, name); // I assume this is thread safe?
+  dir_close(dir);
   if ( file == NULL ) {
     fd = -1;
     return fd;

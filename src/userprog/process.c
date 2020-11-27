@@ -512,7 +512,10 @@ load (struct input_args * ia, void (**eip) (void), void **esp)
   process_activate ();
 
   /* Open executable file. */
-  file = filesys_open (NULL, file_name);
+  struct dir * dir = dir_open_root();
+  file = filesys_open (dir, file_name);
+  dir_close(dir);
+  
   if (file == NULL) 
     {
       printf ("load: %s: open failed\n", file_name);

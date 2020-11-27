@@ -37,9 +37,11 @@ fsutil_cat (char **argv)
   
   struct file *file;
   char *buffer;
-
+  struct dir * dir = dir_open_root();
+  
   printf ("Printing '%s' to the console...\n", file_name);
-  file = filesys_open (NULL, file_name);
+  file = filesys_open (dir, file_name);
+  dir_close(dir);
   if (file == NULL)
     PANIC ("%s: open failed", file_name);
   buffer = palloc_get_page (PAL_ASSERT);
@@ -76,6 +78,7 @@ fsutil_extract (char **argv UNUSED)
 
   struct block *src;
   void *header, *data;
+  struct dir * dir;
 
   /* Allocate buffers. */
   header = malloc (BLOCK_SECTOR_SIZE);
@@ -120,7 +123,9 @@ fsutil_extract (char **argv UNUSED)
           /* Create destination file. */
           if (!filesys_create (NULL, file_name, size))
             PANIC ("%s: create failed", file_name);
-          dst = filesys_open (NULL, file_name);
+          dir = dir_open_root();
+          dst = filesys_open (dir, file_name);
+          dir_close(dir);
           if (dst == NULL)
             PANIC ("%s: open failed", file_name);
 
@@ -173,6 +178,7 @@ fsutil_append (char **argv)
   struct file *src;
   struct block *dst;
   off_t size;
+  struct dir * dir;
 
   printf ("Appending '%s' to ustar archive on scratch device...\n", file_name);
 
@@ -182,7 +188,10 @@ fsutil_append (char **argv)
     PANIC ("couldn't allocate buffer");
 
   /* Open source file. */
-  src = filesys_open (NULL, file_name);
+  dir = dir_open_root();
+  src = filesys_open (dir, file_name);
+  dir_close(dir);
+  
   if (src == NULL)
     PANIC ("%s: open failed", file_name);
   size = file_length (src);
