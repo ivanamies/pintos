@@ -444,7 +444,9 @@ syscall_handler (struct intr_frame *f UNUSED)
     if ( check_user_ptr_with_terminate((void *)tmp_char_ptr /*file_name*/) ) {
       return;
     }
-    f->eax = filesys_remove(tmp_char_ptr);
+    dir = dir_open_root();
+    
+    f->eax = filesys_remove(dir, tmp_char_ptr);
   }
   else if ( syscall_no == SYS_OPEN ) {
     tmp_char_ptr = (char *)user_args[0];    

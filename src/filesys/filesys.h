@@ -17,6 +17,6 @@ void filesys_init (bool format);
 void filesys_done (void);
 bool filesys_create (struct dir * dir, const char *name, off_t initial_size);
 struct file *filesys_open (struct dir * dir, const char *name);
-bool filesys_remove (const char *name);
+bool filesys_remove (struct dir * dir, const char *name);
 
 #endif /* filesys/filesys.h */
