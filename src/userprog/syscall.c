@@ -29,9 +29,6 @@ static int check_user_ptr (void * p);
 #define MAX_FILES 4096
 #define MAX_ARGS_ON_USER_STACK 4
 
-static struct dir * get_dir_from_name(const char * full_name, int * needs_close,
-                                      char * name);
-
 typedef struct fd_file {
   int fd;
   char name[MAX_FILE_NAME_LEN];
@@ -141,18 +138,9 @@ static int create_fd(const char * name, struct file * file) {
   return fd;
 }
 
-int open_fd(const char * full_name) {
+int open_fd(const char * const name) {
   int fd;
-  char name[DIR_MAX_SUBNAME + 1];
-  int needs_close = 0;
-  memset(name,0,sizeof(name));
-  printf("full_name %s\n",full_name);
-  struct dir * dir = get_dir_from_name(full_name,&needs_close,name);
-  struct file * file = filesys_open(dir,name); // I assume this is thread safe?
-  printf("open_fd dir %p name %s file %p\n",dir,name,file);
-  if ( needs_close ) {
-    dir_close(dir);
-  }
+  struct file * file = filesys_open(NULL, name); // I assume this is thread safe?
   if ( file == NULL ) {
     fd = -1;
     return fd;
@@ -276,22 +264,6 @@ syscall_init (void)
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
-struct dir * get_dir_from_name(const char * full_name, int * needs_close,
-                               char * name) {
-  tokenization_t tokens = tokenize_dir_name(full_name);
-  ASSERT(tokens.num_names != 0);
-  strlcpy(name,tokens.names[tokens.num_names-1],DIR_MAX_SUBNAME);
-  if ( tokens.num_names == 1 ) {
-    *needs_close = 0;
-  }
-  else {
-    *needs_close = 1;
-    tokens.num_names--;
-  }
-  struct dir * res = dir_get(&tokens);
-  return res;
-}
-
 static int check_user_ptr (void * p_) {
   const char * p = p_;
   int i;
@@ -405,7 +377,6 @@ syscall_handler (struct intr_frame *f UNUSED)
   
   int tmp_int;
   char * tmp_char_ptr;
-  int needs_close= 0;
 
   int success;
   
@@ -414,8 +385,6 @@ syscall_handler (struct intr_frame *f UNUSED)
   size_t word_size = sizeof(void *);
   char * esp = f->esp; // user's stack pointer
                        // cast to char * to have 1 byte type
-  
-  char name[DIR_MAX_SUBNAME + 1];
   
   // verify that it's a good pointer
   if ( check_user_ptr_with_terminate(esp) ) {
@@ -437,7 +406,7 @@ syscall_handler (struct intr_frame *f UNUSED)
     user_args[i] = *((void **)esp);
     esp += word_size;
   }
-    
+  
   if ( syscall_no == SYS_HALT ) {
     shutdown_power_off();
   }
@@ -464,11 +433,8 @@ syscall_handler (struct intr_frame *f UNUSED)
     if ( check_user_ptr_with_terminate((void *)tmp_char_ptr /*file_name*/) ) {
       return;
     }
-    struct dir * dir = get_dir_from_name(tmp_char_ptr,&needs_close,name);
-    success = filesys_create(dir,name,tmp_int);
-    if ( needs_close ) {
-      dir_close(dir);
-    }
+
+    success = filesys_create(tmp_char_ptr,tmp_int);
     f->eax = success;
   }
   else if ( syscall_no == SYS_REMOVE ) {
@@ -476,11 +442,7 @@ syscall_handler (struct intr_frame *f UNUSED)
     if ( check_user_ptr_with_terminate((void *)tmp_char_ptr /*file_name*/) ) {
       return;
     }
-    struct dir * dir = get_dir_from_name(tmp_char_ptr,&needs_close,name);
-    f->eax = filesys_remove(dir,name);
-    if ( needs_close ) {
-      dir_close(dir);
-    }    
+    f->eax = filesys_remove(tmp_char_ptr);
   }
   else if ( syscall_no == SYS_OPEN ) {
     tmp_char_ptr = (char *)user_args[0];    

@@ -504,23 +504,15 @@ load (struct input_args * ia, void (**eip) (void), void **esp)
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
   strlcpy(t->process_name,file_name,PROCESS_NAME_MAX_LENGTH);
-  
-  // WIP set working directory to root
-  // should be inheriting its cwd from parent
-  //
+  // set working directory to root
   thread_set_cwd(dir_open_root());
-  //
-  //
-  
   if (t->pagedir == NULL) {
     goto done;
   }
   process_activate ();
 
   /* Open executable file. */
-  struct dir * dir = thread_get_cwd();
-  file = filesys_open (dir, file_name);
-  
+  file = filesys_open (NULL, file_name);
   if (file == NULL) 
     {
       printf ("load: %s: open failed\n", file_name);
