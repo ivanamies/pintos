@@ -385,6 +385,7 @@ syscall_handler (struct intr_frame *f UNUSED)
   size_t word_size = sizeof(void *);
   char * esp = f->esp; // user's stack pointer
                        // cast to char * to have 1 byte type
+  struct dir * dir;
   
   // verify that it's a good pointer
   if ( check_user_ptr_with_terminate(esp) ) {
@@ -429,12 +430,13 @@ syscall_handler (struct intr_frame *f UNUSED)
   else if ( syscall_no == SYS_CREATE ) {
     tmp_char_ptr = (char *)user_args[0];
     tmp_int = (int)user_args[1];
-
+    
     if ( check_user_ptr_with_terminate((void *)tmp_char_ptr /*file_name*/) ) {
       return;
     }
-
-    success = filesys_create(tmp_char_ptr,tmp_int);
+    dir = dir_open_root();
+    
+    success = filesys_create(dir, tmp_char_ptr,tmp_int);
     f->eax = success;
   }
   else if ( syscall_no == SYS_REMOVE ) {
