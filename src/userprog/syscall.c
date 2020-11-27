@@ -10,6 +10,7 @@
 #include "threads/vaddr.h"
 #include "threads/synch.h"
 #include "threads/palloc.h"
+#include "threads/malloc.h"
 
 #include "userprog/pagedir.h"
 #include "userprog/process.h"
@@ -28,6 +29,9 @@ static int check_user_ptr (void * p);
 #define MAX_FILE_NAME_LEN 64
 #define MAX_FILES 4096
 #define MAX_ARGS_ON_USER_STACK 4
+
+static struct dir * get_dir_from_name(const char * full_name, int * needs_close,
+                                      char * name);
 
 typedef struct fd_file {
   int fd;
@@ -138,17 +142,24 @@ static int create_fd(const char * name, struct file * file) {
   return fd;
 }
 
-int open_fd(const char * const name) {
+int open_fd(const char * const full_name) {
   int fd;
-  struct dir * dir = dir_open_root();
-  struct file * file = filesys_open(dir, name); // I assume this is thread safe?
+  const uint32_t name_len = DIR_MAX_SUBNAME + 1;
+  char * name = (char *)malloc(name_len);
+  memset(name,0,name_len);
+  
+  int needs_close = 0;
+  struct dir * dir = get_dir_from_name(full_name,&needs_close,name);
+  struct file * file = filesys_open(dir, full_name); // I assume this is thread safe?
   dir_close(dir);
   if ( file == NULL ) {
+    free(name);
     fd = -1;
     return fd;
   }
   
-  fd = create_fd(name,file);
+  fd = create_fd(full_name,file);
+  free(name);
   
   return fd;
 }
@@ -265,6 +276,14 @@ syscall_init (void)
 {
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
+
+struct dir * get_dir_from_name(const char * full_name, int * needs_close,
+                               char * name) {
+  *needs_close = 1;
+  struct dir * dir = dir_open_root();
+  return dir;
+}
+
 
 static int check_user_ptr (void * p_) {
   const char * p = p_;
