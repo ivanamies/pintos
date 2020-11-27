@@ -281,21 +281,17 @@ syscall_init (void)
 
 struct dir * get_dir_from_name(const char * full_name, int * needs_close,
                                char * name) {
-  /* tokenization_t tokens = tokenize_dir_name(full_name); */
-  /* ASSERT(tokens.num_names != 0); */
-  /* strlcpy(name,tokens.names[tokens.num_names-1],DIR_MAX_SUBNAME); */
-  /* if ( tokens.num_names == 1 ) { */
-  /*   *needs_close = 0; */
-  /* } */
-  /* else { */
-  /*   *needs_close = 1; */
-  /*   tokens.num_names--; */
-  /* } */
-  /* struct dir * res = dir_get(&tokens); */
-  /* return res; */
-  
-  *needs_close = 1;
-  struct dir * dir = dir_open_root();
+  tokenization_t tokens = tokenize_dir_name(full_name);
+  ASSERT(tokens.num_names != 0);
+  strlcpy(name,tokens.names[tokens.num_names-1],DIR_MAX_SUBNAME);
+  if ( tokens.num_names == 1 ) {
+    *needs_close = 0;
+  }
+  else {
+    *needs_close = 1;
+  }
+  tokens.num_names--;
+  struct dir * dir = dir_get(&tokens);  
   return dir;
 }
 

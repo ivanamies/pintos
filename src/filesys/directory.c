@@ -293,7 +293,6 @@ static void print_tokenization(tokenization_t * tokens) {
 // NULL if fail
 struct dir * dir_get(tokenization_t * tokens) {
   struct dir * dir = thread_get_cwd();
-
   if ( tokens->is_absolute_path ) {
     dir = dir_open_root();
   }
