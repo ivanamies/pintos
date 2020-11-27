@@ -51,13 +51,8 @@ filesys_done (void)
 bool
 filesys_create (struct dir * dir, const char *name, off_t initial_size) 
 {
-
-  bool dir_needs_close = false;
-  if ( dir == NULL ) {
-    dir_needs_close = true;
-    dir = dir_open_root();
-  }
-  
+  ASSERT(dir != NULL);
+    
   block_sector_t inode_sector = 0;
   int aux1 = dir_inumber(dir);
   int aux2 = 0;
@@ -69,10 +64,6 @@ filesys_create (struct dir * dir, const char *name, off_t initial_size)
     free_map_release (inode_sector, 1);
   }
   
-  if ( dir_needs_close ) {
-    dir_close (dir);
-  }
-
   return success;
 }
 
