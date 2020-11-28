@@ -360,8 +360,10 @@ bool dir_mkdir(const char * name) {
     if ( success ) { // fail if we find the dir in the current dir
       return false;
     }
-    block_sector_t sector;
+    block_sector_t sector = 0;
     free_map_allocate(1,&sector);
+    ASSERT(sector != 0);
+    printf("===tagiamies mkdir name %s sector %u\n",tokens.names[num_names-1],sector);
     const uint32_t some_sector_size = 16;
     block_sector_t prev_sector = inode_get_aux1(dir->inode);
     success = dir_create(sector,some_sector_size,prev_sector);

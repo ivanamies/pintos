@@ -150,7 +150,10 @@ int open_fd(const char * const full_name) {
   
   int needs_close = 0;
   struct dir * dir = get_dir_from_name(full_name,&needs_close,name);
-  struct file * file = filesys_open(dir, full_name); // I assume this is thread safe?
+  printf("fullname %s name %s dir inode %d\n",full_name,name,
+         inode_get_sector(dir_get_inode(dir)));
+  struct file * file = filesys_open(dir, name); // I assume this is thread safe?
+  printf("file %p\n",file);
   if ( needs_close ) {
     dir_close(dir);
   }
@@ -160,7 +163,7 @@ int open_fd(const char * const full_name) {
     return fd;
   }
   
-  fd = create_fd(full_name,file);
+  fd = create_fd(name,file);
   free(name);
   
   return fd;
@@ -475,7 +478,7 @@ syscall_handler (struct intr_frame *f UNUSED)
       name = (char *)calloc(name_len, 1);
       dir = get_dir_from_name(tmp_char_ptr,&needs_close,name);
       
-      success = filesys_create(dir, tmp_char_ptr,tmp_int);
+      success = filesys_create(dir, name,tmp_int);
       
       if ( needs_close ) {
         dir_close(dir);
@@ -496,7 +499,7 @@ syscall_handler (struct intr_frame *f UNUSED)
       name = (char *)calloc(name_len, 1);
       dir = get_dir_from_name(tmp_char_ptr,&needs_close,name);
       
-      success = filesys_remove(dir, tmp_char_ptr);
+      success = filesys_remove(dir, name);
       
       if ( needs_close ) {
         dir_close(dir);
@@ -577,6 +580,7 @@ syscall_handler (struct intr_frame *f UNUSED)
       return;
     }
     f->eax = dir_chdir(tmp_char_ptr);
+    printf("chdir tmp_char_ptr %s dir inode 3 %d\n",tmp_char_ptr,inode_get_sector(dir_get_inode(thread_get_cwd())));
   }
   else if ( syscall_no == SYS_MKDIR ) {
     tmp_char_ptr = (char *)user_args[0];    
