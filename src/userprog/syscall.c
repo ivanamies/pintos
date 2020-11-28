@@ -109,7 +109,7 @@ void destroy_fd(int pid) {
   lock_release(&fd_table_lock);
 }
 
-static int create_fd(const char * name, struct file * file) {
+static int create_fd(const char * name, struct file * file, struct dir * dir) {
   int fd;
   int fd_idx;
 
@@ -120,20 +120,22 @@ static int create_fd(const char * name, struct file * file) {
   else if ( strlen(name)+1 >= MAX_FILE_NAME_LEN) {
     return -1;
   }
-  
+
+  ASSERT((file != NULL && dir == NULL) ||
+         (file == NULL && dir != NULL));
+
   lock_acquire(&fd_table_lock);
 
   ASSERT ( empty_fd_idx < MAX_FILES );
   fd_idx = empty_fd_idx;
   ++empty_fd_idx;
-      
-  ASSERT( file != NULL );
   
   fd = fd_idx; // must start at 2
-  
+
   fd_table[fd_idx].fd = fd;
   strlcpy(fd_table[fd_idx].name,name,MAX_FILE_NAME_LEN);
   fd_table[fd_idx].file = file;
+  fd_table[fd_idx].dir = dir;
   fd_table[fd_idx].is_open = 1; // ONLY call from open_fd
   fd_table[fd_idx].pid = thread_pid();
   
@@ -149,24 +151,33 @@ int open_fd(const char * const full_name) {
   memset(name,0,name_len);
   
   int needs_close = 0;
-  struct dir * dir = get_dir_from_name(full_name,&needs_close,name);
-  if( dir == NULL ) {
-    free(name);
-    fd = -1;
-    return fd;
-  }
-  struct file * file = filesys_open(dir, name); // I assume this is thread safe?
-  /* printf("file %p\n",file); */
-  if ( needs_close ) {
-    dir_close(dir);
-  }
-  if ( file == NULL ) {
-    free(name);
-    fd = -1;
-    return fd;
-  }
+  struct dir * base_dir = get_dir_from_name(full_name,&needs_close,name);
+  struct file * file = NULL;
+  struct dir * dir = NULL;
+  struct inode * inode = NULL;
+  bool is_dir = filesys_isdir(base_dir,name,&inode);
   
-  fd = create_fd(name,file);
+  if( base_dir == NULL ) {
+    fd = -1;
+    goto open_fd_done;
+  }
+  if ( is_dir ) {
+    dir = dir_open(inode);
+  }
+  else {
+    file = filesys_open(base_dir, name); // I assume this is thread safe?
+    if ( file == NULL ) {
+      fd = -1;
+      goto open_fd_done;
+    }
+  }
+
+  fd = create_fd(name,file,dir);
+
+ open_fd_done:
+  if ( needs_close ) {
+    dir_close(base_dir);
+  }
   free(name);
   
   return fd;
@@ -176,7 +187,7 @@ static int fd_to_fd_idx_no_lock(int fd) {
   return fd;
 }
 
-static int is_valid_fd_entry_no_lock(int fd_idx) {
+static int is_valid_file_fd_entry_no_lock(int fd_idx) {
   if ( fd_idx == 0 || fd_idx == 1 || fd_idx >= empty_fd_idx ) {
     return 0;
   }
@@ -185,6 +196,7 @@ static int is_valid_fd_entry_no_lock(int fd_idx) {
             fd_table[fd_idx].pid != thread_pid() ) {
     return 0;
   }
+  ASSERT(fd_table[fd_idx].dir == NULL);
   return 1;
 }
 
@@ -192,7 +204,7 @@ static void close_fd(int fd) {
   lock_acquire(&fd_table_lock);
 
   int fd_idx = fd_to_fd_idx_no_lock(fd);
-  int ret = is_valid_fd_entry_no_lock(fd_idx);
+  int ret = is_valid_file_fd_entry_no_lock(fd_idx);
   if ( ret == 1 ) {
     ASSERT(fd_table[fd_idx].file != NULL);
     file_close(fd_table[fd_idx].file);
@@ -206,11 +218,14 @@ static void close_fd(int fd) {
 static int read_fd(int fd, void * p, unsigned sz) {
   lock_acquire(&fd_table_lock);
   int fd_idx = fd_to_fd_idx_no_lock(fd);
-  int ret = is_valid_fd_entry_no_lock(fd_idx);
+  int ret = is_valid_file_fd_entry_no_lock(fd_idx);
   if ( ret == 1 ) {
     ASSERT(fd_table[fd_idx].file != NULL);
     ASSERT(fd_table[fd_idx].pid == thread_pid());  
     ret = file_read(fd_table[fd_idx].file,p,sz);
+  }
+  else {
+    ret = -1;
   }
   lock_release(&fd_table_lock);
   return ret;
@@ -219,7 +234,7 @@ static int read_fd(int fd, void * p, unsigned sz) {
 static int filesize_fd(int fd) {
   lock_acquire(&fd_table_lock);
   int fd_idx = fd_to_fd_idx_no_lock(fd);
-  int ret = is_valid_fd_entry_no_lock(fd_idx);
+  int ret = is_valid_file_fd_entry_no_lock(fd_idx);
   if ( ret == 1 ) {
     ASSERT(fd_table[fd_idx].file != NULL);
     ASSERT(fd_table[fd_idx].pid == thread_pid());  
@@ -232,11 +247,14 @@ static int filesize_fd(int fd) {
 static int write_fd(int fd, void * p, unsigned sz) {
   lock_acquire(&fd_table_lock);
   int fd_idx = fd_to_fd_idx_no_lock(fd);
-  int ret = is_valid_fd_entry_no_lock(fd_idx);
+  int ret = is_valid_file_fd_entry_no_lock(fd_idx);
   if ( ret == 1 ) {
     ASSERT(fd_table[fd_idx].file != NULL);
     ASSERT(fd_table[fd_idx].pid == thread_pid());
     ret = file_write(fd_table[fd_idx].file,p,sz);
+  }
+  else {
+    ret = -1;
   }
   lock_release(&fd_table_lock);
   return ret;
@@ -245,7 +263,7 @@ static int write_fd(int fd, void * p, unsigned sz) {
 static void seek_fd(int fd, unsigned pos) {
   lock_acquire(&fd_table_lock);
   int fd_idx = fd_to_fd_idx_no_lock(fd);
-  int ret = is_valid_fd_entry_no_lock(fd_idx);
+  int ret = is_valid_file_fd_entry_no_lock(fd_idx);
   if ( ret == 1 ) {
     ASSERT(fd_table[fd_idx].file != NULL);
     ASSERT(fd_table[fd_idx].pid == thread_pid());
@@ -257,7 +275,7 @@ static void seek_fd(int fd, unsigned pos) {
 static int tell_fd(int fd) {
   lock_acquire(&fd_table_lock);
   int fd_idx = fd_to_fd_idx_no_lock(fd);
-  int ret = is_valid_fd_entry_no_lock(fd_idx);
+  int ret = is_valid_file_fd_entry_no_lock(fd_idx);
   if ( ret == 1 ) {
     ASSERT(fd_table[fd_idx].file != NULL);
     ASSERT(fd_table[fd_idx].pid == thread_pid());
@@ -270,7 +288,7 @@ static int tell_fd(int fd) {
 void deny_write_fd(int fd) {
   lock_acquire(&fd_table_lock);
   int fd_idx = fd_to_fd_idx_no_lock(fd);
-  int ret = is_valid_fd_entry_no_lock(fd_idx);
+  int ret = is_valid_file_fd_entry_no_lock(fd_idx);
   if ( ret == 1 ) {
     ASSERT(fd_table[fd_idx].file != NULL);
     ASSERT(fd_table[fd_idx].pid == thread_pid());
@@ -412,7 +430,6 @@ static int get_num_args(int syscall_no) {
 static void
 syscall_handler (struct intr_frame *f UNUSED) 
 {
-
   int fd;
   
   int tmp_int;
@@ -523,7 +540,7 @@ syscall_handler (struct intr_frame *f UNUSED)
     f->eax = success;
   }
   else if ( syscall_no == SYS_OPEN ) {
-    tmp_char_ptr = (char *)user_args[0];    
+    tmp_char_ptr = (char *)user_args[0];
     if ( check_user_ptr_with_terminate((void *)tmp_char_ptr /*file_name*/) ) {
       return;
     }

@@ -505,7 +505,12 @@ load (struct input_args * ia, void (**eip) (void), void **esp)
   t->pagedir = pagedir_create ();
   strlcpy(t->process_name,file_name,PROCESS_NAME_MAX_LENGTH);
   // set working directory to root
+  // WIP this should be set to the parent's cwd
+  //
   thread_set_cwd(dir_open_root());
+  //
+  //
+  //
   if (t->pagedir == NULL) {
     goto done;
   }

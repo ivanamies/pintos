@@ -81,7 +81,6 @@ filesys_open (struct dir * dir, const char *name)
   if (dir != NULL) {
     dir_lookup (dir, name, &inode);
   }
-  
   return file_open (inode);
 }
 
@@ -115,3 +114,23 @@ do_format (void)
   free_map_close ();
   printf ("done.\n");
 }
+
+bool filesys_isdir(struct dir * dir, const char * name, struct inode **inode_in) {
+  ASSERT(dir != NULL);
+
+  // for whatever reason, I cannot just pass in inode_in...
+  // I HAVE to do the *inode_in = inode garbage.
+  // this is like weird maybe(?) compiler bug #3(?) on this project.
+  // perhaps this is really stack corruption?
+  struct inode * inode;
+  dir_lookup (dir, name, &inode);
+
+  if ( inode != NULL ) {
+    *inode_in = inode;
+    return inode_is_dir(inode);
+  }
+  else {
+    return false;
+  }
+}
+

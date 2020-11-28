@@ -9,6 +9,7 @@
 #define ROOT_DIR_SECTOR 1       /* Root directory file inode sector. */
 
 struct dir;
+struct inode;
 
 /* Block device that contains the file system. */
 struct block *fs_device;
@@ -18,5 +19,6 @@ void filesys_done (void);
 bool filesys_create (struct dir * dir, const char *name, off_t initial_size);
 struct file *filesys_open (struct dir * dir, const char *name);
 bool filesys_remove (struct dir * dir, const char *name);
+bool filesys_isdir(struct dir * dir, const char * name, struct inode **inode);
 
 #endif /* filesys/filesys.h */
