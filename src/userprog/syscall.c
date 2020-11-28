@@ -150,8 +150,11 @@ int open_fd(const char * const full_name) {
   
   int needs_close = 0;
   struct dir * dir = get_dir_from_name(full_name,&needs_close,name);
-  /* printf("fullname %s name %s dir inode %d\n",full_name,name, */
-  /*        inode_get_sector(dir_get_inode(dir))); */
+  if( dir == NULL ) {
+    free(name);
+    fd = -1;
+    return fd;
+  }
   struct file * file = filesys_open(dir, name); // I assume this is thread safe?
   /* printf("file %p\n",file); */
   if ( needs_close ) {
@@ -285,6 +288,9 @@ syscall_init (void)
 struct dir * get_dir_from_name(const char * full_name, int * needs_close,
                                char * name) {
   tokenization_t tokens = tokenize_dir_name(full_name);
+  if ( tokens.error == 1 ) {
+    return NULL;
+  }
   ASSERT(tokens.num_names != 0);
   strlcpy(name,tokens.names[tokens.num_names-1],DIR_MAX_SUBNAME);
   if ( tokens.num_names == 1 ) {
@@ -477,11 +483,15 @@ syscall_handler (struct intr_frame *f UNUSED)
     else {
       name = (char *)calloc(name_len, 1);
       dir = get_dir_from_name(tmp_char_ptr,&needs_close,name);
+      if ( dir == NULL ) {
+        success = 0;
+      }
+      else {
+        success = filesys_create(dir, name,tmp_int);
       
-      success = filesys_create(dir, name,tmp_int);
-      
-      if ( needs_close ) {
-        dir_close(dir);
+        if ( needs_close ) {
+          dir_close(dir);
+        }
       }
       free(name);
     }    
@@ -498,11 +508,15 @@ syscall_handler (struct intr_frame *f UNUSED)
     else {
       name = (char *)calloc(name_len, 1);
       dir = get_dir_from_name(tmp_char_ptr,&needs_close,name);
+      if ( dir == NULL ) {
+        success = 0;
+      }
+      else {
+        success = filesys_remove(dir, name);
       
-      success = filesys_remove(dir, name);
-      
-      if ( needs_close ) {
-        dir_close(dir);
+        if ( needs_close ) {
+          dir_close(dir);
+        }
       }
       free(name);
     }

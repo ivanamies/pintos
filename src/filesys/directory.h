@@ -19,6 +19,7 @@ typedef struct tokenization {
   uint32_t num_names;
   char names[DIR_MAX_NAMES][DIR_MAX_SUBNAME + 1];
   int is_absolute_path;
+  int error;
 } tokenization_t;
 
 /* Opening and closing directories. */

@@ -249,7 +249,7 @@ tokenization_t tokenize_dir_name(const char * name) {
   if ( name[0] == '/' ) {
     tokens.is_absolute_path = 1;
   }
-  // asumme null terminated
+  // asume null terminated
   const uint32_t name_len = strlen(name)+1;
   char * name_copy = (char *)malloc(name_len);
   strlcpy(name_copy,name,name_len);
@@ -259,8 +259,11 @@ tokenization_t tokenize_dir_name(const char * name) {
   
   for ( token = strtok_r(name_copy, "/", &save_ptr); token != NULL;
         token = strtok_r(NULL, "/", &save_ptr) ) {
-    ASSERT(tokens.num_names < DIR_MAX_NAMES);
-    ASSERT(strlen(token) < DIR_MAX_SUBNAME);
+    if ( tokens.num_names >= DIR_MAX_NAMES ||
+         strlen(token) >= DIR_MAX_SUBNAME ) {
+      tokens.error = 1;
+      break;
+    }
     strlcpy(tokens.names[tokens.num_names],token,strlen(token)+1);
     ++tokens.num_names;
   }
@@ -333,6 +336,9 @@ struct dir * dir_get(tokenization_t * tokens) {
 
 bool dir_chdir(const char * name) {
   tokenization_t tokens = tokenize_dir_name(name);
+  if ( tokens.error == 1 ) {
+    return false;
+  }
   struct dir * dir = dir_get(&tokens);
   if ( dir == NULL ) {
     return false;
@@ -351,6 +357,9 @@ bool dir_mkdir(const char * name) {
     return false;
   }
   tokenization_t tokens = tokenize_dir_name(name);
+  if ( tokens.error == 1) {
+    return false;
+  }
   int num_names = tokens.num_names;
   tokens.num_names--;
   struct dir * dir = dir_get(&tokens);
