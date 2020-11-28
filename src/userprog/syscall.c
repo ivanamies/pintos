@@ -295,7 +295,6 @@ struct dir * get_dir_from_name(const char * full_name, int * needs_close,
   return dir;
 }
 
-
 static int check_user_ptr (void * p_) {
   const char * p = p_;
   int i;
@@ -466,9 +465,13 @@ syscall_handler (struct intr_frame *f UNUSED)
     if ( check_user_ptr_with_terminate((void *)tmp_char_ptr /*file_name*/) ) {
       return;
     }
-    dir = dir_open_root();
-    
-    success = filesys_create(dir, tmp_char_ptr,tmp_int);
+    else if ( strcmp(tmp_char_ptr,"") == 0 ) {
+      success = 0;
+    }
+    else {
+      dir = dir_open_root();
+      success = filesys_create(dir, tmp_char_ptr,tmp_int);
+    }    
     f->eax = success;
   }
   else if ( syscall_no == SYS_REMOVE ) {
@@ -476,14 +479,22 @@ syscall_handler (struct intr_frame *f UNUSED)
     if ( check_user_ptr_with_terminate((void *)tmp_char_ptr /*file_name*/) ) {
       return;
     }
-    dir = dir_open_root();
-    
-    f->eax = filesys_remove(dir, tmp_char_ptr);
+    else if ( strcmp(tmp_char_ptr,"") == 0 ) {
+      success = 0;
+    }
+    else {
+      dir = dir_open_root();
+      success = filesys_remove(dir, tmp_char_ptr);
+    }
+    f->eax = success;
   }
   else if ( syscall_no == SYS_OPEN ) {
     tmp_char_ptr = (char *)user_args[0];    
     if ( check_user_ptr_with_terminate((void *)tmp_char_ptr /*file_name*/) ) {
       return;
+    }
+    else if ( strcmp(tmp_char_ptr,"") == 0 ) {
+      fd = -1;
     }
     else {
       fd = open_fd(tmp_char_ptr);
