@@ -416,7 +416,10 @@ syscall_handler (struct intr_frame *f UNUSED)
   size_t word_size = sizeof(void *);
   char * esp = f->esp; // user's stack pointer
                        // cast to char * to have 1 byte type
-  struct dir * dir;
+  struct dir * dir = NULL;
+  int needs_close = 0;
+  const uint32_t name_len = DIR_MAX_SUBNAME + 1;
+  char * name = NULL;
   
   // verify that it's a good pointer
   if ( check_user_ptr_with_terminate(esp) ) {
@@ -469,8 +472,15 @@ syscall_handler (struct intr_frame *f UNUSED)
       success = 0;
     }
     else {
-      dir = dir_open_root();
+      name = (char *)calloc(name_len, 1);
+      dir = get_dir_from_name(tmp_char_ptr,&needs_close,name);
+      
       success = filesys_create(dir, tmp_char_ptr,tmp_int);
+      
+      if ( needs_close ) {
+        dir_close(dir);
+      }
+      free(name);
     }    
     f->eax = success;
   }
@@ -483,8 +493,15 @@ syscall_handler (struct intr_frame *f UNUSED)
       success = 0;
     }
     else {
-      dir = dir_open_root();
+      name = (char *)calloc(name_len, 1);
+      dir = get_dir_from_name(tmp_char_ptr,&needs_close,name);
+      
       success = filesys_remove(dir, tmp_char_ptr);
+      
+      if ( needs_close ) {
+        dir_close(dir);
+      }
+      free(name);
     }
     f->eax = success;
   }
