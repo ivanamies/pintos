@@ -27,7 +27,7 @@ static int check_user_ptr (void * p);
 
 #define MAX_PAGES_IN_FILE 8
 #define MAX_FILE_NAME_LEN 64
-#define MAX_FILES 4096
+#define MAX_FILES 2048
 #define MAX_ARGS_ON_USER_STACK 4
 
 static struct dir * get_dir_from_name(const char * full_name, int * needs_close,
@@ -38,6 +38,7 @@ typedef struct fd_file {
   char name[MAX_FILE_NAME_LEN];
   struct file * file;
   struct dir * dir;
+  int inumber;
   int is_open; // 0 if this fd is closed, 1 if this fd is open
   int pid; // pid of owning process
 } fd_file_t;
@@ -74,6 +75,7 @@ void init_fd_table(void) {
     fd_table[i].name[0] = 0;
     fd_table[i].file = NULL;
     fd_table[i].dir = NULL;
+    fd_table[i].inumber = -1;
     fd_table[i].is_open = 0;
     fd_table[i].pid = -1;
   }
@@ -93,6 +95,13 @@ static void clear_fd(struct fd_file * fd_file) {
     }
     fd_file->file = NULL;
   }
+  else if ( fd_file->dir != NULL ) {
+    if ( fd_file->is_open == 1 ) {
+      dir_close(fd_file->dir);
+    }
+    fd_file->dir = NULL;
+  }
+  fd_file->inumber = -1;
   fd_file->is_open = 0;
   fd_file->pid = -1;
 }
@@ -109,7 +118,7 @@ void destroy_fd(int pid) {
   lock_release(&fd_table_lock);
 }
 
-static int create_fd(const char * name, struct file * file, struct dir * dir) {
+static int create_fd_file(const char * name, struct file * file) {
   int fd;
   int fd_idx;
 
@@ -121,9 +130,8 @@ static int create_fd(const char * name, struct file * file, struct dir * dir) {
     return -1;
   }
 
-  ASSERT((file != NULL && dir == NULL) ||
-         (file == NULL && dir != NULL));
-
+  ASSERT(file != NULL);
+  
   lock_acquire(&fd_table_lock);
 
   ASSERT ( empty_fd_idx < MAX_FILES );
@@ -135,7 +143,35 @@ static int create_fd(const char * name, struct file * file, struct dir * dir) {
   fd_table[fd_idx].fd = fd;
   strlcpy(fd_table[fd_idx].name,name,MAX_FILE_NAME_LEN);
   fd_table[fd_idx].file = file;
+  fd_table[fd_idx].dir = NULL;
+  fd_table[fd_idx].inumber = file_inumber(file);
+  fd_table[fd_idx].is_open = 1; // ONLY call from open_fd
+  fd_table[fd_idx].pid = thread_pid();
+  
+  lock_release(&fd_table_lock);
+  
+  return fd;
+}
+
+static int create_fd_dir(struct dir * dir) {
+  int fd;
+  int fd_idx;
+
+  ASSERT ( dir != NULL );
+  
+  lock_acquire(&fd_table_lock);
+
+  ASSERT ( empty_fd_idx < MAX_FILES );
+  fd_idx = empty_fd_idx;
+  ++empty_fd_idx;
+  
+  fd = fd_idx; // must start at 2
+
+  fd_table[fd_idx].fd = fd;
+  strlcpy(fd_table[fd_idx].name,"its a dir",MAX_FILE_NAME_LEN);
+  fd_table[fd_idx].file = NULL;
   fd_table[fd_idx].dir = dir;
+  fd_table[fd_idx].inumber = dir_inumber(dir);
   fd_table[fd_idx].is_open = 1; // ONLY call from open_fd
   fd_table[fd_idx].pid = thread_pid();
   
@@ -163,6 +199,10 @@ int open_fd(const char * const full_name) {
   }
   if ( is_dir ) {
     dir = dir_open(inode);
+    if ( dir == NULL ) {
+      fd = -1;
+      goto open_fd_done;
+    }
   }
   else {
     file = filesys_open(base_dir, name); // I assume this is thread safe?
@@ -172,7 +212,12 @@ int open_fd(const char * const full_name) {
     }
   }
 
-  fd = create_fd(name,file,dir);
+  if ( dir != NULL ) {
+    fd = create_fd_dir(dir);
+  }
+  else if ( file != NULL) {
+    fd = create_fd_file(name,file);
+  }
 
  open_fd_done:
   if ( needs_close ) {
@@ -309,7 +354,6 @@ struct dir * get_dir_from_name(const char * full_name, int * needs_close,
   if ( tokens.error == 1 ) {
     return NULL;
   }
-  ASSERT(tokens.num_names != 0);
   strlcpy(name,tokens.names[tokens.num_names-1],DIR_MAX_SUBNAME);
   if ( tokens.num_names == 1 ) {
     *needs_close = 0;
@@ -611,7 +655,6 @@ syscall_handler (struct intr_frame *f UNUSED)
       return;
     }
     f->eax = dir_chdir(tmp_char_ptr);
-    /* printf("chdir tmp_char_ptr %s dir inode 3 %d\n",tmp_char_ptr,inode_get_sector(dir_get_inode(thread_get_cwd()))); */
   }
   else if ( syscall_no == SYS_MKDIR ) {
     tmp_char_ptr = (char *)user_args[0];    
