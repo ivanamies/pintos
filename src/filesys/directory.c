@@ -402,3 +402,18 @@ int dir_inumber(struct dir * dir) {
   ASSERT(dir != NULL);
   return inode_get_sector(dir_get_inode(dir));
 }
+
+// calling .. on / will give you /
+struct dir * dir_open_prev_dir(struct dir * dir) {
+  struct inode * inode = dir_get_inode(dir);
+  ASSERT(inode);
+  int prev_inode_sector = inode_get_aux2(inode);
+  ASSERT(prev_inode_sector >= ROOT_DIR_SECTOR);
+  struct inode * prev_inode = inode_open(prev_inode_sector);
+  ASSERT(prev_inode);
+  struct dir * prev_dir = dir_open(inode);
+  ASSERT(prev_dir);
+  
+  return prev_dir;
+}
+

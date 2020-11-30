@@ -30,6 +30,13 @@ static int check_user_ptr (void * p);
 #define MAX_FILES 2048
 #define MAX_ARGS_ON_USER_STACK 4
 
+static void halt(void) {
+  int j = 0;
+  while ( true ) {
+    ++j;
+  }
+}
+
 static struct dir * get_dir_from_name(const char * full_name, int * needs_close,
                                       char * name);
 
@@ -160,7 +167,7 @@ static int create_fd_dir(struct dir * dir) {
   ASSERT ( dir != NULL );
   
   lock_acquire(&fd_table_lock);
-
+  
   ASSERT ( empty_fd_idx < MAX_FILES );
   fd_idx = empty_fd_idx;
   ++empty_fd_idx;
@@ -182,6 +189,24 @@ static int create_fd_dir(struct dir * dir) {
 
 int open_fd(const char * const full_name) {
   int fd;
+  struct dir * dir = NULL;
+  if (strcmp(full_name,"/") == 0) {
+    dir = dir_open_root();
+    fd = create_fd_dir(dir);
+    return fd;
+  }
+  else if (strcmp(full_name,".") == 0){
+    dir = dir_reopen(thread_get_cwd());
+    fd = create_fd_dir(dir);
+    return fd;
+  }
+  else if (strcmp(full_name,"..") == 0) {
+    dir = dir_open_prev_dir(thread_get_cwd());
+    fd = create_fd_dir(dir);
+    return fd;
+  }
+  
+  // all other cases
   const uint32_t name_len = DIR_MAX_SUBNAME + 1;
   char * name = (char *)malloc(name_len);
   memset(name,0,name_len);
@@ -189,15 +214,21 @@ int open_fd(const char * const full_name) {
   int needs_close = 0;
   struct dir * base_dir = get_dir_from_name(full_name,&needs_close,name);
   struct file * file = NULL;
-  struct dir * dir = NULL;
   struct inode * inode = NULL;
   bool is_dir = filesys_isdir(base_dir,name,&inode);
-  
+
   if( base_dir == NULL ) {
     fd = -1;
     goto open_fd_done;
   }
   if ( is_dir ) {
+    /* printf("base_dir %p sector %u full_name %s name %s\n", */
+    /*        base_dir,inode_get_sector(dir_get_inode(dir)),full_name,name); */
+    /* printf("is dir %d inode %p inode sector %u\n",is_dir,inode, */
+    /*        inode_get_sector(inode)); */
+  
+
+    ASSERT(inode);
     dir = dir_open(inode);
     if ( dir == NULL ) {
       fd = -1;
@@ -242,6 +273,19 @@ static int is_valid_file_fd_entry_no_lock(int fd_idx) {
     return 0;
   }
   ASSERT(fd_table[fd_idx].dir == NULL);
+  return 1;
+}
+
+static int is_valid_dir_fd_entry_no_lock(int fd_idx) {
+  if ( fd_idx == 0 || fd_idx == 1 || fd_idx >= empty_fd_idx ) {
+    return 0;
+  }
+  else if ( fd_table[fd_idx].dir == NULL ||
+            fd_table[fd_idx].is_open == 0 ||
+            fd_table[fd_idx].pid != thread_pid() ) {
+    return 0;
+  }
+  ASSERT(fd_table[fd_idx].file == NULL);
   return 1;
 }
 
@@ -340,6 +384,73 @@ void deny_write_fd(int fd) {
     file_deny_write(fd_table[fd_idx].file);
   }
   lock_release(&fd_table_lock);
+}
+
+static int fd_isdir(int fd);
+
+static int fd_readdir(int fd, char * name) {
+  bool is_dir = fd_isdir(fd);
+  if ( !is_dir ) {
+    return 0;
+  }
+  lock_acquire(&fd_table_lock);
+  int fd_idx = fd_to_fd_idx_no_lock(fd);
+  int ret = is_valid_dir_fd_entry_no_lock(fd_idx);
+  /* printf("fd readdir\n"); */
+  /* printf("ret %d\n",ret); */
+  /* printf("fd %d fd_idx %d\n",fd,fd_idx); */
+  struct dir * dir;
+  if ( ret == 1 ) {
+    ASSERT(fd_table[fd_idx].dir != NULL);
+    ASSERT(fd_table[fd_idx].pid == thread_pid());
+    dir = fd_table[fd_idx].dir;
+    /* printf("dir %p sector %u\n",dir,inode_get_sector(dir_get_inode(dir))); */
+    ASSERT(dir != NULL);
+    ret = dir_readdir(dir, name); // ret is now success or fail
+    /* printf("name %s\n",name); */
+  }
+  lock_release(&fd_table_lock);
+  return ret;
+}
+
+int fd_isdir(int fd) {
+  lock_acquire(&fd_table_lock);
+  int fd_idx = fd_to_fd_idx_no_lock(fd);
+  int ret = is_valid_dir_fd_entry_no_lock(fd_idx);
+  lock_release(&fd_table_lock);
+  return ret;
+}
+
+static int fd_inumber(int fd) {
+  bool is_dir = fd_isdir(fd);
+  lock_acquire(&fd_table_lock);
+  int fd_idx = fd_to_fd_idx_no_lock(fd);
+  int ret = 0;
+  if ( is_dir ) {
+    ret = is_valid_dir_fd_entry_no_lock(fd_idx);
+    if ( ret ) {
+      struct dir * dir = fd_table[fd_idx].dir;
+      ASSERT(dir != NULL);
+      ret = inode_get_sector(dir_get_inode(dir));
+    }
+    else {
+      ret = -1;
+    }
+  }
+  else {
+    ret = is_valid_file_fd_entry_no_lock(fd_idx);
+    if ( ret ) {
+      struct file * file = fd_table[fd_idx].file;
+      ASSERT(file != NULL);
+      ret = inode_get_sector(file_get_inode(file));
+    }
+    else {
+      ret = -1;
+    }
+  }
+  lock_release(&fd_table_lock);
+  ASSERT(ret != 0);
+  return ret;
 }
 
 void
@@ -664,10 +775,20 @@ syscall_handler (struct intr_frame *f UNUSED)
     f->eax = dir_mkdir(tmp_char_ptr);
   }
   else if ( syscall_no == SYS_READDIR ) {
+    int fd = (int)user_args[0];
+    tmp_char_ptr = (char *)user_args[1];
+    if ( check_user_ptr_with_terminate((void *)tmp_char_ptr /*name*/) ) {
+      return;
+    }
+    f->eax = fd_readdir(fd,tmp_char_ptr);
   }
   else if ( syscall_no == SYS_ISDIR ) {
+    int fd = (int)user_args[0];
+    f->eax = fd_isdir(fd);
   }
   else if ( syscall_no == SYS_INUMBER ) {
+    int fd = (int)user_args[0];
+    f->eax = fd_inumber(fd);
   }
   else {
     printf("didn't get a project 2 sys call\n");

@@ -42,5 +42,6 @@ bool dir_mkdir(const char * name);
 int dir_inumber(struct dir *);
 tokenization_t tokenize_dir_name(const char * name);
 struct dir * dir_get(tokenization_t * tokens);
-
+struct dir * dir_open_prev_dir(struct dir * dir);
+  
 #endif /* filesys/directory.h */
