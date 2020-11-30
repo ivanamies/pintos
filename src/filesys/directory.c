@@ -404,7 +404,6 @@ int dir_inumber(struct dir * dir) {
 }
 
 bool dir_empty(struct dir * dir) {
-  ASSERT(false);
   const uint32_t name_len = NAME_MAX + 1;
   char * name = (char *)calloc(name_len,1);
   const uint32_t old_pos = dir->pos;

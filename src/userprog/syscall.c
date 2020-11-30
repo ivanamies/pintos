@@ -170,8 +170,8 @@ static bool check_dir_fd_open(struct dir * dir) {
       break;
     }
   }
-  return success;
   lock_release(&fd_table_lock);
+  return success;
 }
 
 static int fd_remove(const char * full_name) {
@@ -195,35 +195,41 @@ static int fd_remove(const char * full_name) {
     struct dir * base_dir = get_dir_from_name(full_name,&base_dir_needs_close,name);
     struct dir * dir = NULL;
     if ( base_dir == NULL ) {
-      goto fd_remove_else_cleanup;
+      goto fd_remove_cleanup;
     }
     struct inode * inode;
     success = dir_lookup(base_dir,name,&inode);
-    bool is_dir = inode_is_dir(inode);
-    dir = dir_open(inode);
-    ASSERT(dir);
+    if ( !success ) {
+      goto fd_remove_cleanup;
+    }
+    bool is_dir = inode_is_dir(inode);    
     if ( is_dir ) {
+      dir = dir_open(inode);
+      ASSERT(dir);
       // check if removing the current directory
       if ( dir_is_same(dir,thread_get_cwd()) ) {
-        goto fd_remove_else_cleanup;
+        success = false;
+        goto fd_remove_cleanup;
       }
       // check if removing a directory that has something in it
       else if ( !dir_empty(dir) ) {
-        goto fd_remove_else_cleanup;        
+        success = false;
+        goto fd_remove_cleanup;        
       }
       // check if removing an open directory
-      else if ( !check_dir_fd_open(dir) ) {
-        goto fd_remove_else_cleanup;        
+      else if ( check_dir_fd_open(dir) ) {
+        success = false;
+        goto fd_remove_cleanup;        
       }
       else {
         success = filesys_remove(dir,name);
-      }
+      }      
     }
     else {
       // try to remove if a file
       success = filesys_remove(base_dir,name);
     }
-  fd_remove_else_cleanup:
+  fd_remove_cleanup:
     if ( dir ) {
       dir_close(dir);
     }
