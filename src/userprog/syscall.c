@@ -221,7 +221,7 @@ static int fd_remove(const char * full_name) {
     }
     else {
       // try to remove if a file
-      success = filesys_remove(dir,name);
+      success = filesys_remove(base_dir,name);
     }
   fd_remove_else_cleanup:
     if ( dir ) {
