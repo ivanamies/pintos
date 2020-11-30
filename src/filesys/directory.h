@@ -40,6 +40,8 @@ bool dir_readdir (struct dir *, char name[NAME_MAX + 1]);
 bool dir_chdir(const char * name);
 bool dir_mkdir(const char * name);
 int dir_inumber(struct dir *);
+bool dir_empty(struct dir * dir);
+bool dir_is_same(struct dir * dir1, struct dir * dir2 );
 tokenization_t tokenize_dir_name(const char * name);
 struct dir * dir_get(tokenization_t * tokens);
 struct dir * dir_open_prev_dir(struct dir * dir);

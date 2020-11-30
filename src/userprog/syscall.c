@@ -160,6 +160,81 @@ static int create_fd_file(const char * name, struct file * file) {
   return fd;
 }
 
+static bool check_dir_fd_open(struct dir * dir) {
+  int inumber = dir_inumber(dir);
+  lock_acquire(&fd_table_lock);
+  bool success = false;
+  for ( int i = 0; i < MAX_FILES; ++i ) {
+    if ( fd_table[i].inumber == inumber && fd_table[i].is_open ) {
+      success = true;
+      break;
+    }
+  }
+  return success;
+  lock_release(&fd_table_lock);
+}
+
+static int fd_remove(const char * full_name) {
+  if ( strcmp(full_name,"") == 0 ) {
+    return 0;
+  }
+  else if ( strcmp(full_name, "/") == 0 ) {
+    return 0;
+  }
+  else if ( strcmp(full_name, ".") == 0 ) {
+    return 0;
+  }
+  else if ( strcmp(full_name, "..") == 0 ) {
+    return 0;
+  }
+  else {
+    const uint32_t name_len = NAME_MAX + 1;
+    char * name = (char *)calloc(name_len, 1);
+    int base_dir_needs_close = 0;
+    bool success = false;
+    struct dir * base_dir = get_dir_from_name(full_name,&base_dir_needs_close,name);
+    struct dir * dir = NULL;
+    if ( base_dir == NULL ) {
+      goto fd_remove_else_cleanup;
+    }
+    struct inode * inode;
+    success = dir_lookup(base_dir,name,&inode);
+    bool is_dir = inode_is_dir(inode);
+    dir = dir_open(inode);
+    ASSERT(dir);
+    if ( is_dir ) {
+      // check if removing the current directory
+      if ( dir_is_same(dir,thread_get_cwd()) ) {
+        goto fd_remove_else_cleanup;
+      }
+      // check if removing a directory that has something in it
+      else if ( !dir_empty(dir) ) {
+        goto fd_remove_else_cleanup;        
+      }
+      // check if removing an open directory
+      else if ( !check_dir_fd_open(dir) ) {
+        goto fd_remove_else_cleanup;        
+      }
+      else {
+        success = filesys_remove(dir,name);
+      }
+    }
+    else {
+      // try to remove if a file
+      success = filesys_remove(dir,name);
+    }
+  fd_remove_else_cleanup:
+    if ( dir ) {
+      dir_close(dir);
+    }
+    if ( base_dir_needs_close ) {
+      dir_close(base_dir);
+    }
+    free(name);
+    return success;
+  }      
+}
+
 static int create_fd_dir(struct dir * dir) {
   int fd;
   int fd_idx;
@@ -674,25 +749,7 @@ syscall_handler (struct intr_frame *f UNUSED)
     if ( check_user_ptr_with_terminate((void *)tmp_char_ptr /*file_name*/) ) {
       return;
     }
-    else if ( strcmp(tmp_char_ptr,"") == 0 ) {
-      success = 0;
-    }
-    else {
-      name = (char *)calloc(name_len, 1);
-      dir = get_dir_from_name(tmp_char_ptr,&needs_close,name);
-      if ( dir == NULL ) {
-        success = 0;
-      }
-      else {
-        success = filesys_remove(dir, name);
-      
-        if ( needs_close ) {
-          dir_close(dir);
-        }
-      }
-      free(name);
-    }
-    f->eax = success;
+    f->eax = fd_remove(tmp_char_ptr);
   }
   else if ( syscall_no == SYS_OPEN ) {
     tmp_char_ptr = (char *)user_args[0];

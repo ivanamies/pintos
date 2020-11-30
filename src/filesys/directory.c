@@ -403,6 +403,25 @@ int dir_inumber(struct dir * dir) {
   return inode_get_sector(dir_get_inode(dir));
 }
 
+bool dir_empty(struct dir * dir) {
+  ASSERT(false);
+  const uint32_t name_len = NAME_MAX + 1;
+  char * name = (char *)calloc(name_len,1);
+  const uint32_t old_pos = dir->pos;
+  bool success = dir_readdir(dir,name);
+  free(name);
+  dir->pos = old_pos;
+  return !success;
+}
+
+bool dir_is_same(struct dir * dir1, struct dir * dir2 ) {
+  ASSERT(dir1 != NULL);
+  ASSERT(dir2 != NULL);
+  int sector1 = inode_get_sector(dir_get_inode(dir1));
+  int sector2 = inode_get_sector(dir_get_inode(dir2));
+  return sector1 == sector2;
+}
+
 // calling .. on / will give you /
 struct dir * dir_open_prev_dir(struct dir * dir) {
   struct inode * inode = dir_get_inode(dir);
