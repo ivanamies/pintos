@@ -781,7 +781,12 @@ syscall_handler (struct intr_frame *f UNUSED)
   }
   else if ( syscall_no == SYS_FILESIZE ) {
     int fd = (int)user_args[0];
-    f->eax = filesize_fd(fd);
+    if ( fd < 0 || fd >= MAX_FILES ) {
+      f->eax = 0;
+    }
+    else {
+      f->eax = filesize_fd(fd);
+    }
   }
   else if ( syscall_no == SYS_READ ) {
     int fd = (int)user_args[0];
@@ -801,6 +806,9 @@ syscall_handler (struct intr_frame *f UNUSED)
       }
       f->eax = sz;
     }
+    else if ( fd < 0 || fd >= MAX_FILES ) {
+      f->eax = 0;
+    }
     else {
       f->eax = read_fd(fd,p,sz);
     }
@@ -815,6 +823,9 @@ syscall_handler (struct intr_frame *f UNUSED)
     if ( fd == 1 ) {
       putbuf(p,size);
     }
+    else if ( fd < 0 || fd >= MAX_FILES ) {
+      f->eax = 0;
+    }
     else {
       f->eax = write_fd(fd,p,size);
     }
@@ -822,15 +833,30 @@ syscall_handler (struct intr_frame *f UNUSED)
   else if ( syscall_no == SYS_SEEK ) {
     int fd = (int)user_args[0];
     unsigned pos = (unsigned)user_args[1];
-    seek_fd(fd,pos);
+    if (fd < 0 || fd >= MAX_FILES ) {
+      f->eax = 0;
+    }
+    else {
+      seek_fd(fd,pos);
+    }
   }
   else if ( syscall_no == SYS_TELL ) {
     int fd = (int)user_args[0];
-    f->eax = tell_fd(fd);
+    if (fd < 0 || fd >= MAX_FILES ) {
+      f->eax = 0;
+    }
+    else {
+      f->eax = tell_fd(fd);
+    }
   }
   else if ( syscall_no == SYS_CLOSE ) {
     int fd = (int)user_args[0];
-    close_fd(fd);
+    if (fd < 0 || fd >= MAX_FILES ) {
+      f->eax = 0;
+    }
+    else {
+      close_fd(fd);
+    }
   }
   else if ( syscall_no == SYS_CHDIR ) {
     tmp_char_ptr = (char *)user_args[0];    
@@ -852,15 +878,30 @@ syscall_handler (struct intr_frame *f UNUSED)
     if ( check_user_ptr_with_terminate((void *)tmp_char_ptr /*name*/) ) {
       return;
     }
-    f->eax = fd_readdir(fd,tmp_char_ptr);
+    if (fd < 0 || fd >= MAX_FILES ) {
+      f->eax = 0;
+    }
+    else {
+      f->eax = fd_readdir(fd,tmp_char_ptr);
+    }
   }
   else if ( syscall_no == SYS_ISDIR ) {
     int fd = (int)user_args[0];
-    f->eax = fd_isdir(fd);
+    if (fd < 0 || fd >= MAX_FILES ) {
+      f->eax = 0;
+    }
+    else {
+      f->eax = fd_isdir(fd);
+    }
   }
   else if ( syscall_no == SYS_INUMBER ) {
     int fd = (int)user_args[0];
-    f->eax = fd_inumber(fd);
+    if (fd < 0 || fd >= MAX_FILES ) {
+      f->eax = 0;
+    }
+    else {
+      f->eax = fd_inumber(fd);
+    }
   }
   else {
     printf("didn't get a project 2 sys call\n");
