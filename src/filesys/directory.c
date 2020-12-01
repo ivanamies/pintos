@@ -132,14 +132,8 @@ dir_lookup (const struct dir *dir, const char *name,
   ASSERT (dir != NULL);
   ASSERT (name != NULL);
 
-  /* printf("1\n"); */
-  bool lookup_success = lookup (dir, name, &e, NULL);
-  /* printf("2\n"); */
-  if (lookup_success) {
-    /* printf("3\n"); */
+  if (lookup (dir, name, &e, NULL))
     *inode = inode_open (e.inode_sector);
-    /* printf("4\n"); */
-  }
   else
     *inode = NULL;
 
@@ -266,7 +260,7 @@ tokenization_t tokenize_dir_name(const char * name) {
   for ( token = strtok_r(name_copy, "/", &save_ptr); token != NULL;
         token = strtok_r(NULL, "/", &save_ptr) ) {
     if ( tokens.num_names >= DIR_MAX_NAMES ||
-         strlen(token) >= NAME_MAX+1 ) {
+         strlen(token) >= DIR_MAX_SUBNAME ) {
       tokens.error = 1;
       break;
     }
