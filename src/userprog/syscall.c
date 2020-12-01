@@ -202,7 +202,7 @@ static int fd_remove(const char * full_name) {
     if ( !success ) {
       goto fd_remove_cleanup;
     }
-    bool is_dir = inode_is_dir(inode);    
+    bool is_dir = inode_is_dir(inode);
     if ( is_dir ) {
       dir = dir_open(inode);
       ASSERT(dir);
@@ -217,12 +217,18 @@ static int fd_remove(const char * full_name) {
         goto fd_remove_cleanup;        
       }
       // check if removing an open directory
+      // for some reason this isn't being hit in dir-rm-tree ??
       else if ( check_dir_fd_open(dir) ) {
         success = false;
         goto fd_remove_cleanup;        
       }
       else {
-        success = filesys_remove(dir,name);
+        success = filesys_remove(base_dir,name);
+        /* int j = 0; */
+        /* while ( j < 3000 ) { */
+        /*   ++j; */
+        /* } */
+        
       }      
     }
     else {
@@ -294,14 +300,15 @@ int open_fd(const char * const full_name) {
   
   int needs_close = 0;
   struct dir * base_dir = get_dir_from_name(full_name,&needs_close,name);
+    if( base_dir == NULL ) {
+    fd = -1;
+    goto open_fd_done;
+  }
+
   struct file * file = NULL;
   struct inode * inode = NULL;
   bool is_dir = filesys_isdir(base_dir,name,&inode);
 
-  if( base_dir == NULL ) {
-    fd = -1;
-    goto open_fd_done;
-  }
   if ( is_dir ) {
     /* printf("base_dir %p sector %u full_name %s name %s\n", */
     /*        base_dir,inode_get_sector(dir_get_inode(dir)),full_name,name); */
