@@ -6,6 +6,14 @@
 #include "userprog/process.h"
 #include "threads/thread.h"
 
+static void halt(void) {
+  int j = 0;
+  while ( true ) {
+    ++j;
+  }
+}
+
+
 /* Number of page faults processed. */
 static long long page_fault_cnt;
 
@@ -72,6 +80,7 @@ exception_print_stats (void)
 static void
 kill (struct intr_frame *f) 
 {
+  halt();
   /* This interrupt is one (probably) caused by a user process.
      For example, the process might have tried to access unmapped
      virtual memory (a page fault).  For now, we simply kill the

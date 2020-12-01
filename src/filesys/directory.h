@@ -10,14 +10,13 @@
    After directories are implemented, this maximum length may be
    retained, but much longer full path names must be allowed. */
 #define NAME_MAX 30
-#define DIR_MAX_SUBNAME NAME_MAX
 #define DIR_MAX_NAMES 16
 
 struct inode;
 
 typedef struct tokenization {
   uint32_t num_names;
-  char names[DIR_MAX_NAMES][DIR_MAX_SUBNAME + 1];
+  char names[DIR_MAX_NAMES][NAME_MAX + 1];
   int is_absolute_path;
   int error;
 } tokenization_t;

@@ -192,7 +192,7 @@ typedef struct stack_allocator {
 } stack_allocator_t;
 
 stack_allocator_t kernel_mem, user_mem;
-int stack_allocator_max_pages = 256; // you probably can't add more stuff here
+int stack_allocator_max_pages = 200; // you probably can't add more stuff here
 
 void stack_allocator_init() {  
   lock_init(&kernel_mem.lk);

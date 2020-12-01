@@ -292,9 +292,11 @@ int open_fd(const char * const full_name) {
     fd = create_fd_dir(dir);
     return fd;
   }
+
+  /* printf("===ta open fd 1\n"); */
   
   // all other cases
-  const uint32_t name_len = DIR_MAX_SUBNAME + 1;
+  const uint32_t name_len = NAME_MAX + 1;
   char * name = (char *)malloc(name_len);
   memset(name,0,name_len);
   
@@ -304,11 +306,11 @@ int open_fd(const char * const full_name) {
     fd = -1;
     goto open_fd_done;
   }
-
+    /* printf("===ta open fd 2\n"); */
   struct file * file = NULL;
   struct inode * inode = NULL;
   bool is_dir = filesys_isdir(base_dir,name,&inode);
-
+  /* printf("===ta open fd 3\n"); */
   if ( is_dir ) {
     /* printf("base_dir %p sector %u full_name %s name %s\n", */
     /*        base_dir,inode_get_sector(dir_get_inode(dir)),full_name,name); */
@@ -324,7 +326,9 @@ int open_fd(const char * const full_name) {
     }
   }
   else {
+    /* printf("===ta open fd 4\n"); */
     file = filesys_open(base_dir, name); // I assume this is thread safe?
+    /* printf("===ta open fd 5\n"); */
     if ( file == NULL ) {
       fd = -1;
       goto open_fd_done;
@@ -335,7 +339,9 @@ int open_fd(const char * const full_name) {
     fd = create_fd_dir(dir);
   }
   else if ( file != NULL) {
+    /* printf("===ta open fd 6\n"); */
     fd = create_fd_file(name,file);
+    /* printf("===ta open fd 7\n"); */
   }
 
  open_fd_done:
@@ -344,6 +350,8 @@ int open_fd(const char * const full_name) {
   }
   free(name);
   
+  /* printf("===ta open fd 8\n"); */
+    
   return fd;
 }
 
@@ -549,11 +557,13 @@ syscall_init (void)
 
 struct dir * get_dir_from_name(const char * full_name, int * needs_close,
                                char * name) {
+  printf("===ta getdirname 1\n");
   tokenization_t tokens = tokenize_dir_name(full_name);
+  printf("===ta getdirname 2\n");
   if ( tokens.error == 1 ) {
     return NULL;
   }
-  strlcpy(name,tokens.names[tokens.num_names-1],DIR_MAX_SUBNAME);
+  strlcpy(name,tokens.names[tokens.num_names-1],NAME_MAX + 1);
   if ( tokens.num_names == 1 ) {
     *needs_close = 0;
   }
@@ -561,7 +571,9 @@ struct dir * get_dir_from_name(const char * full_name, int * needs_close,
     *needs_close = 1;
   }
   tokens.num_names--;
+  printf("===ta getdirname 3\n");
   struct dir * dir = dir_get(&tokens);  
+  printf("===ta getdirname 4\n");
   return dir;
 }
 
@@ -672,7 +684,7 @@ static int get_num_args(int syscall_no) {
 
 static void
 syscall_handler (struct intr_frame *f UNUSED) 
-{
+{  
   int fd;
   
   int tmp_int;
@@ -687,7 +699,7 @@ syscall_handler (struct intr_frame *f UNUSED)
                        // cast to char * to have 1 byte type
   struct dir * dir = NULL;
   int needs_close = 0;
-  const uint32_t name_len = DIR_MAX_SUBNAME + 1;
+  const uint32_t name_len = NAME_MAX + 1;
   char * name = NULL;
   
   // verify that it's a good pointer
@@ -731,6 +743,7 @@ syscall_handler (struct intr_frame *f UNUSED)
     f->eax = process_wait((int)user_args[0]);
   }
   else if ( syscall_no == SYS_CREATE ) {
+    printf("===ta sys call create 1\n");
     tmp_char_ptr = (char *)user_args[0];
     tmp_int = (int)user_args[1];
     
@@ -742,12 +755,16 @@ syscall_handler (struct intr_frame *f UNUSED)
     }
     else {
       name = (char *)calloc(name_len, 1);
+      printf("===ta sys call create 2\n");
       dir = get_dir_from_name(tmp_char_ptr,&needs_close,name);
+      printf("===ta sys call create 3\n");
       if ( dir == NULL ) {
         success = 0;
       }
       else {
+        printf("===ta sys call create 4\n");
         success = filesys_create(dir, name,tmp_int);
+        printf("===ta sys call create 5\n");
       
         if ( needs_close ) {
           dir_close(dir);
@@ -765,6 +782,7 @@ syscall_handler (struct intr_frame *f UNUSED)
     f->eax = fd_remove(tmp_char_ptr);
   }
   else if ( syscall_no == SYS_OPEN ) {
+    printf("===ta sys call open\n");
     tmp_char_ptr = (char *)user_args[0];
     if ( check_user_ptr_with_terminate((void *)tmp_char_ptr /*file_name*/) ) {
       return;
@@ -861,7 +879,7 @@ syscall_handler (struct intr_frame *f UNUSED)
     f->eax = fd_inumber(fd);
   }
   else {
-    printf("didn't get a project 2 sys call\n");
+    printf("didn't get a project 2 or 4 sys call\n");
     ASSERT(false);
     process_terminate(PROCESS_KILLED,-1);
   }  

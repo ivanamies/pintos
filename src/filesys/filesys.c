@@ -56,15 +56,20 @@ filesys_create (struct dir * dir, const char *name, off_t initial_size)
   block_sector_t inode_sector = 0;
   int aux1 = dir_inumber(dir);
   int aux2 = 0;
-  bool success = (dir != NULL
-                  && free_map_allocate (1, &inode_sector)
-                  && inode_create (inode_sector, initial_size, aux1, aux2)
-                  && dir_add (dir, name, inode_sector));
-  if (!success && inode_sector != 0) {
+  bool success1 = dir != NULL;
+  printf("===ta fc 1\n");
+  bool success2 = success1 && free_map_allocate (1, &inode_sector);
+  printf("===ta fc 2\n");
+  bool success3 = success2 && inode_create (inode_sector, initial_size, aux1, aux2);
+  printf("===ta fc 3\n");
+  bool success4 = success3 && dir_add (dir, name, inode_sector);
+  printf("===ta fc 4\n");
+
+  if (!success4 && inode_sector != 0) {
     free_map_release (inode_sector, 1);
   }
   
-  return success;
+  return success4;
 }
 
 /* Opens the file with the given NAME.
@@ -77,10 +82,11 @@ filesys_open (struct dir * dir, const char *name)
 {
   ASSERT(dir != NULL);
   struct inode *inode = NULL;
-
+  /* printf("===ta filesys open 1\n"); */
   if (dir != NULL) {
     dir_lookup (dir, name, &inode);
   }
+  /* printf("===ta filesys open 2\n"); */
   return file_open (inode);
 }
 

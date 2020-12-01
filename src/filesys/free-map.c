@@ -2,6 +2,8 @@
 #include <bitmap.h>
 #include <debug.h>
 
+#include <stdio.h>
+
 #include "threads/thread.h"
 
 #include "filesys/directory.h"
@@ -23,6 +25,13 @@ free_map_init (void)
   bitmap_mark (free_map, ROOT_DIR_SECTOR);
 }
 
+static void halt(void) {
+  int j = 0;
+  while ( true ) {
+    ++j;
+  }
+}
+
 /* Allocates CNT consecutive sectors from the free map and stores
    the first into *SECTORP.
    Returns true if successful, false if not enough consecutive
@@ -39,8 +48,15 @@ free_map_allocate (size_t cnt, block_sector_t *sectorp)
       bitmap_set_multiple (free_map, sector, cnt, false); 
       sector = BITMAP_ERROR;
     }
-  if (sector != BITMAP_ERROR)
+  if (sector != BITMAP_ERROR) {
     *sectorp = sector;
+  }
+
+  if ( sector == BITMAP_ERROR ) {
+    printf("free map allocate failed\n");
+    halt();
+  }
+  
   return sector != BITMAP_ERROR;
 }
 
