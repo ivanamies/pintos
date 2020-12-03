@@ -397,8 +397,8 @@ void cache_block_action(block_sector_t target, void * buffer,
   cache_data_t * cache_data;
   rw_lock_t * rw_lock;
   size_t to_evict;
-  uint8_t * src = NULL;
-  uint8_t * dst = NULL;
+  void * src = NULL;
+  void * dst = NULL;
   bool success;
 
   // printf("thread %p target %zu cache block action enter\n",thread_current(),target);
@@ -448,10 +448,6 @@ void cache_block_action(block_sector_t target, void * buffer,
     cache_entry = &cache.cache_entries[to_evict];
     rw_lock = &cache_entry->rw_lock;
     
-    if ( cache_entry->sector == 329 ) {
-      printf("thread %p target %zu evicted entry with sector 329\n",thread_current(),target);
-    }
-    
     // check that target entry wasn't inserted
     // this will do cache_entry->sector = target;
     success = cache_block_replace(to_evict,target);
@@ -494,38 +490,8 @@ void cache_block_read(struct block * block, block_sector_t target, void * buffer
   // printf("thread %p cache block read target %u buffer %p\n",thread_current(),target,buffer);
   /* print_cache(); */
   ASSERT(block == cache.block);
-  //
-  //
-  if ( target == 329 || target +1 == 329 ) {
-    printf("cache read %zu\n",target);
-    printf("cache request read ahead %zu\n",target+1);
-  }
-  /* if ( target >= 320 || target <= 330 ) { */
-  /*   uint8_t * also_buffer = (void *)malloc(512); */
-  /*   uint32_t buffer_sum = 0; */
-  /*   for ( int i = 0; i < chunk_size; ++i ) { */
-  /*     buffer_sum += also_buffer[i]; */
-  /*   } */
-  /*   printf("cache write sector %d with sum %u\n",target,buffer_sum); */
-  /* } */
-  /* bool should_skip = target+1 == 323; */
-  bool should_skip = false;
-  // for some reason reading ahead sector 323 fucks up the cache...
-  // it's sector 329 that is incorrectly written
-  if ( !should_skip ){
-    cache_request_read_ahead(target+1);
-  }
+  cache_request_read_ahead(target+1);
   cache_block_action(target,buffer,sector_ofs,chunk_size,0 /*read*/);
-  // block_read(block,target,buffer);
-  // cache_request_read_ahead_wait(request);
-  
-  // cache_read_ahead_async(target+1);
-  // debug code
-  // block_read(block,target,&random_buffer);
-  /* int err = memcmp(buffer,random_buffer,BLOCK_SECTOR_SIZE); */
-  /* ASSERT(err == 0); */
-
-  // printf("thread %p cache block read end target %u buffer %p contents %zu\n",thread_current(),target,buffer,res);
 }
 
 void cache_block_write(struct block * block, block_sector_t target, void * buffer, size_t sector_ofs, size_t chunk_size) {
@@ -535,16 +501,6 @@ void cache_block_write(struct block * block, block_sector_t target, void * buffe
   ASSERT(block == cache.block);
   ASSERT(buffer != NULL);
 
-  if ( target == 329 ) {
-    uint8_t * also_buffer = buffer;
-    uint32_t buffer_sum = 0;
-    for ( int i = 0; i < chunk_size; ++i ) {
-      buffer_sum += also_buffer[i];
-    }
-    printf("thread %p cache write sector %d ofs %zu size %zu with sum %u\n",thread_current(),target,sector_ofs,chunk_size,buffer_sum);
-  }
   cache_block_action(target,buffer,sector_ofs,chunk_size,1 /*write*/);
 
-  /* // debug code */
-  // block_write(block,target,buffer);
 }
