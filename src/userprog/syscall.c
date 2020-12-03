@@ -386,6 +386,7 @@ static void close_fd(int fd) {
   int ret = is_valid_file_fd_entry_no_lock(fd_idx);
   if ( ret == 1 ) {
     ASSERT(fd_table[fd_idx].file != NULL);
+    printf("close_fd\n");
     file_close(fd_table[fd_idx].file);
     fd_table[fd_idx].fd = -1;
     fd_table[fd_idx].is_open = 0;
@@ -430,7 +431,9 @@ static int write_fd(int fd, void * p, unsigned sz) {
   if ( ret == 1 ) {
     ASSERT(fd_table[fd_idx].file != NULL);
     ASSERT(fd_table[fd_idx].pid == thread_pid());
+    printf("write_fd 1\n");
     ret = file_write(fd_table[fd_idx].file,p,sz);
+    printf("write_fd 2\n");
   }
   else {
     ret = -1;

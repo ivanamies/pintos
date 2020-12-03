@@ -135,6 +135,8 @@ static void inode_disk_offset_to_block(struct inode_disk * inode_disk, inode_dir
   memset(double_indirect_block,0,sizeof(inode_indirect_block_disk_t));
   int old_sector;
   
+  // printf("direct nodes\n");
+  
   // offset / ( 8 * 512 )
   // want which direct block this offset points to
   int idx = offset / ( DIRECT_BLOCK_DISK_MAX_MANAGED_LENGTH * BLOCK_SECTOR_SIZE);
@@ -149,7 +151,7 @@ static void inode_disk_offset_to_block(struct inode_disk * inode_disk, inode_dir
     free(double_indirect_block);
     return;
   }
-  
+    
   // go into indirect blocks
   idx -= INDIRECT_BLOCK_DISK_IDX;
   // number of direct blocks managed per indirect inode, 127
@@ -183,7 +185,7 @@ static void inode_disk_offset_to_block(struct inode_disk * inode_disk, inode_dir
     free(double_indirect_block);
     return;
   }
-  
+    
   // go into double indirect blocks
   idx -= max_blocks_managed1;
   // number of blocks managed per double indirect node, 127 x 127 
@@ -473,6 +475,8 @@ inode_close (struct inode *inode)
   // does not actually write to disk
   cache_block_write(fs_device, inode->sector,&inode->data,0, BLOCK_SECTOR_SIZE);
 
+  printf("inode close %d\n",inode->sector);
+  
   /* Release resources if this was the last opener. */
   if (--inode->open_cnt == 0)
     {
@@ -486,6 +490,7 @@ inode_close (struct inode *inode)
       /* Deallocate blocks if removed. */
       if (inode->removed) 
         {
+          printf("inode dealloc %d\n");
           inode_dealloc(inode);
         }
       rw_lock_write_release(&inode->rw_lock);
@@ -587,30 +592,63 @@ static void inode_extend(struct inode * inode, off_t end) {
 
 /* Writes SIZE bytes from BUFFER into INODE, starting at OFFSET.
    Returns the number of bytes actually written, which may be
-   less than SIZE if end of file is reached or an error occurs.
-   (Normally a write at end of file would extend the inode, but
-   growth is not yet implemented.) */
+   less than SIZE if end of file is reached or an error occurs. */
 off_t
 inode_write_at(struct inode *inode, void *buffer_, off_t size,
                off_t offset) 
-{  
+{
+  //////////////////////
+  int orig_size = size;
+  int orig_offset = offset;
+  //////////////////////
+  
   const uint8_t *buffer = (const uint8_t *)buffer_;
   off_t bytes_written = 0;
-
-  rw_lock_write_acquire(&inode->rw_lock);
+    
+  /* rw_lock_write_acquire(&inode->rw_lock); */
   if (inode->deny_write_cnt) {
-    rw_lock_write_release(&inode->rw_lock);
+    /* rw_lock_write_release(&inode->rw_lock); */
     return 0;
   }
+
   
+  if ( orig_size == 840 ) {
+    uint8_t * buffer_copy = malloc(90);
+    inode_read_at(inode, buffer_copy, 90, 3270);
+    size_t buffer_copy_sum = 0;
+    for ( int i = 0; i < 90; ++i ) {
+      buffer_copy_sum += buffer_copy[i];
+    }
+    free(buffer_copy);
+    printf("buffer_copy_sum at sz 90 offset 3270 1: %zu\n",buffer_copy_sum);
+  }
+
   const off_t max_size = 8 << 20; // 8 MB
   const off_t clamped_size = offset + size < max_size ? offset + size : max_size;
   
   if ( inode_length_no_lock(inode) < clamped_size ) {
     inode_extend(inode, clamped_size);
   }
-  
-  while (size > 0) {    
+
+  // uncommenting this will somehow make the error go away...
+  /* if ( orig_size == 840 ) { */
+  /*   uint8_t * buffer_copy = malloc(orig_size); */
+  /*   inode_read_at(inode, buffer_copy, 840, 2520); */
+  /*   size_t buffer_copy_sum = 0; */
+  /*   for ( int i = 0; i < orig_size; ++i ) { */
+  /*     buffer_copy_sum += buffer_copy[i]; */
+  /*   } */
+  /*   printf("buffer_copy_sum at sz 840 offset 2520 2: %zu\n",buffer_copy_sum); */
+  /* } */
+
+  /* printf("size %u offset %u\n",size,offset); */
+  /* size_t buffer_sum = 0; */
+  /* for ( int i = 0; i < size; ++i ) { */
+  /*   buffer_sum += buffer[i]; */
+  /* } */
+  /* printf("buffer_sum %zu\n",buffer_sum); */
+
+  while (size > 0) {
     /* Sector to write, starting byte offset within sector. */
     block_sector_t sector_idx = byte_to_sector (inode, offset);
     int sector_ofs = offset % BLOCK_SECTOR_SIZE;
@@ -639,8 +677,22 @@ inode_write_at(struct inode *inode, void *buffer_, off_t size,
   cache_block_write(fs_device, inode->sector, &inode->data, 0, BLOCK_SECTOR_SIZE);
   //
   //
-  
-  rw_lock_write_release(&inode->rw_lock);
+
+  /* rw_lock_write_release(&inode->rw_lock); */
+
+  // moving this above cache block write or commenting out cache block write
+  // will make the error go away...
+  if ( orig_size == 840 ) {
+    uint8_t * buffer_copy = malloc(90);
+    inode_read_at(inode, buffer_copy, 90, 3270); // corresponds to sector 329
+    size_t buffer_copy_sum = 0;
+    for ( int i = 0; i < 90; ++i ) {
+      buffer_copy_sum += buffer_copy[i];
+    }
+    free(buffer_copy);
+    printf("buffer_copy_sum at sz 90 offset 3270 3: %zu\n",buffer_copy_sum);
+  }
+
   return bytes_written;
 }
 

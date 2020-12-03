@@ -53,9 +53,7 @@ typedef struct cache {
   struct hash cache_entries_map;
   cache_entry_t cache_entries[MAX_CACHE_ENTRIES];
   cache_data_t cache_data[MAX_CACHE_ENTRIES];
-  
-  uint8_t bad_access_buffer[1024];
-  
+    
   // clock hand
   struct lock clock_hand_lock;
   size_t clock_hand;
@@ -103,9 +101,6 @@ static void rw_lock_release_action(rw_lock_t * lock, int write ) {
 
 static size_t get_clock_hand(void) {
   // printf("thread %p acquire clock hand lock %p\n",thread_current(),&cache.clock_hand_lock);
-  for ( size_t i = 0; i < sizeof(cache.bad_access_buffer); ++i ) {
-    ASSERT(cache.bad_access_buffer[i] == 0xC );
-  }
   lock_acquire(&cache.clock_hand_lock);
   int clock_hand = cache.clock_hand;
   ++cache.clock_hand;
@@ -176,7 +171,10 @@ static void cache_write_back(void * aux UNUSED) {
     //...
     // wait, this is stupid it should be based on number of cache hits or disk requests.
     thread_sleep_hack();
-    cache_write_all_entries();
+    //
+    // cache_write_all_entries();
+    //
+    //
   }
 }
 
@@ -268,8 +266,6 @@ void cache_init_early() {
     cache.cache_entries[i].sector = -1;
     cache.cache_entries[i].idx = i;
   }
-
-  memset(&cache.bad_access_buffer,0xC,sizeof(cache.bad_access_buffer));
   
   cache_read_ahead_init();
 }
@@ -492,7 +488,19 @@ void cache_block_read(struct block * block, block_sector_t target, void * buffer
   // printf("thread %p cache block read target %u buffer %p\n",thread_current(),target,buffer);
   /* print_cache(); */
   ASSERT(block == cache.block);
-  cache_request_read_ahead(target+1);
+  //
+  //
+  if ( target == 329 || target +1 == 329 ) {
+    printf("cache read %zu\n",target);
+    printf("cache request read ahead %zu\n",target+1);
+  }
+  /* bool should_skip = target+1 == 323; */
+  bool should_skip = false;
+  // for some reason reading ahead sector 323 fucks up the cache...
+  // it's sector 329 that is incorrectly written
+  if ( !should_skip ){
+    cache_request_read_ahead(target+1);
+  }
   cache_block_action(target,buffer,sector_ofs,chunk_size,0 /*read*/);
   // block_read(block,target,buffer);
   // cache_request_read_ahead_wait(request);
@@ -512,7 +520,10 @@ void cache_block_write(struct block * block, block_sector_t target, void * buffe
   
   ASSERT(block == cache.block);
   ASSERT(buffer != NULL);
-  
+
+  if ( target == 329 ) {
+    printf("cache write sector %d\n",target);
+  }
   cache_block_action(target,buffer,sector_ofs,chunk_size,1 /*write*/);
 
   /* // debug code */
