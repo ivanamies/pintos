@@ -5,6 +5,7 @@
 #include <string.h>
 #include <stdio.h>
 
+#include "threads/thread.h"
 #include "threads/malloc.h"
 #include "threads/rw_lock.h"
 
@@ -24,7 +25,7 @@
 #define INDIRECT_BLOCK_DISK_IDX (DIRECT_BLOCK_DISK_IDX + NUM_DIRECT_BLOCKS_DISK_MANAGED)
 #define DOUBLE_INDIRECT_BLOCK_DISK_IDX (INDIRECT_BLOCK_DISK_IDX + NUM_INDIRECT_BLOCK_DISK_MANAGED)
 
-#define DIRECT_BLOCK_DISK_MAX_MANAGED_LENGTH 8
+#define DIRECT_BLOCK_DISK_MAX_MANAGED_LENGTH 6
 
 #define MAX_RECORDKEEPING_BLOCKS (NUM_DIRECT_BLOCKS_DISK_MANAGED + NUM_INDIRECT_BLOCK_DISK_MANAGED + NUM_DOUBLE_INDIRECT_BLOCK_DISK_MANAGED)
 #define MAX_RECORDKEEPING_BLOCKS_INDIRECT_INODE 127
@@ -81,11 +82,24 @@ static void inode_direct_block_disk_get(inode_direct_block_disk_t * block, int *
   if ( *sector == -1 ) {
     // allocate sector for the direct block
     ASSERT(sizeof(int) == sizeof(block_sector_t));
-    free_map_allocate(1, (block_sector_t *)sector);
+    
+    /* if ( itr > 3390 ) { */
+    /*   printf("====tagiamies thread %p inode_direct_block_disk_get 2\n",thread_current()); */
+    /* } */
+    bool success = free_map_allocate(1, (block_sector_t *)sector);
+    ASSERT(success);
+    
+    /* if ( itr > 3390 ) { */
+    /*   printf("====tagiamies thread %p inode_direct_block_disk_get 4\n",thread_current()); */
+    /* } */
+
     // allocate sectors for the sectors managed by the direct block
-    free_map_allocate(num_sectors,(block_sector_t *)&block->start);
+    success = free_map_allocate(num_sectors,(block_sector_t *)&block->start);
+    ASSERT(success);
+
     block->length = num_sectors;
     block->magic = INODE_MAGIC;
+
     cache_block_write(fs_device, *sector, block, 0, BLOCK_SECTOR_SIZE);
 
     // write zeroes into managed data
@@ -94,7 +108,7 @@ static void inode_direct_block_disk_get(inode_direct_block_disk_t * block, int *
     }
   }
   else {
-    cache_block_read(fs_device, *sector, block, 0, BLOCK_SECTOR_SIZE);    
+    cache_block_read(fs_device, *sector, block, 0, BLOCK_SECTOR_SIZE);
   }
 }
 
@@ -134,16 +148,25 @@ static void inode_disk_offset_to_block(struct inode_disk * inode_disk, inode_dir
   inode_indirect_block_disk_t * double_indirect_block = (inode_indirect_block_disk_t *)malloc(sizeof(inode_indirect_block_disk_t));
   memset(double_indirect_block,0,sizeof(inode_indirect_block_disk_t));
   int old_sector;
-    
+
   // offset / ( 8 * 512 )
   // want which direct block this offset points to
   int idx = offset / ( DIRECT_BLOCK_DISK_MAX_MANAGED_LENGTH * BLOCK_SECTOR_SIZE);
   if ( idx < INDIRECT_BLOCK_DISK_IDX ) {
     int sector_to_direct_block = inode_disk->blocks[idx];
+
+    /* if ( itr > 3390 ) { */
+    /*   printf("====tagiamies thread %p inode disk offset to block 4\n",thread_current()); */
+    /* } */
+
     inode_direct_block_disk_get(res,&sector_to_direct_block);
+
+    /* if ( itr > 3390 ) { */
+    /*   printf("====tagiamies thread %p inode disk offset to block 5\n",thread_current()); */
+    /* } */
+
     ASSERT(sector_to_direct_block != -1);
     inode_disk->blocks[idx] = sector_to_direct_block;
-
     // cleanup
     free(indirect_block);
     free(double_indirect_block);
@@ -549,7 +572,13 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
 static void inode_touch_direct_block(struct inode_disk * disk_inode, off_t target) {
   // inode_disk_offset_to_block does all the memory management
   inode_direct_block_disk_t * direct_block = (inode_direct_block_disk_t *)malloc(sizeof(inode_direct_block_disk_t));
+  /* if ( itr > 3390 ) { */
+  /*   printf("====tagiamies thread %p inode touch direct block 1\n",thread_current()); */
+  /* } */
   inode_disk_offset_to_block(disk_inode,direct_block,target);
+  /* if ( itr > 3390 ) { */
+  /*   printf("====tagiamies thread %p inode touch direct block 2\n",thread_current()); */
+  /* } */
   
   // it has to be properly initialized
   ASSERT(direct_block->magic == INODE_MAGIC);
@@ -563,17 +592,24 @@ static void inode_disk_extend(struct inode_disk * disk_inode, size_t curr_length
   if ( end == 0 ) {
     return;
   }
-  
   // 0, make none
   // 1-512, make 1
   // 0-1024, make 2
   if ( curr_length == 0 ) {
     // initialize it
+    /* if ( itr > 3390 ) { */
+    /*   printf("====tagiamies thread %p inode disk extend 2\n",thread_current()); */
+    /* } */
     inode_touch_direct_block(disk_inode,1);
+    /* if ( itr > 3390 ) { */
+    /*   printf("====tagiamies thread %p inode disk extend 3\n",thread_current()); */
+    /* } */
+
     curr_length = 1;
   }
   int curr_block_length = (curr_length-1) / BLOCK_SECTOR_SIZE;
   int desired_block_length = (end-1) / BLOCK_SECTOR_SIZE;
+
   while ( curr_block_length <= desired_block_length ) {
     inode_touch_direct_block(disk_inode,(curr_block_length)*BLOCK_SECTOR_SIZE);
     ++curr_block_length;
@@ -582,7 +618,13 @@ static void inode_disk_extend(struct inode_disk * disk_inode, size_t curr_length
 }
 
 static void inode_extend(struct inode * inode, off_t end) {
+  /* if ( itr > 3390 ) { */
+  /*   printf("====tagiamies thread %p inode extend enter\n",thread_current()); */
+  /* } */
   inode_disk_extend(&inode->data, inode_length_no_lock(inode), end);
+  /* if ( itr > 3390 ) { */
+  /*   printf("====tagiamies thread %p inode extend exit\n",thread_current()); */
+  /* } */
 }
 
 /* Writes SIZE bytes from BUFFER into INODE, starting at OFFSET.
@@ -594,7 +636,11 @@ inode_write_at(struct inode *inode, void *buffer_, off_t size,
 {  
   const uint8_t *buffer = (const uint8_t *)buffer_;
   off_t bytes_written = 0;
-    
+
+  /* if ( itr > 3390 ) { */
+  /*   printf("====tagiamies thread %p inode write 0\n",thread_current()); */
+  /* } */
+
   rw_lock_write_acquire(&inode->rw_lock);
   if (inode->deny_write_cnt) {
     rw_lock_write_release(&inode->rw_lock);
@@ -607,7 +653,7 @@ inode_write_at(struct inode *inode, void *buffer_, off_t size,
   if ( inode_length_no_lock(inode) < clamped_size ) {
     inode_extend(inode, clamped_size);
   }
-
+  
   while (size > 0) {
     /* Sector to write, starting byte offset within sector. */
     block_sector_t sector_idx = byte_to_sector (inode, offset);
@@ -634,12 +680,12 @@ inode_write_at(struct inode *inode, void *buffer_, off_t size,
 
   // I'm not sure if this is needed...
   // also write back inode data
-  cache_block_write(fs_device, inode->sector, &inode->data, 0, BLOCK_SECTOR_SIZE);
+  // cache_block_write(fs_device, inode->sector, &inode->data, 0, BLOCK_SECTOR_SIZE);
   //
   //
 
   rw_lock_write_release(&inode->rw_lock);
-
+  
   return bytes_written;
 }
 

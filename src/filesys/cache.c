@@ -171,10 +171,7 @@ static void cache_write_back(void * aux UNUSED) {
     //...
     // wait, this is stupid it should be based on number of cache hits or disk requests.
     thread_sleep_hack();
-    //
-    // cache_write_all_entries();
-    //
-    //
+    cache_write_all_entries();
   }
 }
 

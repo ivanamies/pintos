@@ -29,6 +29,7 @@ static int check_user_ptr (void * p);
 #define MAX_FILE_NAME_LEN 64
 #define MAX_FILES 2048
 #define MAX_ARGS_ON_USER_STACK 4
+#define MAX_FD_IDX 410
 
 static void halt(void) {
   int j = 0;
@@ -145,6 +146,10 @@ static int create_fd_file(const char * name, struct file * file) {
 
   ASSERT ( empty_fd_idx < MAX_FILES );
   fd_idx = empty_fd_idx;
+  // for some reason the spec assumes fd creation will ALWAYS works
+  /* if ( fd_idx > MAX_FD_IDX ) { */
+  /*   return -1; */
+  /* } */
   ++empty_fd_idx;
   
   fd = fd_idx; // must start at 2
@@ -225,12 +230,7 @@ static int fd_remove(const char * full_name) {
         goto fd_remove_cleanup;        
       }
       else {
-        success = filesys_remove(base_dir,name);
-        /* int j = 0; */
-        /* while ( j < 3000 ) { */
-        /*   ++j; */
-        /* } */
-        
+        success = filesys_remove(base_dir,name);        
       }      
     }
     else {
@@ -262,6 +262,10 @@ static int create_fd_dir(struct dir * dir) {
   ++empty_fd_idx;
   
   fd = fd_idx; // must start at 2
+  // for some reason the spec assumes fd creation will ALWAYS works
+  /* if ( fd_idx > MAX_FD_IDX ) { */
+  /*   return -1; */
+  /* } */
 
   fd_table[fd_idx].fd = fd;
   strlcpy(fd_table[fd_idx].name,"its a dir",MAX_FILE_NAME_LEN);
@@ -306,18 +310,12 @@ int open_fd(const char * const full_name) {
     fd = -1;
     goto open_fd_done;
   }
-
+    
   struct file * file = NULL;
   struct inode * inode = NULL;
   bool is_dir = filesys_isdir(base_dir,name,&inode);
-
-  if ( is_dir ) {
-    /* printf("base_dir %p sector %u full_name %s name %s\n", */
-    /*        base_dir,inode_get_sector(dir_get_inode(dir)),full_name,name); */
-    /* printf("is dir %d inode %p inode sector %u\n",is_dir,inode, */
-    /*        inode_get_sector(inode)); */
   
-
+  if ( is_dir ) {
     ASSERT(inode);
     dir = dir_open(inode);
     if ( dir == NULL ) {
@@ -339,7 +337,11 @@ int open_fd(const char * const full_name) {
   else if ( file != NULL) {
     fd = create_fd_file(name,file);
   }
-
+  else {
+    ASSERT(false && "really has to be one of the two");
+  }
+    
+  
  open_fd_done:
   if ( needs_close ) {
     dir_close(base_dir);
@@ -611,34 +613,34 @@ static int check_user_ptr_with_terminate(void * p) {
 
 static int get_num_args(int syscall_no) {
   int num_args;
-  if ( syscall_no == SYS_HALT ) {
+  if ( syscall_no == SYS_HALT ) { // 0
     num_args = 0;
   }
-  else if (syscall_no == SYS_EXIT ) {
+  else if (syscall_no == SYS_EXIT ) { // 1
     num_args = 1;
   }
-  else if ( syscall_no == SYS_EXEC ) {
+  else if ( syscall_no == SYS_EXEC ) { // 2
     num_args = 1;
   }
-  else if ( syscall_no == SYS_WAIT ) {
+  else if ( syscall_no == SYS_WAIT ) { // 3
     num_args = 1;
   }
-  else if ( syscall_no == SYS_CREATE ) {
+  else if ( syscall_no == SYS_CREATE ) { // 4
     num_args = 2;
   }
-  else if ( syscall_no == SYS_REMOVE ) {
+  else if ( syscall_no == SYS_REMOVE ) { // 5
     num_args = 1;
   }
-  else if ( syscall_no == SYS_OPEN ) {
+  else if ( syscall_no == SYS_OPEN ) { // 6
     num_args = 1;
   }
-  else if ( syscall_no == SYS_FILESIZE ) {
+  else if ( syscall_no == SYS_FILESIZE ) { // 7
     num_args = 1;
   }
-  else if ( syscall_no == SYS_READ ) {
+  else if ( syscall_no == SYS_READ ) { // 8
     num_args = 3;
   }
-  else if ( syscall_no == SYS_WRITE ) {
+  else if ( syscall_no == SYS_WRITE ) { // 9
     num_args = 3;
   }
   else if ( syscall_no == SYS_SEEK ) {
@@ -781,7 +783,7 @@ syscall_handler (struct intr_frame *f UNUSED)
   }
   else if ( syscall_no == SYS_FILESIZE ) {
     int fd = (int)user_args[0];
-    if ( fd < 0 || fd >= MAX_FILES ) {
+    if ( fd < 0 ) {
       f->eax = 0;
     }
     else {
@@ -806,7 +808,7 @@ syscall_handler (struct intr_frame *f UNUSED)
       }
       f->eax = sz;
     }
-    else if ( fd < 0 || fd >= MAX_FILES ) {
+    else if ( fd < 0 || fd >= MAX_FD_IDX ) {
       f->eax = 0;
     }
     else {
@@ -823,7 +825,7 @@ syscall_handler (struct intr_frame *f UNUSED)
     if ( fd == 1 ) {
       putbuf(p,size);
     }
-    else if ( fd < 0 || fd >= MAX_FILES ) {
+    else if ( fd < 0 || fd >= MAX_FD_IDX ) {
       f->eax = 0;
     }
     else {
@@ -833,7 +835,7 @@ syscall_handler (struct intr_frame *f UNUSED)
   else if ( syscall_no == SYS_SEEK ) {
     int fd = (int)user_args[0];
     unsigned pos = (unsigned)user_args[1];
-    if (fd < 0 || fd >= MAX_FILES ) {
+    if (fd < 0 ) {
       f->eax = 0;
     }
     else {
@@ -842,7 +844,7 @@ syscall_handler (struct intr_frame *f UNUSED)
   }
   else if ( syscall_no == SYS_TELL ) {
     int fd = (int)user_args[0];
-    if (fd < 0 || fd >= MAX_FILES ) {
+    if (fd < 0 ) {
       f->eax = 0;
     }
     else {
@@ -851,7 +853,7 @@ syscall_handler (struct intr_frame *f UNUSED)
   }
   else if ( syscall_no == SYS_CLOSE ) {
     int fd = (int)user_args[0];
-    if (fd < 0 || fd >= MAX_FILES ) {
+    if (fd < 0 ) {
       f->eax = 0;
     }
     else {
@@ -878,7 +880,7 @@ syscall_handler (struct intr_frame *f UNUSED)
     if ( check_user_ptr_with_terminate((void *)tmp_char_ptr /*name*/) ) {
       return;
     }
-    if (fd < 0 || fd >= MAX_FILES ) {
+    if (fd < 0 ) {
       f->eax = 0;
     }
     else {
@@ -887,7 +889,7 @@ syscall_handler (struct intr_frame *f UNUSED)
   }
   else if ( syscall_no == SYS_ISDIR ) {
     int fd = (int)user_args[0];
-    if (fd < 0 || fd >= MAX_FILES ) {
+    if (fd < 0 ) {
       f->eax = 0;
     }
     else {
@@ -896,7 +898,7 @@ syscall_handler (struct intr_frame *f UNUSED)
   }
   else if ( syscall_no == SYS_INUMBER ) {
     int fd = (int)user_args[0];
-    if (fd < 0 || fd >= MAX_FILES ) {
+    if (fd < 0 ) {
       f->eax = 0;
     }
     else {
@@ -907,5 +909,5 @@ syscall_handler (struct intr_frame *f UNUSED)
     printf("didn't get a project 2 sys call\n");
     ASSERT(false);
     process_terminate(PROCESS_KILLED,-1);
-  }  
+  }
 }
