@@ -205,15 +205,15 @@ process_execute (const char *input)
       
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
-  /* input_copy = palloc_get_page (PAL_ZERO); */
-  input_copy = get_pages_from_stack_allocator(0,1);
+  input_copy = palloc_get_page (PAL_ZERO);
+  /* input_copy = get_pages_from_stack_allocator(0,1); */
   
   if (input_copy == NULL)
     return TID_ERROR;
   strlcpy (input_copy, input, PGSIZE);
   
-  /* ia = palloc_get_page (0); */
-  ia = get_pages_from_stack_allocator(0,1);
+  ia = palloc_get_page (PAL_ZERO);
+  /* ia = get_pages_from_stack_allocator(0,1); */
   ASSERT(sizeof(ia) <= PGSIZE);
   if ( ia == NULL ) {
     return TID_ERROR;
@@ -248,13 +248,10 @@ process_execute (const char *input)
     
   // free allocated page
   /* palloc_free_page (ia); */
-  free_pages_from_stack_allocator(0,ia);
+  /* free_pages_from_stack_allocator(0,ia); */
+  palloc_free_page(input_copy);
+  palloc_free_page(ia);
   
-  if (tid == TID_ERROR) {
-    /* palloc_free_page (input_copy); */
-    free_pages_from_stack_allocator(0,ia);
-  }
-
   return tid;
 }
 

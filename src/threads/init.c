@@ -97,7 +97,6 @@ pintos_init (void)
 
   /* Initialize memory system. */
   palloc_init (user_page_limit);
-  stack_allocator_init(); // custom stack allocator because palloc appears broken...
   malloc_init ();
   paging_init ();
     
