@@ -226,7 +226,7 @@ static int fd_remove(const char * full_name) {
       // check if removing an open directory
       // for some reason this isn't being hit in dir-rm-tree ??
       else if ( check_dir_fd_open(dir) ) {
-        printf("full_name %s is still open\n",full_name);
+        /* printf("full_name %s is still open\n",full_name); */
         success = false;
         goto fd_remove_cleanup;        
       }
