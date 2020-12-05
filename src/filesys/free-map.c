@@ -1,7 +1,6 @@
 #include "filesys/free-map.h"
 #include <bitmap.h>
 #include <debug.h>
-#include <stdio.h>
 
 #include "threads/thread.h"
 
@@ -17,9 +16,7 @@ static struct bitmap *free_map;      /* Free map, one bit per sector. */
 void
 free_map_init (void) 
 {
-  const uint32_t total_size = block_size(fs_device);
-  /* printf("total_size %u\n",total_size); */
-  free_map = bitmap_create (total_size);
+  free_map = bitmap_create (block_size (fs_device));
   if (free_map == NULL)
     PANIC ("bitmap creation failed--file system device is too large");
   bitmap_mark (free_map, FREE_MAP_SECTOR);
@@ -42,16 +39,8 @@ free_map_allocate (size_t cnt, block_sector_t *sectorp)
       bitmap_set_multiple (free_map, sector, cnt, false); 
       sector = BITMAP_ERROR;
     }
-  if (sector != BITMAP_ERROR) {
+  if (sector != BITMAP_ERROR)
     *sectorp = sector;
-  }
-  if ( sector == BITMAP_ERROR ) {
-    const int the_appropriate_amount = 10;
-    for ( int i =0; i < the_appropriate_amount; ++i ){
-      printf("free_map_allocate FAIL\n");
-    }
-    ASSERT(false && "free map allocate OOM is undesirable...\n");
-  }
   return sector != BITMAP_ERROR;
 }
 

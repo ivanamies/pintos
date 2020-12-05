@@ -4,7 +4,6 @@
 #include <stdio.h>
 #include "devices/ide.h"
 #include "threads/malloc.h"
-#include "threads/thread.h"
 
 /* A block device. */
 struct block
