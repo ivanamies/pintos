@@ -97,10 +97,10 @@ void init_fd_table(void) {
 }
 
 static void clear_fd(struct fd_file * fd_file) {
+  fd_file->fd = -1;
+  fd_file->name[0] = 0;
   if ( fd_file->file != NULL ) {
     if ( fd_file->is_open == 1 ) {
-      printf("fd %d name %s\n",fd_file->fd,fd_file->name);
-      print_inode(file_get_inode(fd_file->file));
       file_close(fd_file->file);
     }
     fd_file->file = NULL;
@@ -111,8 +111,6 @@ static void clear_fd(struct fd_file * fd_file) {
     }
     fd_file->dir = NULL;
   }
-  fd_file->fd = -1;
-  fd_file->name[0] = 0;
   fd_file->inumber = -1;
   fd_file->is_open = 0;
   fd_file->pid = -1;
@@ -120,7 +118,7 @@ static void clear_fd(struct fd_file * fd_file) {
 
 void destroy_fd(int pid) {
   lock_acquire(&fd_table_lock);
-  
+
   int i;
   for ( i = 0; i < MAX_FILES; ++i ) {
     if ( fd_table[i].pid == pid ) {
@@ -387,7 +385,6 @@ static void close_fd(int fd) {
 
   int fd_idx = fd_to_fd_idx_no_lock(fd);
   int ret = is_valid_file_fd_entry_no_lock(fd_idx);
-  printf("close_fd fd %d name %s\n",fd,fd_table[fd_idx].name);
   if ( ret == 1 ) {
     ASSERT(fd_table[fd_idx].file != NULL);
     file_close(fd_table[fd_idx].file);
