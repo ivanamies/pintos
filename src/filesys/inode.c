@@ -249,6 +249,12 @@ struct inode
     struct inode_disk data;             /* Inode content. */
   };
 
+
+void print_inode(struct inode * inode) {
+  printf("inode %p sector %u\n",inode,inode->sector);
+  print_inode_disk(&inode->data);
+}
+
 static void inode_extend(struct inode * inode, off_t end);
 static void inode_disk_extend(struct inode_disk * disk_inode, size_t length, off_t end);
 static off_t inode_length_no_lock (struct inode *inode);
@@ -468,7 +474,8 @@ inode_close (struct inode *inode)
     return;
 
   rw_lock_write_acquire(&inode->rw_lock);
-      
+
+  printf("inode %p sector %u written to cache\n",inode,inode->sector);
   // writes it to cache
   // does not actually write to disk
   cache_block_write(fs_device, inode->sector,&inode->data,0, BLOCK_SECTOR_SIZE);
@@ -634,6 +641,7 @@ inode_write_at(struct inode *inode, void *buffer_, off_t size,
 
   // I'm not sure if this is needed...
   // also write back inode data
+  //
   // cache_block_write(fs_device, inode->sector, &inode->data, 0, BLOCK_SECTOR_SIZE);
   //
   //

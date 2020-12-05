@@ -109,7 +109,10 @@ do_format (void)
   }
 
   free_map_create ();
-  if (!dir_create (ROOT_DIR_SECTOR, 16, prev_dir_inode))
+  // for some reason it matters that this needs to be some large number
+  // implying there is some bug (somewhere) that directory file length
+  // is not being properly updated
+  if (!dir_create (ROOT_DIR_SECTOR, 100, prev_dir_inode))
     PANIC ("root directory creation failed");
   free_map_close ();
   printf ("done.\n");

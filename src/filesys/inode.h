@@ -20,6 +20,7 @@ void inode_deny_write (struct inode *);
 void inode_allow_write (struct inode *);
 off_t inode_length (struct inode *);
 
+void print_inode(struct inode * inode);
 int inode_get_sector(struct inode *);
 int inode_get_aux1(struct inode *);
 int inode_get_aux2(struct inode *);
