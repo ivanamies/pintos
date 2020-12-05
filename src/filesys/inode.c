@@ -634,7 +634,7 @@ inode_write_at(struct inode *inode, void *buffer_, off_t size,
 
   // I'm not sure if this is needed...
   // also write back inode data
-  cache_block_write(fs_device, inode->sector, &inode->data, 0, BLOCK_SECTOR_SIZE);
+  // cache_block_write(fs_device, inode->sector, &inode->data, 0, BLOCK_SECTOR_SIZE);
   //
   //
 
