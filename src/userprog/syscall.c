@@ -204,7 +204,7 @@ static int fd_remove(const char * full_name) {
     if ( base_dir == NULL ) {
       goto fd_remove_cleanup;
     }
-    struct inode * inode;
+    struct inode * inode = NULL;
     success = dir_lookup(base_dir,name,&inode);
     if ( !success ) {
       goto fd_remove_cleanup;
@@ -226,6 +226,7 @@ static int fd_remove(const char * full_name) {
       // check if removing an open directory
       // for some reason this isn't being hit in dir-rm-tree ??
       else if ( check_dir_fd_open(dir) ) {
+        printf("full_name %s is still open\n",full_name);
         success = false;
         goto fd_remove_cleanup;        
       }
@@ -391,6 +392,15 @@ static void close_fd(int fd) {
     file_close(fd_table[fd_idx].file);
     fd_table[fd_idx].fd = -1;
     fd_table[fd_idx].is_open = 0;
+  }
+  else {
+    ret = is_valid_dir_fd_entry_no_lock(fd_idx);
+    if ( ret == 1 ) {
+      ASSERT(fd_table[fd_idx].dir != NULL);
+      dir_close(fd_table[fd_idx].dir);
+      fd_table[fd_idx].fd = -1;
+      fd_table[fd_idx].is_open = 0;
+    }
   }
   
   lock_release(&fd_table_lock);

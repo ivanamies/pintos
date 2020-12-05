@@ -274,6 +274,7 @@ tokenization_t tokenize_dir_name(const char * name) {
 static void print_tokenization(tokenization_t * tokens) {
   printf("=====\n");
   printf("tokens %p\n",tokens);
+  printf("absolute path: %d\n",tokens->is_absolute_path);
   printf("num names %u\n",tokens->num_names);
   for ( uint32_t i = 0; i < tokens->num_names; ++i ) {
     printf("tokens[%u]: %s\n",i,tokens->names[i]);
@@ -302,6 +303,7 @@ struct dir * dir_get(tokenization_t * tokens) {
   uint32_t num_names = tokens->num_names;
   struct inode * inode;
   for ( uint32_t i = 0; i < num_names; ++i ) {
+    /* printf("dir get loop %d\n",i); */
     if (strcmp(tokens->names[i],".") == 0 ) { // not interesting
       continue;
     }
@@ -314,14 +316,18 @@ struct dir * dir_get(tokenization_t * tokens) {
       dir = dir_open(inode);
     }
     else {
-      /* printf("===========\n"); */
+      /* printf("====tagiamies dir_get\n"); */
       /* printf("tokens->names[i] %s\n",tokens->names[i]); */
+      inode = NULL;
       bool success = dir_lookup(dir,tokens->names[i],&inode);
+      /* printf("success %d\n",success); */
       if ( success ) {
         if ( i > 0  ) { // do not close the cwd we enter with
           dir_close(dir); // you may close the tmp dirs we opened, i > 0
         }
+        /* printf("inode %p sector %u\n",inode,inode_get_sector(inode)); */
         dir = dir_open(inode);
+        /* printf("dir %p inode %p sector %u\n",dir, dir_get_inode(dir), inode_get_sector(dir_get_inode(dir))); */
       }
       else {
         if ( i > 0  ) { // do not close the cwd we enter with
@@ -331,6 +337,7 @@ struct dir * dir_get(tokenization_t * tokens) {
       }
     }
   }
+  /* printf("dir %p dir sector %u\n",dir,inode_get_sector(dir_get_inode(dir))); */
   return dir;
 }
 
@@ -344,6 +351,7 @@ bool dir_chdir(const char * name) {
     return false;
   }
   else {
+    // printf("chdir to name %s sector %u\n",name,inode_get_sector(dir_get_inode(dir)));
     thread_set_cwd(dir);
     return true;
   }
@@ -360,6 +368,7 @@ bool dir_mkdir(const char * name) {
   if ( tokens.error == 1) {
     return false;
   }
+  /* print_tokenization(&tokens); */
   int num_names = tokens.num_names;
   tokens.num_names--;
   struct dir * dir = dir_get(&tokens);
@@ -372,9 +381,9 @@ bool dir_mkdir(const char * name) {
     block_sector_t sector = 0;
     free_map_allocate(1,&sector);
     ASSERT(sector != 0);
-    /* printf("===tagiamies mkdir name %s sector %u\n",tokens.names[num_names-1],sector); */
     const uint32_t some_sector_size = 16;
-    block_sector_t prev_sector = inode_get_aux1(dir->inode);
+    block_sector_t prev_sector = inode_get_sector(dir->inode);
+    // printf("===tagiamies curr dir sector %u mkdir name %s sector %u\n",inode_get_sector(dir_get_inode(dir)),tokens.names[num_names-1],sector);
     success = dir_create(sector,some_sector_size,prev_sector);
     ASSERT(success);
     success = dir_add(dir,tokens.names[num_names-1],sector);
