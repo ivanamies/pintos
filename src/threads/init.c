@@ -32,6 +32,7 @@
 #include "tests/threads/tests.h"
 #endif
 #ifdef FILESYS
+#include "devices/pci.h"
 #include "devices/block.h"
 #include "devices/ide.h"
 #include "filesys/filesys.h"
@@ -122,6 +123,9 @@ pintos_init (void)
   timer_calibrate ();
   
 #ifdef FILESYS
+  // initialize network
+  pci_init();
+  
   /* Initialize file system. */
   ide_init ();
   locate_block_devices ();
