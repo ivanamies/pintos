@@ -22,6 +22,8 @@ struct pci_func {
   uint32_t reg_base[6];
   uint32_t reg_size[6];
   uint8_t irq_line;
+
+  void * mmio_vaddr;
 };
 
 struct pci_bus {
@@ -30,6 +32,8 @@ struct pci_bus {
 };
 
 void pci_init (void);
+
 void pci_func_enable(struct pci_func *func);
+void * pci_alloc_mem (void *phys_ptr, int pages);
 
 #endif /* devices/pci.h */

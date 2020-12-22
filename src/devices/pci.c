@@ -6,6 +6,12 @@
 #include <stdio.h>
 #include <string.h>
 #include "threads/io.h"
+#include "threads/pte.h"
+#include "threads/init.h"
+
+// taken from https://github.com/mutantmonkey/pintos/blob/network/src/devices/pci.c#L162
+/* number of pages that have been allocated to pci devices in the pci zone */
+static int num_pci_pages;
 
 /* The code in this file is an interface to the PCI subsystem,
    and provides access to PCI-connected devices.
@@ -253,6 +259,42 @@ pci_init(void)
 {
   static struct pci_bus root_bus;
   memset(&root_bus, 0, sizeof(root_bus));
-	
+  
+  num_pci_pages = 0;
+  
   pci_scan_bus(&root_bus);
+}
+
+// taken from https://github.com/mutantmonkey/pintos/blob/network/src/devices/pci.c#L827
+/** allocate PCI memory pages for PCI devices */
+void * pci_alloc_mem (void *phys_ptr, int pages) {
+  void *vaddr;
+  int i;
+
+  phys_ptr = (void *) ((uintptr_t) phys_ptr & ~PGMASK);
+
+  /* not enough space to allocate? */
+  if ((unsigned) (num_pci_pages + pages) >= (unsigned) PCI_ADDR_ZONE_PAGES)
+    {
+      return NULL;
+    }
+
+  /* insert into PCI_ZONE */
+  for (i = 0; i < pages; i++)
+    {
+      uint32_t pte_idx = (num_pci_pages + i) % 1024;
+      uint32_t pde_idx = (num_pci_pages + i) / 1024;
+      uint32_t *pt;
+      uint32_t pte;
+
+      pde_idx += pd_no ((void *) PCI_ADDR_ZONE_BEGIN);
+      pte = ((uint32_t) phys_ptr + (i * PGSIZE)) | PTE_P | PTE_W | PTE_CD;
+      pt = (uint32_t *) (ptov (init_page_dir[pde_idx] & ~PGMASK));
+      pt[pte_idx] = pte;
+    }
+
+  vaddr = (void *) (PCI_ADDR_ZONE_BEGIN + (num_pci_pages * PGSIZE));
+  num_pci_pages += pages;
+
+  return vaddr;
 }

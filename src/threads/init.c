@@ -61,6 +61,7 @@ static size_t user_page_limit = SIZE_MAX;
 
 static void bss_init (void);
 static void paging_init (void);
+static void pci_zone_init(void);
 
 static char **read_command_line (void);
 static char **parse_options (char **argv);
@@ -197,6 +198,8 @@ paging_init (void)
       pt[pte_idx] = pte_create_kernel (vaddr, !in_kernel_text);
     }
 
+  pci_zone_init();
+  
   /* Store the physical address of the page directory into CR3
      aka PDBR (page directory base register).  This activates our
      new page tables immediately.  See [IA32-v2a] "MOV--Move
