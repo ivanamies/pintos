@@ -191,7 +191,7 @@ paging_init (void)
       if (pd[pde_idx] == 0)
         {
           pt = palloc_get_page (PAL_ASSERT | PAL_ZERO);
-          pd[pde_idx] = pde_create (pt);
+          pd[pde_idx] = pde_create_kernel (pt);
         }
 
       pt[pte_idx] = pte_create_kernel (vaddr, !in_kernel_text);
@@ -203,6 +203,23 @@ paging_init (void)
      to/from Control Registers" and [IA32-v3a] 3.7.5 "Base Address
      of the Page Directory". */
   asm volatile ("movl %0, %%cr3" : : "r" (vtop (init_page_dir)));
+}
+
+// taken from https://github.com/mutantmonkey/pintos/blob/network/src/threads/init.c#L212
+// I'm pretty sure you shouldn't have two PCI zones for one network driver, but w/e
+// initialize PCI zones
+static void pci_zone_init(void) {
+  int i;
+  for ( i = 0; i < PCI_ADDR_ZONE_PDES; ++i ) {
+    
+    size_t pde_idx = pd_no((void *)PCI_ADDR_ZONE_BEGIN) + i;
+    uint32_t pde;
+    void * pt;
+
+    pt = palloc_get_page(PAL_ASSERT | PAL_ZERO);
+    pde = pde_create_kernel(pt);
+    init_page_dir[pde_idx] = pde;
+  }
 }
 
 /* Breaks the kernel command line into words and returns them as

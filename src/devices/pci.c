@@ -35,7 +35,7 @@ struct pci_driver pci_attach_class[] = {
 
 struct pci_driver pci_attach_vendor[] = {
   { E100_VENDORID, E100_QEMU_DEVICEID, &pci_e100_attach },
-  { E100_VENDORID, E100_BOCHS_DEVICEID, &pci_e100_attach },
+  // { E100_VENDORID, E100_BOCHS_DEVICEID, &pci_e100_attach },
   { 0, 0, 0 },
 };
 

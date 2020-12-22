@@ -4,6 +4,10 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+bool pagedir_set_page_no_assert (uint32_t *pd, void *upage, void *kpage, bool writable);
+void * pagedir_get_page_no_assert(uint32_t * pd, const void * uaddr);
+void pagedir_clear_page_no_assert (uint32_t *pd, void *upage);
+
 uint32_t *pagedir_create (void);
 void pagedir_destroy (uint32_t *pd);
 bool pagedir_set_page (uint32_t *pd, void *upage, void *kpage, bool rw);

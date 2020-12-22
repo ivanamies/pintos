@@ -47,21 +47,10 @@ pagedir_destroy (uint32_t *pd)
   palloc_free_page (pd);
 }
 
-/* Returns the address of the page table entry for virtual
-   address VADDR in page directory PD.
-   If PD does not have a page table for VADDR, behavior depends
-   on CREATE.  If CREATE is true, then a new page table is
-   created and a pointer into it is returned.  Otherwise, a null
-   pointer is returned. */
 static uint32_t *
-lookup_page (uint32_t *pd, const void *vaddr, bool create)
+lookup_page_no_assert (uint32_t *pd, const void *vaddr, bool create)
 {
   uint32_t *pt, *pde;
-
-  ASSERT (pd != NULL);
-
-  /* Shouldn't create new kernel virtual mappings. */
-  ASSERT (!create || is_user_vaddr (vaddr));
 
   /* Check for a page table for VADDR.
      If one is missing, create one if requested. */
@@ -74,7 +63,7 @@ lookup_page (uint32_t *pd, const void *vaddr, bool create)
           if (pt == NULL) 
             return NULL; 
       
-          *pde = pde_create (pt);
+          *pde = pde_create_user (pt);
         }
       else
         return NULL;
@@ -83,6 +72,39 @@ lookup_page (uint32_t *pd, const void *vaddr, bool create)
   /* Return the page table entry. */
   pt = pde_get_pt (*pde);
   return &pt[pt_no (vaddr)];
+}
+
+/* Returns the address of the page table entry for virtual
+   address VADDR in page directory PD.
+   If PD does not have a page table for VADDR, behavior depends
+   on CREATE.  If CREATE is true, then a new page table is
+   created and a pointer into it is returned.  Otherwise, a null
+   pointer is returned. */
+static uint32_t *
+lookup_page (uint32_t *pd, const void *vaddr, bool create)
+{
+  ASSERT (pd != NULL);
+
+  /* Shouldn't create new kernel virtual mappings. */
+  ASSERT (!create || is_user_vaddr (vaddr));
+
+  return lookup_page_no_assert(pd,vaddr,create);
+}
+
+bool
+pagedir_set_page_no_assert (uint32_t *pd, void *upage, void *kpage, bool writable)
+{
+  uint32_t *pte;
+
+  pte = lookup_page_no_assert (pd, upage, true);
+
+  if (pte != NULL) 
+    {
+      *pte = pte_create_user (kpage, writable);
+      return true;
+    }
+  else
+    return false;
 }
 
 /* Adds a mapping in page directory PD from user virtual page
@@ -98,14 +120,14 @@ lookup_page (uint32_t *pd, const void *vaddr, bool create)
 bool
 pagedir_set_page (uint32_t *pd, void *upage, void *kpage, bool writable)
 {
-  uint32_t *pte;
-
   ASSERT (pg_ofs (upage) == 0);
   ASSERT (pg_ofs (kpage) == 0);
   ASSERT (is_user_vaddr (upage));
   ASSERT (vtop (kpage) >> PTSHIFT < init_ram_pages);
   ASSERT (pd != init_page_dir);
 
+  uint32_t *pte;
+  
   pte = lookup_page (pd, upage, true);
 
   if (pte != NULL) 
@@ -118,6 +140,17 @@ pagedir_set_page (uint32_t *pd, void *upage, void *kpage, bool writable)
     return false;
 }
 
+void * pagedir_get_page_no_assert(uint32_t * pd, const void * uaddr) {
+  uint32_t *pte;
+  pte = lookup_page_no_assert (pd, uaddr, false);
+  if (pte != NULL && (*pte & PTE_P) != 0) {
+    return pte_get_page (*pte) + pg_ofs (uaddr);
+  }
+  else {
+    return NULL;
+  }  
+}
+
 /* Looks up the physical address that corresponds to user virtual
    address UADDR in PD.  Returns the kernel virtual address
    corresponding to that physical address, or a null pointer if
@@ -125,16 +158,29 @@ pagedir_set_page (uint32_t *pd, void *upage, void *kpage, bool writable)
 void *
 pagedir_get_page (uint32_t *pd, const void *uaddr) 
 {
-  uint32_t *pte;
-
   ASSERT (is_user_vaddr (uaddr));
+
+  uint32_t *pte;
   pte = lookup_page (pd, uaddr, false);
   if (pte != NULL && (*pte & PTE_P) != 0) {
     return pte_get_page (*pte) + pg_ofs (uaddr);
   }
   else {
     return NULL;
-  }
+  }  
+}
+
+void
+pagedir_clear_page_no_assert (uint32_t *pd, void *upage) 
+{
+  uint32_t *pte;
+
+  pte = lookup_page (pd, upage, false);
+  if (pte != NULL && (*pte & PTE_P) != 0)
+    {
+      *pte &= ~PTE_P;
+      invalidate_pagedir (pd);
+    }
 }
 
 /* Marks user virtual page UPAGE "not present" in page

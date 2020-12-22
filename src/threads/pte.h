@@ -28,6 +28,13 @@
 #define PDBITS  10                         /* Number of page dir bits. */
 #define PDMASK  BITMASK(PDSHIFT, PDBITS)   /* Page directory bits (22:31). */
 
+// taken from https://github.com/mutantmonkey/pintos/blob/d5970670f50073600d35a15d62e6773f2d08b00e/src/threads/pte.h#L31
+/* memory dedicated to PCI - make sure this is 4MB aligned */
+#define PCI_ADDR_ZONE_BEGIN	0xe0000000
+#define PCI_ADDR_ZONE_END	0xe0800000
+#define PCI_ADDR_ZONE_PDES	2
+#define PCI_ADDR_ZONE_PAGES	(PCI_ADDR_ZONE_END-PCI_ADDR_ZONE_BEGIN)/PGSIZE
+
 /* Obtains page table index from a virtual address. */
 static inline unsigned pt_no (const void *va) {
   return ((uintptr_t) va & PTMASK) >> PTSHIFT;
@@ -66,11 +73,18 @@ static inline uintptr_t pd_no (const void *va) {
 #define PTE_U 0x4               /* 1=user/kernel, 0=kernel only. */
 #define PTE_A 0x20              /* 1=accessed, 0=not acccessed. */
 #define PTE_D 0x40              /* 1=dirty, 0=not dirty (PTEs only). */
+// taken from https://github.com/mutantmonkey/pintos/blob/d5970670f50073600d35a15d62e6773f2d08b00e/src/threads/pte.h#L79
+#define PTE_G (1<<8)            // 1 = global page, do not flush
 
 /* Returns a PDE that points to page table PT. */
-static inline uint32_t pde_create (uint32_t *pt) {
+static inline uint32_t pde_create_user (uint32_t *pt) {
   ASSERT (pg_ofs (pt) == 0);
   return vtop (pt) | PTE_U | PTE_P | PTE_W;
+}
+
+static inline uint32_t pde_create_kernel(uint32_t * pt) {
+  ASSERT (pg_ofs (pt) == 0);
+  return vtop (pt) | PTE_P | PTE_W | PTE_G;
 }
 
 /* Returns a pointer to the page table that page directory entry
