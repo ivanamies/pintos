@@ -9,6 +9,17 @@
 // #define E100_BOCHS_DEVICEID 0x100e
 #define E100_QEMU_DEVICEID 0x100e
 
+typedef struct tx_desc {
+  uint64_t addr;
+  uint16_t length;
+  uint8_t cso;
+  uint8_t cmd;
+  uint8_t status;
+  uint8_t css;
+  uint16_t special;
+} tx_desc_t;
+
 int pci_e100_attach(struct pci_func *pcif);
+void e100_transmit(void * data, uint16_t sz);
 
 #endif // DEVICES_E100_H
