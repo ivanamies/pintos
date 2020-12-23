@@ -8,6 +8,7 @@
 #include "threads/io.h"
 #include "threads/pte.h"
 #include "threads/init.h"
+#include "userprog/pagedir.h"
 
 // taken from https://github.com/mutantmonkey/pintos/blob/network/src/devices/pci.c#L162
 /* number of pages that have been allocated to pci devices in the pci zone */
@@ -267,7 +268,24 @@ pci_init(void)
 
 // taken from https://github.com/mutantmonkey/pintos/blob/network/src/devices/pci.c#L827
 /** allocate PCI memory pages for PCI devices */
-void * pci_alloc_mem (void *phys_ptr, int pages) {
+void * pci_alloc_mem (void *phys_ptr_, int pages) {
+
+  // this doesn't work and I don't know why
+  // I can't even express what I don't know. I don't understand how MMU works.
+  // I used pagedir_set_page and pagedir_get_page through project 3 without really
+  // understanding them.
+  /* uint8_t * phys_ptr = phys_ptr_; */
+  /* void * vaddr_base = (void *)PCI_ADDR_ZONE_BEGIN; */
+  /* const bool writable = true; */
+  /* for ( int i = 0; i < pages; ++i ) { */
+  /*   void * vaddr = vaddr_base + i*PGSIZE; */
+  /*   ASSERT(pagedir_get_page_no_assert (init_page_dir, vaddr) == NULL); */
+  /*   bool success = pagedir_set_page_no_assert(init_page_dir,vaddr,phys_ptr,writable); */
+  /*   ASSERT(success); */
+  /* }   */
+  /* return vaddr_base; */
+
+  void * phys_ptr = phys_ptr_;
   void *vaddr;
   int i;
 
@@ -297,4 +315,5 @@ void * pci_alloc_mem (void *phys_ptr, int pages) {
   num_pci_pages += pages;
 
   return vaddr;
+
 }
