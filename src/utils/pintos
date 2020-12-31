@@ -645,7 +645,10 @@ sub run_qemu {
   push (@cmd, '-drive', 'format=raw,media=disk,index=2,file=' . $disks[2]) if defined $disks[2];
   push (@cmd, '-drive', 'format=raw,media=disk,index=3,file=' . $disks[3]) if defined $disks[3];
   push (@cmd, '-m', $mem);
-  push (@cmd, '-net', 'nic,model=e1000');
+  # push (@cmd, '-net', 'nic,model=e1000');
+  push (@cmd, '-netdev', 'user,id=u1');
+  push (@cmd, '-device', 'e1000,netdev=u1');
+  push (@cmd, '-object', 'filter-dump,id=f1,netdev=u1,file=/tmp/dump.dat');
   push (@cmd, '-nographic') if $vga eq 'none';
   push (@cmd, '-serial', 'stdio') if $serial && $vga ne 'none';
   push (@cmd, '-S') if $debug eq 'monitor';

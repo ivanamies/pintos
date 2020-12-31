@@ -27,7 +27,7 @@ static int check_user_ptr (void * p);
 
 #define MAX_PAGES_IN_FILE 8
 #define MAX_FILE_NAME_LEN 64
-#define MAX_FILES 2048
+#define MAX_FILES 1024
 #define MAX_ARGS_ON_USER_STACK 4
 #define MAX_FD_IDX 410
 
