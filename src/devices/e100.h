@@ -14,7 +14,7 @@ typedef struct tx_desc {
   uint16_t length;
   uint8_t cso;
   uint8_t cmd;
-  uint8_t status;
+  uint8_t status; // last 4 bits are RSV
   uint8_t css;
   uint16_t special;
 } tx_desc_t;

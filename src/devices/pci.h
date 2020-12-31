@@ -35,5 +35,6 @@ void pci_init (void);
 
 void pci_func_enable(struct pci_func *func);
 void * pci_alloc_mem (void *phys_ptr, int pages);
+void * pci_alloc_mem2(int pages);
 
 #endif /* devices/pci.h */

@@ -266,6 +266,12 @@ pci_init(void)
   pci_scan_bus(&root_bus);
 }
 
+void * pci_alloc_mem2(int pages) {
+  void * vaddr = (void *) (PCI_ADDR_ZONE_BEGIN + (num_pci_pages * PGSIZE));
+  num_pci_pages += pages;
+  return vaddr;
+}
+
 // taken from https://github.com/mutantmonkey/pintos/blob/network/src/devices/pci.c#L827
 /** allocate PCI memory pages for PCI devices */
 void * pci_alloc_mem (void *phys_ptr_, int pages) {
