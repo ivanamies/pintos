@@ -1,0 +1,7 @@
+# -*- makefile -*-
+
+kernel.bin: DEFINES = -DUSERPROG -DFILESYS -DVM -DNET
+KERNEL_SUBDIRS = threads devices lib lib/kernel userprog filesys vm net net/lwip/api net/lwip/core net/lwip/core/ipv4 net/lwip/netif net/lwip/pintos/arch
+#TEST_SUBDIRS = tests/net
+#GRADING_FILE = $(SRCDIR)/tests/net/Grading
+SIMULATOR = --qemu

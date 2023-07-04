@@ -19,6 +19,15 @@ typedef struct tx_desc {
   uint16_t special;
 } tx_desc_t;
 
+typedef struct rx_desc {
+  uint64_t addr;
+  uint16_t length;
+  uint16_t checksum;
+  uint8_t status;
+  uint8_t errors;
+  uint8_t special;
+} rx_desc_t;
+
 int pci_e100_attach(struct pci_func *pcif);
 void e100_transmit(void * data, uint16_t sz);
 
